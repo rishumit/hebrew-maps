@@ -1,0 +1,146 @@
+name: Windows Installer
+
+# Triggers:
+#   - Every push/PR to main — builds and uploads the installer as an artifact
+#   - Every version tag (v*.*.*) — also creates a GitHub Release with the installer EXE
+#   - Manual dispatch — lets you pick version and whether to release
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 1.2.0) — defaults to tag or 1.0.0"
+        required: false
+        default: ""
+      release:
+        description: "Create GitHub Release?"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Resolve version string
+      #    Priority: manual input → git tag → fallback to 1.0.0
+      # -----------------------------------------------------------------------
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}"
+          if (-not $v) {
+            # Extract from tag like "refs/tags/v1.2.3"
+            $ref = "${{ github.ref }}"
+            if ($ref -match '^refs/tags/v(.+)$') {
+              $v = $Matches[1]
+            } else {
+              $v = "1.0.0"
+            }
+          }
+          Write-Host "Building version: $v"
+          echo "value=$v" >> $env:GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # 3. Python — use the same version as in the existing CI workflow
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # -----------------------------------------------------------------------
+      # 4. Install runtime dependencies + PyInstaller into a plain venv.
+      #    We do NOT use the project's uv-managed .venv here because the
+      #    GitHub runner has uv trampoline issues; a plain venv is reliable.
+      # -----------------------------------------------------------------------
+      - name: Create venv and install dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\pip.exe install --upgrade pip
+          .venv\Scripts\pip.exe install -r requirements.txt
+          .venv\Scripts\pip.exe install "pyinstaller==6.10.0"
+
+      # -----------------------------------------------------------------------
+      # 5. Install Inno Setup 6 via Chocolatey (pre-installed on windows-latest)
+      # -----------------------------------------------------------------------
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: choco install innosetup --version 6.3.3 -y --no-progress
+
+      # -----------------------------------------------------------------------
+      # 6. Generate icon
+      # -----------------------------------------------------------------------
+      - name: Generate icon.ico
+        shell: pwsh
+        run: .venv\Scripts\python.exe installer\make_icon.py
+
+      # -----------------------------------------------------------------------
+      # 7. Run PyInstaller
+      # -----------------------------------------------------------------------
+      - name: PyInstaller — bundle app
+        shell: pwsh
+        run: |
+          .venv\Scripts\pyinstaller.exe installer\hebrew-maps.spec `
+            --distpath installer\dist `
+            --workpath installer\build `
+            --noconfirm
+
+      # -----------------------------------------------------------------------
+      # 8. Compile Inno Setup installer
+      # -----------------------------------------------------------------------
+      - name: Inno Setup — compile installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} installer\hebrew-maps.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # -----------------------------------------------------------------------
+      # 9. Upload installer as a workflow artifact (available on every run)
+      # -----------------------------------------------------------------------
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HebrewMaps-Setup-${{ steps.version.outputs.value }}
+          path: installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+          retention-days: 30
+
+      # -----------------------------------------------------------------------
+      # 10. Create GitHub Release (only on version tags or when manually requested)
+      # -----------------------------------------------------------------------
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.version.outputs.value) }}
+          name: "מפות בעברית v${{ steps.version.outputs.value }}"
+          body: |
+            ## התקנה / Installation
+
+            הורידו את `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` והריצו.
+
+            Download `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` and run it.
+
+            **דרישות מערכת / System requirements:** Windows 10/11 x64
+
+            ---
+            Built automatically from commit ${{ github.sha }}
+          files: installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+          draft: false
+          prerelease: false

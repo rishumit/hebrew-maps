@@ -6,3 +6,9 @@ __pycache__/
 .env
 tools-bin/
 .venv/
+
+# Installer build artifacts
+installer/dist/
+installer/build/
+installer/icon.ico
+installer/HebrewMaps-Setup-*.exe

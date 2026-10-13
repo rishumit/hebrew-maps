@@ -98,14 +98,22 @@ def _open_browser_when_ready(host: str, port: int) -> None:
     health = f"{url}/api/health"
 
     def _poll() -> None:
+        started = False
         for _ in range(40):          # 40 × 500 ms = 20 s
             time.sleep(0.5)
             try:
                 with urllib.request.urlopen(health, timeout=1):
+                    started = True
                     break
             except Exception:        # noqa: BLE001
                 continue
-        webbrowser.open(url)
+        if started:
+            webbrowser.open(url)
+        else:
+            import logging
+            logging.getLogger("hmaps.launcher").error(
+                "Server did not respond at %s after 20 s — check hebrew-maps.log", health
+            )
 
     t = threading.Thread(target=_poll, daemon=True)
     t.start()
