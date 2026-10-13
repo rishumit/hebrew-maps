@@ -74,7 +74,7 @@ jobs:
           python -m venv .venv
           .venv\Scripts\pip.exe install --upgrade pip
           .venv\Scripts\pip.exe install -r requirements.txt
-          .venv\Scripts\pip.exe install "pyinstaller==6.10.0"
+          .venv\Scripts\pip.exe install "pyinstaller==6.10.0" "Pillow>=10"
 
       # -----------------------------------------------------------------------
       # 5. Ensure Inno Setup 6 is available
