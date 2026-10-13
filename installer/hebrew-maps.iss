@@ -45,7 +45,8 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 [Files]
 ; PyInstaller bundle — EXE + _internal\ tree
 ; build.ps1 passes --distpath installer\dist so the bundle lands here:
-Source: "installer\dist\hebrew-maps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; The .iss is compiled with its directory as CWD, so "dist\" is relative to installer\
+Source: "dist\hebrew-maps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Web assets (HTML, JS, CSS, fonts, icons)
 Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs

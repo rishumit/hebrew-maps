@@ -116,8 +116,12 @@ jobs:
         shell: pwsh
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} installer\hebrew-maps.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Run ISCC from the installer\ dir so relative paths in the .iss are correct
+          Push-Location installer
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} hebrew-maps.iss
+          $exit = $LASTEXITCODE
+          Pop-Location
+          if ($exit -ne 0) { exit $exit }
 
       # -----------------------------------------------------------------------
       # 9. Upload installer as a workflow artifact (available on every run)
