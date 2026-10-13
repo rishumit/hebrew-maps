@@ -49,10 +49,10 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Source: "dist\hebrew-maps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Web assets (HTML, JS, CSS, fonts, icons)
-Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — current map pointer file
-Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: ignoreversion
+Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Data — map databases (wildcard matches any dated build)
 Source: "..\data\maps-*.db"; DestDir: "{app}\data"; Flags: ignoreversion skipifsourcedoesntexist

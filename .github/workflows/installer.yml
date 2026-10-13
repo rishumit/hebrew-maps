@@ -110,7 +110,14 @@ jobs:
             --noconfirm
 
       # -----------------------------------------------------------------------
-      # 8. Compile Inno Setup installer
+      # 8. Fetch web assets (vendor JS, fonts-ui) — gitignored but needed by ISS
+      # -----------------------------------------------------------------------
+      - name: Fetch web assets
+        shell: pwsh
+        run: .venv\Scripts\python.exe tools\fetch_assets.py
+
+      # -----------------------------------------------------------------------
+      # 9. Compile Inno Setup installer
       # -----------------------------------------------------------------------
       - name: Inno Setup — compile installer
         shell: pwsh
