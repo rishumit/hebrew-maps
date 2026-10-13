@@ -8,10 +8,18 @@
 
 import os
 from pathlib import Path
+import importlib.util as _ilu
 
 # SPECPATH is set by PyInstaller to the directory containing this .spec file,
 # which is <project-root>\installer\.  One level up is the project root.
 ROOT = Path(SPECPATH).parent
+
+
+def _tzdata_datas():
+    spec = _ilu.find_spec('tzdata')
+    if spec and spec.submodule_search_locations:
+        return [(list(spec.submodule_search_locations)[0], 'tzdata')]
+    return []
 
 a = Analysis(
     [str(ROOT / 'hmaps' / '__main__.py')],
@@ -23,8 +31,7 @@ a = Analysis(
         (str(ROOT / 'hmaps' / 'api' / 'openapi.json'), 'hmaps/api'),
         # tzdata ships as a data-only package; PyInstaller misses the zoneinfo files.
         # Locate it dynamically so this works on any venv layout.
-        *([(__import__('importlib.util').find_spec('tzdata').submodule_search_locations[0], 'tzdata')]
-          if __import__('importlib.util').find_spec('tzdata') else []),
+        *( _tzdata_datas() ),
         # web/ assets are NOT bundled here — Inno Setup copies them alongside the EXE.
         # They are listed in the [Files] section of hebrew-maps.iss instead.
     ],
