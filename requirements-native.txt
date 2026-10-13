@@ -1,0 +1,5 @@
+# Installation without Docker (Windows / macOS / Linux): runtime + pyosmium for reading OSM data
+-r requirements.txt
+osmium>=3.7
+# recognises the content filter's "sent for review" stand-in pictures when downloading POI photos
+pillow>=10

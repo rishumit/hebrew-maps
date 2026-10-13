@@ -1,0 +1,6 @@
+# Test tooling
+-r requirements.txt
+playwright>=1.45
+pillow>=10
+scipy>=1.11
+contourpy>=1.2

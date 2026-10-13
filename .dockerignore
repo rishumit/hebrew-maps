@@ -1,0 +1,8 @@
+.git
+data
+tests
+docs
+**/__pycache__
+*.pyc
+web/vendor
+.github

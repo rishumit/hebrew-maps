@@ -1,0 +1,5 @@
+# Runtime dependencies (API + data pipeline). Tested with starlette 1.6, uvicorn 0.53, numpy 2.x.
+starlette>=0.41,<2
+uvicorn>=0.30
+numpy>=1.26
+tzdata>=2024.1

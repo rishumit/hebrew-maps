@@ -1,0 +1,77 @@
+# מפות בעברית – Hebrew Maps
+#   docker compose up -d            -> web app + API (http://localhost:8080) and routing
+#   setup.cmd / ./setup.sh           -> first-time data build (see README)
+name: hebrew-maps
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/app.Dockerfile
+  image: hebrew-maps/app:1.0
+  volumes:
+    - hmaps-data:/data
+  environment:
+    HMAPS_OSRM_CAR: http://routing:5001
+    HMAPS_OSRM_FOOT: http://routing:5002
+    HMAPS_OSRM_BIKE: http://routing:5003
+    HMAPS_LOG_LEVEL: ${HMAPS_LOG_LEVEL:-INFO}
+    HMAPS_RATE_PER_SEC: ${HMAPS_RATE_PER_SEC:-20}
+    HMAPS_RATE_BURST: ${HMAPS_RATE_BURST:-80}
+
+services:
+  api:
+    <<: *app
+    ports:
+      - "${HMAPS_PORT:-8080}:8080"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  routing:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    entrypoint: ["/bin/sh", "/scripts/run.sh"]
+    volumes:
+      - hmaps-data:/data
+      - ./docker/routing:/scripts:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ---------------------------------------------------------- one-shot jobs (setup / updates)
+  etl:
+    <<: *app
+    profiles: ["jobs"]
+    command: ["python", "-m", "hmaps.etl", "build"]
+    restart: "no"
+
+  tiles:
+    image: ghcr.io/onthegomap/planetiler:latest
+    profiles: ["jobs"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xmx${PLANETILER_MEMORY:-3g}"
+    volumes:
+      - hmaps-data:/data
+    command:
+      - --download
+      - --area=israel-and-palestine
+      - --output=/data/tiles/build/israel.mbtiles
+      - --force
+      - --languages=he,en,ar
+      - --maxzoom=14
+    restart: "no"
+
+  # optional HTTPS front for a public domain: HMAPS_DOMAIN=maps.example.org docker compose --profile https up -d
+  https:
+    image: caddy:2.8
+    profiles: ["https"]
+    command: ["caddy", "reverse-proxy", "--from", "${HMAPS_DOMAIN:-localhost}", "--to", "api:8080"]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - caddy-data:/data
+    restart: unless-stopped
+
+volumes:
+  hmaps-data:
+  caddy-data:

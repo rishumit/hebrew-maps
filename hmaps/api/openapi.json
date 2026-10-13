@@ -1,0 +1,1823 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "מפות בעברית – API",
+  "version": "1.0.0",
+  "description": "API של מערכת המפות: חיפוש בעברית, נקודות עניין, גיאוקודינג, ניווט ואריחי מפה."
+ },
+ "paths": {
+  "/api/health": {
+   "get": {
+    "summary": "בדיקת תקינות",
+    "responses": {
+     "200": {
+      "description": "תקין",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/meta": {
+   "get": {
+    "summary": "מידע על הנתונים והשירותים",
+    "responses": {
+     "200": {
+      "description": "מידע",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/categories": {
+   "get": {
+    "summary": "עץ הקטגוריות",
+    "responses": {
+     "200": {
+      "description": "קטגוריות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/search/autocomplete": {
+   "get": {
+    "summary": "השלמה אוטומטית",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": true,
+      "description": "טקסט שהוקלד",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "lat",
+      "in": "query",
+      "required": false,
+      "description": "קו רוחב להעדפת קרבה",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": false,
+      "description": "קו אורך",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "מספר הצעות (ברירת מחדל 8)",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "הצעות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "suggestions": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string",
+              "examples": [
+               "poi-123",
+               "place-5",
+               "street-9",
+               "addr-9-50"
+              ]
+             },
+             "type": {
+              "type": "string",
+              "enum": [
+               "poi",
+               "place",
+               "street",
+               "address",
+               "category",
+               "coordinate",
+               "trail"
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "secondary": {
+              "type": "string"
+             },
+             "category": {
+              "type": "string"
+             },
+             "sub_category": {
+              "type": "string"
+             },
+             "icon": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "location": {
+              "$ref": "#/components/schemas/LatLon"
+             },
+             "distance": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "open_now": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "kosher": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "score": {
+              "type": [
+               "number",
+               "null"
+              ]
+             }
+            }
+           }
+          },
+          "query_time_ms": {
+           "type": "number"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/search": {
+   "get": {
+    "summary": "חיפוש מלא",
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": true,
+      "description": "שאילתה, למשל 'מסעדות בתל אביב' או 'דיזנגוף 50'",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "lat",
+      "in": "query",
+      "required": false,
+      "description": "מרכז המפה",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": false,
+      "description": "מרכז המפה",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "user_lat",
+      "in": "query",
+      "required": false,
+      "description": "מיקום המשתמש",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "user_lon",
+      "in": "query",
+      "required": false,
+      "description": "מיקום המשתמש",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "category",
+      "in": "query",
+      "required": false,
+      "description": "סינון לפי קטגוריה/תת-קטגוריה",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "kosher",
+      "in": "query",
+      "required": false,
+      "description": "רק כשר",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "open_now",
+      "in": "query",
+      "required": false,
+      "description": "פתוח עכשיו",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "גודל עמוד",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "description": "היסט",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "תוצאות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string",
+              "examples": [
+               "poi-123",
+               "place-5",
+               "street-9",
+               "addr-9-50"
+              ]
+             },
+             "type": {
+              "type": "string",
+              "enum": [
+               "poi",
+               "place",
+               "street",
+               "address",
+               "category",
+               "coordinate",
+               "trail"
+              ]
+             },
+             "name": {
+              "type": "string"
+             },
+             "secondary": {
+              "type": "string"
+             },
+             "category": {
+              "type": "string"
+             },
+             "sub_category": {
+              "type": "string"
+             },
+             "icon": {
+              "type": "string"
+             },
+             "color": {
+              "type": "string"
+             },
+             "location": {
+              "$ref": "#/components/schemas/LatLon"
+             },
+             "distance": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "open_now": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "kosher": {
+              "type": [
+               "boolean",
+               "null"
+              ]
+             },
+             "score": {
+              "type": [
+               "number",
+               "null"
+              ]
+             }
+            }
+           }
+          },
+          "meta": {
+           "type": "object"
+          },
+          "interpretation": {
+           "type": "object",
+           "description": "איך השאילתה פורשה (קטגוריה, כתובת, תיקון כתיב...)"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "summary": "חיפוש מלא (גוף JSON)",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "query": {
+          "type": "string"
+         },
+         "location": {
+          "$ref": "#/components/schemas/LatLon"
+         },
+         "user_location": {
+          "$ref": "#/components/schemas/LatLon"
+         },
+         "filters": {
+          "type": "object",
+          "properties": {
+           "category": {
+            "type": "string"
+           },
+           "kosher": {
+            "type": "boolean"
+           },
+           "open_now": {
+            "type": "boolean"
+           }
+          }
+         },
+         "limit": {
+          "type": "integer"
+         },
+         "offset": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "תוצאות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/poi/{id}": {
+   "get": {
+    "summary": "פרטי נקודת עניין",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "poi-123",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "כרטיס מידע",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/poi": {
+   "get": {
+    "summary": "נקודות עניין בסביבה",
+    "parameters": [
+     {
+      "name": "lat",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "radius",
+      "in": "query",
+      "required": false,
+      "description": "רדיוס במטרים (עד 50000)",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "category",
+      "in": "query",
+      "required": false,
+      "description": "קטגוריה",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "tags",
+      "in": "query",
+      "required": false,
+      "description": "תגיות מופרדות בפסיק",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "kosher",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "open_now",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "רשימה",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/place/{id}": {
+   "get": {
+    "summary": "פרטי יישוב/שכונה כולל גבול",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "place-5",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "יישוב",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/street/{id}": {
+   "get": {
+    "summary": "פרטי רחוב כולל גאומטריה",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "street-9",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "רחוב",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/geocode": {
+   "get": {
+    "summary": "כתובת ← קואורדינטות",
+    "parameters": [
+     {
+      "name": "address",
+      "in": "query",
+      "required": true,
+      "description": "כתובת",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "city",
+      "in": "query",
+      "required": false,
+      "description": "עיר",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מיקום",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/reverse": {
+   "get": {
+    "summary": "קואורדינטות ← כתובת",
+    "parameters": [
+     {
+      "name": "lat",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "כתובת",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/route": {
+   "get": {
+    "summary": "חישוב מסלול",
+    "parameters": [
+     {
+      "name": "from",
+      "in": "query",
+      "required": true,
+      "description": "lat,lon",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "to",
+      "in": "query",
+      "required": true,
+      "description": "lat,lon",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "via",
+      "in": "query",
+      "required": false,
+      "description": "lat,lon (ניתן לחזור)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "description": "car | foot | bike",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "alternatives",
+      "in": "query",
+      "required": false,
+      "description": "מסלולים חלופיים",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מסלולים",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/elevation": {
+   "get": {
+    "summary": "גובה נקודות או פרופיל גובה לאורך קו (Copernicus DEM)",
+    "parameters": [
+     {
+      "name": "points",
+      "in": "query",
+      "required": false,
+      "description": "lat,lon|lat,lon|… (עד 1000 נקודות)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "path",
+      "in": "query",
+      "required": false,
+      "description": "קו מקודד (Google polyline, דיוק 5)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "samples",
+      "in": "query",
+      "required": false,
+      "description": "מספר דגימות לאורך הקו (2–500, ברירת מחדל 200)",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "גבהים (points) או פרופיל (path)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "elevations": {
+           "type": "array",
+           "items": {
+            "type": "number"
+           }
+          },
+          "distance": {
+           "type": "number"
+          },
+          "ascent": {
+           "type": "number"
+          },
+          "descent": {
+           "type": "number"
+          },
+          "min": {
+           "type": "number"
+          },
+          "max": {
+           "type": "number"
+          },
+          "profile": {
+           "type": "array",
+           "description": "[מרחק במטרים, גובה, lon, lat]",
+           "items": {
+            "type": "array",
+            "items": {
+             "type": "number"
+            }
+           }
+          },
+          "unit": {
+           "type": "string"
+          },
+          "attribution": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "נתוני הגובה לא הותקנו"
+     }
+    }
+   },
+   "post": {
+    "summary": "כמו GET, בגוף JSON (לקווים ארוכים)",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "coordinates": {
+          "type": "array",
+          "description": "[[lon, lat], …] כמו ב-GeoJSON",
+          "items": {
+           "type": "array",
+           "items": {
+            "type": "number"
+           }
+          }
+         },
+         "points": {
+          "type": "array",
+          "description": "[[lat, lon], …]",
+          "items": {
+           "type": "array",
+           "items": {
+            "type": "number"
+           }
+          }
+         },
+         "samples": {
+          "type": "integer"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "גבהים או פרופיל",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/tiles/base.json": {
+   "get": {
+    "summary": "TileJSON של מפת הבסיס",
+    "responses": {
+     "200": {
+      "description": "TileJSON",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/tiles/base/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "אריח וקטורי (OpenMapTiles)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     },
+     "204": {
+      "description": "ריק"
+     }
+    }
+   }
+  },
+  "/tiles/poi/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "אריח נקודות עניין",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "cats",
+      "in": "query",
+      "required": false,
+      "description": "קטגוריות מופרדות בפסיק",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "kosher",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     }
+    }
+   }
+  },
+  "/tiles/fallback/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "מפת בסיס חלופית מהמאגר",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     }
+    }
+   }
+  },
+  "/api/trails/{id}": {
+   "get": {
+    "summary": "שביל מסומן: שם, צבע סימון, אורך, רשת וגאומטריה",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "trail-12",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "כרטיס שביל",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "id": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "route": {
+           "type": "string",
+           "enum": [
+            "hiking",
+            "foot",
+            "bicycle",
+            "mtb"
+           ]
+          },
+          "network": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "mark": {
+           "type": "string"
+          },
+          "color": {
+           "type": "string"
+          },
+          "length_km": {
+           "type": "number"
+          },
+          "parts": {
+           "type": "integer"
+          },
+          "continuous": {
+           "type": "boolean"
+          },
+          "bbox": {
+           "type": "array"
+          },
+          "geometry": {
+           "type": "object",
+           "description": "GeoJSON MultiLineString"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/tiles/trails/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "אריח שבילים מסומנים (שכבה trails)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     },
+     "204": {
+      "description": "ריק"
+     }
+    }
+   }
+  },
+  "/tiles/parks/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "אריח שמורות טבע, גנים לאומיים ואתרי רט\"ג (שכבה parks)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     },
+     "204": {
+      "description": "ריק"
+     }
+    }
+   }
+  },
+  "/tiles/contours/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "קווי גובה (שכבות contour: ele, idx; ‏spot: ele)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT (gzip)"
+     },
+     "204": {
+      "description": "ריק"
+     }
+    }
+   }
+  },
+  "/tiles/terrain/{z}/{x}/{y}.png": {
+   "get": {
+    "summary": "אריח גובה Terrarium (להצללת תבליט ולתלת-ממד)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "PNG"
+     },
+     "404": {
+      "description": "השכבה לא נבנתה"
+     }
+    }
+   }
+  },
+  "/fonts/{fontstack}/{range}.pbf": {
+   "get": {
+    "summary": "גליפים לתוויות המפה",
+    "parameters": [
+     {
+      "name": "fontstack",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "range",
+      "in": "path",
+      "required": true,
+      "description": "0-255",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "PBF"
+     }
+    }
+   }
+  },
+  "/metrics": {
+   "get": {
+    "summary": "מדדי Prometheus",
+    "responses": {
+     "200": {
+      "description": "text"
+     }
+    }
+   }
+  },
+  "/api/transit": {
+   "get": {
+    "summary": "תכנון נסיעה בתחבורה ציבורית (זמנים משוערים לפי לוח הזמנים)",
+    "parameters": [
+     {
+      "name": "from",
+      "in": "query",
+      "required": true,
+      "description": "lat,lon",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "to",
+      "in": "query",
+      "required": true,
+      "description": "lat,lon",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "time",
+      "in": "query",
+      "required": false,
+      "description": "ISO 8601, שעון ישראל (ברירת מחדל: עכשיו)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "description": "depart | arrive",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "מספר אפשרויות (1–8)",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "אפשרויות נסיעה (itineraries → legs)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/transit/stop/{id}": {
+   "get": {
+    "summary": "היציאות הקרובות מתחנה",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "stop_id של GTFS, או code-<מספר התחנה>",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "time",
+      "in": "query",
+      "required": false,
+      "description": "ISO 8601",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "תחנה, קווים ויציאות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/transit/stops": {
+   "get": {
+    "summary": "תחנות בסביבה",
+    "parameters": [
+     {
+      "name": "lat",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "radius",
+      "in": "query",
+      "required": false,
+      "description": "מטרים",
+      "schema": {
+       "type": "number"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "תחנות",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/transit/status": {
+   "get": {
+    "summary": "תאריכי לוח הזמנים ועדכניות הנתונים",
+    "responses": {
+     "200": {
+      "description": "מצב",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "LatLon": {
+    "type": "object",
+    "properties": {
+     "lat": {
+      "type": "number"
+     },
+     "lon": {
+      "type": "number"
+     }
+    }
+   },
+   "Error": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "object",
+      "properties": {
+       "code": {
+        "type": "string"
+       },
+       "message": {
+        "type": "string",
+        "description": "הודעה בעברית למשתמש"
+       }
+      }
+     }
+    }
+   },
+   "SearchResult": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "examples": [
+       "poi-123",
+       "place-5",
+       "street-9",
+       "addr-9-50"
+      ]
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "poi",
+       "place",
+       "street",
+       "address",
+       "category",
+       "coordinate",
+       "trail"
+      ]
+     },
+     "name": {
+      "type": "string"
+     },
+     "secondary": {
+      "type": "string"
+     },
+     "category": {
+      "type": "string"
+     },
+     "sub_category": {
+      "type": "string"
+     },
+     "icon": {
+      "type": "string"
+     },
+     "color": {
+      "type": "string"
+     },
+     "location": {
+      "$ref": "#/components/schemas/LatLon"
+     },
+     "distance": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "open_now": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "kosher": {
+      "type": [
+       "boolean",
+       "null"
+      ]
+     },
+     "score": {
+      "type": [
+       "number",
+       "null"
+      ]
+     }
+    }
+   }
+  }
+ }
+}

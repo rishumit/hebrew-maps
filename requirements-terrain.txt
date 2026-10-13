@@ -1,0 +1,2 @@
+# Optional: building the topographic layers (python -m tools.terrain build). The API itself needs only numpy.
+contourpy>=1.2
