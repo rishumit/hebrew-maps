@@ -22,9 +22,9 @@ a = Analysis(
         # — it must land at hmaps/api/ inside the bundle.
         (str(ROOT / 'hmaps' / 'api' / 'openapi.json'), 'hmaps/api'),
         # tzdata ships as a data-only package; PyInstaller misses the zoneinfo files.
-        # Use importlib to find the installed path dynamically (works on any venv layout).
-        *([(__import__('importlib.util', fromlist=['util']).util.find_spec('tzdata').submodule_search_locations[0], 'tzdata')]
-          if __import__('importlib.util', fromlist=['util']).util.find_spec('tzdata') else []),
+        # Locate it dynamically so this works on any venv layout.
+        *([(__import__('importlib.util').find_spec('tzdata').submodule_search_locations[0], 'tzdata')]
+          if __import__('importlib.util').find_spec('tzdata') else []),
         # web/ assets are NOT bundled here — Inno Setup copies them alongside the EXE.
         # They are listed in the [Files] section of hebrew-maps.iss instead.
     ],
