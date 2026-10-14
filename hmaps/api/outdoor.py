@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import urllib.parse
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -20,7 +21,7 @@ from starlette.routing import Route
 
 from ..core import categories, geo
 from ..etl.trails import BIKE_ROUTES, MARK_HE, NETWORK_HE, ROUTE_HE, display_name
-from . import mvt
+from . import mvt, rich
 from .tiles import _simplify_px, _tile_query_bbox
 
 #: colours of the Israeli trail marks (UI swatches; the map style has its own per-theme values)
@@ -89,8 +90,17 @@ def trail_detail(con: sqlite3.Connection, tid: int) -> dict | None:
         "location": {"lat": r["lat"], "lon": r["lon"]},
         "bbox": [r["min_lon"], r["min_lat"], r["max_lon"], r["max_lat"]],
         "geometry": {"type": "MultiLineString", "coordinates": lines},
-        "metadata": {"osm_url": _osm_url(r["osm"]), "source": "OpenStreetMap"},
+        "metadata": {"osm_url": _osm_url(r["osm"]), "source": "OpenStreetMap",
+                     "wikipedia_url": _wiki_url(extra.get("wikipedia"))},
+        **rich.trail_rich(con, r, raw, extra),
     }
+
+
+def _wiki_url(wp: str | None) -> str | None:
+    if not wp or ":" not in wp:
+        return None
+    lang, title = wp.split(":", 1)
+    return f"https://{lang}.wikipedia.org/wiki/{urllib.parse.quote(title.replace(' ', '_'))}"
 
 
 def poi_geometry(con: sqlite3.Connection, poi_id: int) -> dict | None:

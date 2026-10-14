@@ -1,0 +1,84 @@
+/* Hiking-route guide (web/js/guide.js): summary chips, stage timeline, sights, practical info, print layout. */
+
+.popover-btn { width: 100%; margin-top: var(--space-2); }
+
+.guide-view { --stage: #7C3AED; }
+.gd-pad { padding: 0 var(--space-4); margin: 0 0 var(--space-2); }
+.gd-section { border-top: 1px solid var(--border); padding-bottom: var(--space-2); }
+.gd-section.elev { margin: 0; padding: 0 var(--space-4) var(--space-3); }
+.gd-section.elev .subtitle { padding-inline: 0; }
+.gd-h4 { font-size: var(--text-sm); font-weight: 600; margin: var(--space-2) var(--space-4) var(--space-1); color: var(--text-strong); }
+
+.gd-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: var(--space-3) var(--space-4) var(--space-1); }
+.gd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--radius-full); font-size: var(--text-sm);
+  background: var(--surface-3); color: var(--text-strong); border: 1px solid var(--border); }
+.gd-chip .icon { color: var(--primary); }
+.gd-swatch { display: inline-block; width: 18px; height: 6px; border-radius: 3px; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.12); }
+.gd-ends { display: flex; gap: var(--space-2); align-items: flex-start; margin: var(--space-2) var(--space-4) 0; font-size: var(--text-sm); color: var(--text); }
+.gd-ends .icon { color: var(--secondary-dark); margin-top: 2px; flex: none; }
+.gd-desc p { margin: 0 0 var(--space-2); }
+
+/* stage timeline */
+.gd-stages { list-style: none; margin: 0; padding: 0 var(--space-4) var(--space-2); counter-reset: none; }
+.gd-stage { position: relative; padding-inline-start: 44px; padding-bottom: var(--space-3); }
+.gd-stage::before { /* the vertical line joining the numbered stops */
+  content: ""; position: absolute; inset-inline-start: 15px; top: 34px; bottom: -2px; width: 3px; border-radius: 2px;
+  background: var(--stage); opacity: .55; }
+.gd-stage:last-child::before { bottom: var(--space-3); }
+.gd-stage-btn { display: flex; gap: var(--space-3); align-items: flex-start; width: calc(100% + 44px); margin-inline-start: -44px;
+  padding: var(--space-2); text-align: right; background: none; border: 0; border-radius: var(--radius-lg); cursor: pointer; color: inherit; font: inherit; }
+.gd-stage-btn:hover { background: var(--hover); }
+.gd-stage[aria-current] > .gd-stage-btn { background: var(--selected); box-shadow: inset -4px 0 0 var(--stage); }
+.gd-num { width: 30px; height: 30px; flex: none; border-radius: var(--radius-full); display: grid; place-items: center; font-weight: 700;
+  font-size: var(--text-sm); color: #fff; background: var(--stage); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--stage); }
+.gd-stage-title { display: flex; flex-direction: column; min-width: 0; }
+.gd-step { font-size: var(--text-xs); color: var(--text-muted); font-weight: 600; }
+.gd-route { font-weight: 600; color: var(--text-strong); overflow-wrap: anywhere; }
+.gd-meta { font-size: var(--text-sm); color: var(--text-muted); }
+.gd-stage-body { padding-top: var(--space-1); }
+.gd-instr { margin: 0 0 var(--space-2); }
+.gd-note { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
+.gd-marks { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.gd-mark { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); }
+
+/* sights: mini cards */
+.gd-sights { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.gd-sight { display: flex; gap: var(--space-2); align-items: flex-start; width: 100%; text-align: right; padding: var(--space-2);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; color: inherit; font: inherit; }
+.gd-sight:hover, .gd-sight:focus-visible { background: var(--hover); }
+.gd-sicon { width: 30px; height: 30px; margin-top: 0; }
+.gd-sbody { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gd-sname { font-weight: 600; color: var(--text-strong); font-size: var(--text-sm); }
+.gd-stext { font-size: var(--text-xs); color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; }
+.gd-sthumb { width: 48px; height: 48px; border-radius: var(--radius-md); object-fit: cover; flex: none; background: var(--surface-3); }
+
+/* practical & safety */
+.gd-tips { list-style: none; margin: 0; padding: 0 var(--space-4) var(--space-2); display: grid; gap: var(--space-2); }
+.gd-tip { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--text-sm); }
+.gd-tip .icon { color: var(--primary); flex: none; margin-top: 2px; }
+.gd-tip-flood, .gd-tip-heat { padding: var(--space-2); border-radius: var(--radius-lg); background: #FFFBEB; color: #78350F; border: 1px solid #FCD34D; }
+.gd-tip-flood .icon, .gd-tip-heat .icon { color: var(--accent-dark); }
+:root[data-theme="dark"] .gd-tip-flood, :root[data-theme="dark"] .gd-tip-heat { background: #3A2E12; color: #FDE68A; border-color: #78350F; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gd-tip-flood, :root:not([data-theme="light"]) .gd-tip-heat { background: #3A2E12; color: #FDE68A; border-color: #78350F; }
+}
+.gd-credits ul { margin: 0; padding: 0 var(--space-8) var(--space-2) var(--space-4); font-size: var(--text-sm); }
+.gd-credits p { padding: 0 var(--space-4) var(--space-4); margin: 0; }
+
+/* print / "save as PDF": only the guide, full length, no map and no buttons */
+@media print {
+  html:has(.guide-view), html:has(.guide-view) body { overflow: visible !important; height: auto !important; background: #fff !important; }
+  html:has(.guide-view) body > :not(main),
+  html:has(.guide-view) main > :not(#panel),
+  html:has(.guide-view) .skip-link, html:has(.guide-view) .sheet-handle,
+  .guide-view .gd-actions, html:has(.guide-view) .p-head .icon-btn, .guide-view .g-strip li:not(:first-child) { display: none !important; }
+  html:has(.guide-view) main, html:has(.guide-view) #panel, html:has(.guide-view) .panel-body {
+    position: static !important; inset: auto !important; width: auto !important; height: auto !important; max-height: none !important;
+    overflow: visible !important; box-shadow: none !important; border: 0 !important; animation: none !important; transform: none !important; }
+  .guide-view { color: #000; }
+  .guide-view .gd-stage, .guide-view .gd-sight, .guide-view .gd-tip, .guide-view .elev { break-inside: avoid; }
+  .guide-view .gd-stage-btn { box-shadow: none !important; background: none !important; }
+  .guide-view .gd-num { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .guide-view a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 10px; color: #555; word-break: break-all; }
+  .guide-view .gd-stext { -webkit-line-clamp: unset; display: block; }
+}

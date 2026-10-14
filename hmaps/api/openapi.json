@@ -500,7 +500,7 @@
   },
   "/api/poi/{id}": {
    "get": {
-    "summary": "פרטי נקודת עניין",
+    "summary": "פרטי נקודת עניין (באתרי טיול: גלריה, טקסט מוויקיפדיה / ויקימסע, עובדות, שבילים ואתרים בסביבה)",
     "parameters": [
      {
       "name": "id",
@@ -518,7 +518,234 @@
       "content": {
        "application/json": {
         "schema": {
-         "type": "object"
+         "type": "object",
+         "properties": {
+          "media": {
+           "type": "object",
+           "properties": {
+            "gallery": {
+             "type": "array",
+             "items": {
+              "type": "object",
+              "description": "תמונה עם קרדיט (חובה להציג: צלם, רישיון, קישור למקור)",
+              "properties": {
+               "src": {
+                "type": "string"
+               },
+               "full": {
+                "type": "string"
+               },
+               "title": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "author": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "license": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "license_url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "page_url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "source": {
+                "type": "string",
+                "enum": [
+                 "commons",
+                 "mapillary",
+                 "web"
+                ]
+               }
+              }
+             }
+            }
+           }
+          },
+          "texts": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "source": {
+              "type": "string",
+              "enum": [
+               "wikipedia",
+               "wikivoyage"
+              ]
+             },
+             "title": {
+              "type": "string"
+             },
+             "text": {
+              "type": "string"
+             },
+             "paragraphs": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             },
+             "url": {
+              "type": "string"
+             },
+             "license": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "facts": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "label": {
+              "type": "string"
+             },
+             "value": {
+              "type": "string"
+             },
+             "icon": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "nearby_trails": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "nearby_sites": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "official_website": {
+           "type": "string"
+          },
+          "commons_category_url": {
+           "type": "string"
+          },
+          "minyanim": {
+           "type": "object",
+           "description": "זמני תפילות (בתי כנסת המקושרים למאגר נדרים פלוס בלבד)",
+           "properties": {
+            "source": {
+             "type": "string"
+            },
+            "source_url": {
+             "type": "string"
+            },
+            "mosad_id": {
+             "type": "string"
+            },
+            "name": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "address": {
+             "type": [
+              "string",
+              "null"
+             ]
+            },
+            "phone": {
+             "type": [
+              "string",
+              "null"
+             ],
+             "description": "קו טלפוני לשמיעת הזמנים"
+            },
+            "updated": {
+             "type": "string",
+             "description": "תאריך משיכת הנתונים"
+            },
+            "items": {
+             "type": "array",
+             "items": {
+              "type": "object",
+              "properties": {
+               "prayer": {
+                "type": "string",
+                "examples": [
+                 "שחרית",
+                 "מנחה",
+                 "ערבית",
+                 "שיעור"
+                ]
+               },
+               "time": {
+                "type": "string",
+                "examples": [
+                 "06:30"
+                ]
+               },
+               "days": {
+                "type": "string",
+                "description": "אותיות הימים: א..ו, ש (שבת)",
+                "examples": [
+                 "אבגדה"
+                ]
+               },
+               "hall": {
+                "type": [
+                 "string",
+                 "null"
+                ],
+                "description": "אולם / חדר בתוך הבניין"
+               },
+               "note": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               }
+              }
+             }
+            },
+            "sun": {
+             "type": [
+              "object",
+              "null"
+             ],
+             "description": "זריחה / שקיעה להיום בקירוב (גובה פני הים)",
+             "properties": {
+              "sunrise": {
+               "type": "string"
+              },
+              "sunset": {
+               "type": "string"
+              }
+             }
+            },
+            "sun_note": {
+             "type": "string"
+            }
+           }
+          }
+         }
         }
        }
       }
@@ -1276,6 +1503,142 @@
           "geometry": {
            "type": "object",
            "description": "GeoJSON MultiLineString"
+          },
+          "media": {
+           "type": "object",
+           "properties": {
+            "gallery": {
+             "type": "array",
+             "items": {
+              "type": "object",
+              "description": "תמונה עם קרדיט (חובה להציג: צלם, רישיון, קישור למקור)",
+              "properties": {
+               "src": {
+                "type": "string"
+               },
+               "full": {
+                "type": "string"
+               },
+               "title": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "author": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "license": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "license_url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "page_url": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "source": {
+                "type": "string",
+                "enum": [
+                 "commons",
+                 "mapillary",
+                 "web"
+                ]
+               }
+              }
+             }
+            }
+           }
+          },
+          "texts": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "source": {
+              "type": "string",
+              "enum": [
+               "wikipedia",
+               "wikivoyage"
+              ]
+             },
+             "title": {
+              "type": "string"
+             },
+             "text": {
+              "type": "string"
+             },
+             "paragraphs": {
+              "type": "array",
+              "items": {
+               "type": "string"
+              }
+             },
+             "url": {
+              "type": "string"
+             },
+             "license": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "start": {
+           "type": "object",
+           "properties": {
+            "lat": {
+             "type": "number"
+            },
+            "lon": {
+             "type": "number"
+            }
+           }
+          },
+          "end": {
+           "type": "object",
+           "properties": {
+            "lat": {
+             "type": "number"
+            },
+            "lon": {
+             "type": "number"
+            }
+           }
+          },
+          "loop": {
+           "type": "boolean"
+          },
+          "duration_min": {
+           "type": [
+            "integer",
+            "null"
+           ],
+           "description": "זמן משוער ללא עליות"
+          },
+          "difficulty_he": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "sites_along": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           },
+           "description": "אתרים, מעיינות, ברזיות ותצפיות עד 150 מ׳ מהשביל, לפי סדר ההליכה"
           }
          }
         }
@@ -1503,6 +1866,54 @@
     }
    }
   },
+  "/media/{key}": {
+   "get": {
+    "summary": "עותק מקומי של תמונה (tools/media.py)",
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "description": "24 תווי hex",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "image"
+     },
+     "404": {
+      "description": "לא הורד"
+     }
+    }
+   }
+  },
+  "/media/mly/{id}": {
+   "get": {
+    "summary": "תמונת Mapillary (הפניה לכתובת עדכנית, דורש מפתח בשרת)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "302": {
+      "description": "הפניה"
+     },
+     "404": {
+      "description": "אין מפתח / לא נמצא"
+     }
+    }
+   }
+  },
   "/api/transit": {
    "get": {
     "summary": "תכנון נסיעה בתחבורה ציבורית (זמנים משוערים לפי לוח הזמנים)",
@@ -1712,6 +2123,871 @@
         }
        }
       }
+     }
+    }
+   }
+  },
+  "/api/minyanim/near": {
+   "get": {
+    "summary": "מניינים קרובים: התפילות הבאות בסביבה (24 השעות הקרובות), לפי שעה ואז מרחק",
+    "parameters": [
+     {
+      "name": "lat",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "radius",
+      "in": "query",
+      "required": false,
+      "description": "מטרים (50–10000, ברירת מחדל 1000)",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "prayer",
+      "in": "query",
+      "required": false,
+      "description": "שחרית | מנחה | ערבית | שיעור (ברירת מחדל: כל התפילות, בלי שיעורים)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "after",
+      "in": "query",
+      "required": false,
+      "description": "HH:MM (ברירת מחדל: עכשיו, שעון ישראל)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "day",
+      "in": "query",
+      "required": false,
+      "description": "א..ש או 0..6 (0 = ראשון; ברירת מחדל: היום)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מניינים",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "allOf": [
+             {
+              "type": "object",
+              "properties": {
+               "prayer": {
+                "type": "string",
+                "examples": [
+                 "שחרית",
+                 "מנחה",
+                 "ערבית",
+                 "שיעור"
+                ]
+               },
+               "time": {
+                "type": "string",
+                "examples": [
+                 "06:30"
+                ]
+               },
+               "days": {
+                "type": "string",
+                "description": "אותיות הימים: א..ו, ש (שבת)",
+                "examples": [
+                 "אבגדה"
+                ]
+               },
+               "hall": {
+                "type": [
+                 "string",
+                 "null"
+                ],
+                "description": "אולם / חדר בתוך הבניין"
+               },
+               "note": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               }
+              }
+             },
+             {
+              "type": "object",
+              "properties": {
+               "mosad_id": {
+                "type": "string"
+               },
+               "poi_id": {
+                "type": [
+                 "string",
+                 "null"
+                ],
+                "examples": [
+                 "poi-123"
+                ]
+               },
+               "name": {
+                "type": "string"
+               },
+               "address": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               },
+               "lat": {
+                "type": "number"
+               },
+               "lon": {
+                "type": "number"
+               },
+               "distance_m": {
+                "type": "integer"
+               },
+               "tomorrow": {
+                "type": "boolean",
+                "description": "המניין ביום שאחרי"
+               }
+              }
+             }
+            ]
+           }
+          },
+          "meta": {
+           "type": "object"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/hikes": {
+   "get": {
+    "summary": "מסלולי טיול מתוארים באזור",
+    "parameters": [
+     {
+      "name": "bbox",
+      "in": "query",
+      "required": false,
+      "description": "minlon,minlat,maxlon,maxlat",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "lat",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "lon",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "radius",
+      "in": "query",
+      "required": false,
+      "description": "מטרים (ברירת מחדל 20000)",
+      "schema": {
+       "type": "number"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "geometry",
+      "in": "query",
+      "required": false,
+      "description": "1 = כולל קו מפושט",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מסלולים",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/hikes/{id}": {
+   "get": {
+    "summary": "כרטיס מסלול טיול (תיאור, נקודות ציון, טיפים, גאומטריה)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "hike-12",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מסלול",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/hikes/{id}/guide": {
+   "get": {
+    "summary": "מדריך מסלול: סיכום, שלבים, אתרים, מידע מעשי ובטיחות",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "hike-12",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "description": "YYYY-MM-DD לחישוב שעות האור",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מדריך",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string",
+           "enum": [
+            "hike",
+            "trail",
+            "route"
+           ]
+          },
+          "ref": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "name": {
+           "type": "string"
+          },
+          "summary": {
+           "type": "object",
+           "description": "אורך, זמן (time_formula: tobler | naismith | flat), עלייה/ירידה, גבהים, קושי, מעגלי, סימון שבילים"
+          },
+          "start": {
+           "type": "object"
+          },
+          "end": {
+           "type": "object"
+          },
+          "stages": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "n": {
+              "type": "integer"
+             },
+             "from": {
+              "type": "object"
+             },
+             "to": {
+              "type": "object",
+              "description": "kind: waypoint | junction | sight | distance"
+             },
+             "distance_m": {
+              "type": "integer"
+             },
+             "duration_min": {
+              "type": "integer"
+             },
+             "ascent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "descent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "marks": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "stream": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "sights": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "instruction": {
+              "type": "string",
+              "description": "הוראה בעברית"
+             },
+             "bbox": {
+              "type": "array"
+             },
+             "geometry": {
+              "type": "object"
+             }
+            }
+           }
+          },
+          "sights": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "elevation": {
+           "type": [
+            "object",
+            "null"
+           ]
+          },
+          "practical": {
+           "type": "object",
+           "description": "מים, שירותים, חניה, צל, שעות אור (שקיעה), חירום, טיפים"
+          },
+          "credits": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "geometry": {
+           "type": "object"
+          },
+          "bbox": {
+           "type": "array"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/trails/{id}/guide": {
+   "get": {
+    "summary": "מדריך מסלול לשביל מסומן",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "trail-12",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "description": "YYYY-MM-DD",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "מדריך",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string",
+           "enum": [
+            "hike",
+            "trail",
+            "route"
+           ]
+          },
+          "ref": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "name": {
+           "type": "string"
+          },
+          "summary": {
+           "type": "object",
+           "description": "אורך, זמן (time_formula: tobler | naismith | flat), עלייה/ירידה, גבהים, קושי, מעגלי, סימון שבילים"
+          },
+          "start": {
+           "type": "object"
+          },
+          "end": {
+           "type": "object"
+          },
+          "stages": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "n": {
+              "type": "integer"
+             },
+             "from": {
+              "type": "object"
+             },
+             "to": {
+              "type": "object",
+              "description": "kind: waypoint | junction | sight | distance"
+             },
+             "distance_m": {
+              "type": "integer"
+             },
+             "duration_min": {
+              "type": "integer"
+             },
+             "ascent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "descent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "marks": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "stream": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "sights": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "instruction": {
+              "type": "string",
+              "description": "הוראה בעברית"
+             },
+             "bbox": {
+              "type": "array"
+             },
+             "geometry": {
+              "type": "object"
+             }
+            }
+           }
+          },
+          "sights": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "elevation": {
+           "type": [
+            "object",
+            "null"
+           ]
+          },
+          "practical": {
+           "type": "object",
+           "description": "מים, שירותים, חניה, צל, שעות אור (שקיעה), חירום, טיפים"
+          },
+          "credits": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "geometry": {
+           "type": "object"
+          },
+          "bbox": {
+           "type": "array"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/guide": {
+   "post": {
+    "summary": "מדריך מסלול לקו כלשהו (למשל מסלול הליכה שתוכנן)",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "coordinates": {
+          "type": "array",
+          "description": "[[lon, lat], …] מההתחלה לסוף"
+         },
+         "name": {
+          "type": "string"
+         },
+         "waypoints": {
+          "type": "array"
+         },
+         "date": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "מדריך",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string",
+           "enum": [
+            "hike",
+            "trail",
+            "route"
+           ]
+          },
+          "ref": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "name": {
+           "type": "string"
+          },
+          "summary": {
+           "type": "object",
+           "description": "אורך, זמן (time_formula: tobler | naismith | flat), עלייה/ירידה, גבהים, קושי, מעגלי, סימון שבילים"
+          },
+          "start": {
+           "type": "object"
+          },
+          "end": {
+           "type": "object"
+          },
+          "stages": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "n": {
+              "type": "integer"
+             },
+             "from": {
+              "type": "object"
+             },
+             "to": {
+              "type": "object",
+              "description": "kind: waypoint | junction | sight | distance"
+             },
+             "distance_m": {
+              "type": "integer"
+             },
+             "duration_min": {
+              "type": "integer"
+             },
+             "ascent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "descent": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             },
+             "marks": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "stream": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "sights": {
+              "type": "array",
+              "items": {
+               "type": "object"
+              }
+             },
+             "instruction": {
+              "type": "string",
+              "description": "הוראה בעברית"
+             },
+             "bbox": {
+              "type": "array"
+             },
+             "geometry": {
+              "type": "object"
+             }
+            }
+           }
+          },
+          "sights": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "elevation": {
+           "type": [
+            "object",
+            "null"
+           ]
+          },
+          "practical": {
+           "type": "object",
+           "description": "מים, שירותים, חניה, צל, שעות אור (שקיעה), חירום, טיפים"
+          },
+          "credits": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          },
+          "geometry": {
+           "type": "object"
+          },
+          "bbox": {
+           "type": "array"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר שגוי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "המסלול ארוך מדי / לא תקין"
+     }
+    }
+   }
+  },
+  "/tiles/hikes/{z}/{x}/{y}.pbf": {
+   "get": {
+    "summary": "אריח מסלולי טיול מתוארים (שכבה hikes)",
+    "parameters": [
+     {
+      "name": "z",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "x",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "y",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "MVT"
+     },
+     "204": {
+      "description": "ריק"
      }
     }
    }

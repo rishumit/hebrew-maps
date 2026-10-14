@@ -22,7 +22,6 @@ Set-Location -Path (Join-Path $PSScriptRoot "..")
 # 0. Validate venv exists
 # ---------------------------------------------------------------------------
 $py  = ".\.venv\Scripts\python.exe"
-$pip = ".\.venv\Scripts\pip.exe"
 
 if (-not (Test-Path $py)) {
     Write-Error "Virtual environment not found at .venv\Scripts\python.exe.  Run setup-windows.cmd first."
@@ -40,7 +39,14 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 Write-Host "[1/4] Installing PyInstaller into venv..." -ForegroundColor Cyan
 
-& $pip install --quiet "pyinstaller==6.10.0"
+# The .venv is created by uv and has no pip — install with uv when available.
+$uv = ".\tools-bin\uv\uv.exe"
+if (-not (Test-Path $uv)) { $uv = (Get-Command uv -ErrorAction SilentlyContinue).Source }
+if ($uv) {
+    & $uv pip install --quiet --python $py "pyinstaller>=6.10" "pillow>=10"
+} else {
+    & $py -m pip install --quiet "pyinstaller>=6.10" "pillow>=10"
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "pip install pyinstaller failed (exit $LASTEXITCODE)"
     exit 1

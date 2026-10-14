@@ -185,3 +185,65 @@ export function markerImage(iconName, color, { size = 28, dpr = 2, ring = '#ffff
   ctx.restore();
   return ctx.getImageData(0, 0, px, px);
 }
+
+
+/**
+ * Israeli route-number shield, the way Google Maps draws it: a small rounded
+ * rectangle in the sign's colour, a thin inner white frame, the number in bold.
+ * Colours follow the Israeli signage code (freeway blue, 1-2 digit red,
+ * regional green, local black/white).  Returns ImageData for map.addImage.
+ */
+export const SHIELD_STYLES = {
+  fw: { bg: '#1D5BBF', fg: '#FFFFFF', frame: '#FFFFFF', edge: '#123C80' },
+  nat: { bg: '#D6332B', fg: '#FFFFFF', frame: '#FFFFFF', edge: '#8F1D17' },
+  reg: { bg: '#178246', fg: '#FFFFFF', frame: '#FFFFFF', edge: '#0D5A2F' },
+  loc: { bg: '#FFFFFF', fg: '#1F2328', frame: '#1F2328', edge: '#6B7280' },
+};
+
+export function shieldImage(ref, kind = 'nat', { dpr = 2, height = 18 } = {}) {
+  const st = SHIELD_STYLES[kind] || SHIELD_STYLES.nat;
+  const text = String(ref).split(/[;,]/)[0].trim();
+  const font = `700 ${Math.round(height * 0.64)}px "Segoe UI", "Noto Sans", Arial, sans-serif`;
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = font;
+  const tw = Math.ceil(probe.measureText(text).width);
+  const w = Math.max(height + 2, tw + 12);
+  const h = height;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round((w + 2) * dpr);
+  canvas.height = Math.round((h + 3) * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const rr = (x, y, ww, hh, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + ww, y, x + ww, y + hh, r);
+    ctx.arcTo(x + ww, y + hh, x, y + hh, r);
+    ctx.arcTo(x, y + hh, x, y, r);
+    ctx.arcTo(x, y, x + ww, y, r);
+    ctx.closePath();
+  };
+  // body with a soft drop shadow
+  ctx.shadowColor = 'rgba(0,0,0,.28)';
+  ctx.shadowBlur = 1.5;
+  ctx.shadowOffsetY = 0.8;
+  rr(1, 1, w, h, 3.5);
+  ctx.fillStyle = st.bg;
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = st.edge;
+  ctx.stroke();
+  // inner frame, as on the real signs
+  rr(2.6, 2.6, w - 3.2, h - 3.2, 2.2);
+  ctx.lineWidth = 1.1;
+  ctx.strokeStyle = st.frame;
+  ctx.stroke();
+  // number
+  ctx.font = font;
+  ctx.fillStyle = st.fg;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 1 + w / 2, 1 + h / 2 + 0.6);
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}

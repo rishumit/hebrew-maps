@@ -1,7 +1,7 @@
 // Map view: MapLibre setup, basemap themes, overlay layers and map interactions.
 /* global maplibregl */
 
-import { markerImage } from './icons.js';
+import { markerImage, shieldImage } from './icons.js';
 import { fallbackStyle, omtStyle, outdoorLayers, THEMES } from './style.js';
 import { bus, prefersReducedMotion } from './util.js';
 
@@ -9,6 +9,13 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const OUTDOOR_LAYER_IDS = ['parks-fill', 'parks-outline', 'trails-casing', 'trails-line', 'trails-bike', 'trails-label'];
 const TRAIL_CLICK_LAYERS = ['trails-line', 'trails-bike'];
 const ISRAEL_CENTER = [35.0, 31.6];
+// 3D view
+const PITCH_3D = 60;
+const PITCH_SITE_3D = 62; // "תלת-ממד" button of a site / trail card
+const PITCH_MAX_3D = 75;
+const TERRAIN_EXAGGERATION = 1.4; // Israel's relief is modest; a little boost reads better
+// our own layers (added in _installOverlays) - never treated as basemap labels
+const OVERLAY_IDS = new Set(['pois', 'pois-cluster-count', 'results', 'endpoints', 'selection']);
 
 export class MapView {
   constructor(container, meta, categories, initial) {
@@ -17,6 +24,7 @@ export class MapView {
     this.catColor = Object.fromEntries(categories.map((c) => [c.id, c.color]));
     this.theme = initial.theme || 'light';
     this.poiFilter = { cats: [], kosher: false };
+    this.is3d = false;
     this.showPois = true;
     this.showOutdoor = true; // marked trails + nature reserves
     this.data = { results: EMPTY, selection: EMPTY, route: EMPTY, location: EMPTY, highlight: EMPTY, endpoints: EMPTY };
@@ -42,7 +50,10 @@ export class MapView {
       attributionControl: false,
       hash: false,
       dragRotate: true,
-      pitchWithRotate: false,
+      // 2D: no tilting at all (maxPitch 0); 3D mode raises it, then right-drag /
+      // two-finger drag tilts the map like Google Earth view
+      pitchWithRotate: true,
+      maxPitch: 0,
       cooperativeGestures: false,
       locale: {
         'AttributionControl.ToggleAttribution': 'הצג/הסתר ייחוס',
@@ -100,6 +111,119 @@ export class MapView {
     this.map.setStyle(this._baseStyle(), { diff: false });
   }
 
+  // ----------------------------------------------------------------- 3D mode
+  /** Real relief needs the DEM (data/tiles/terrain.mbtiles, built by build-terrain.cmd). */
+  get has3dTerrain() {
+    return !!this.meta?.terrain?.dem?.tiles;
+  }
+
+  /**
+   * Google-Earth-like view: tilted camera, mountains (terrain + hillshade), extruded
+   * buildings and a sky. Survives theme changes (re-applied on style.load).
+   */
+  set3D(on, { animate = true } = {}) {
+    on = !!on;
+    const m = this.map;
+    const duration = animate && !prefersReducedMotion() ? 900 : 0;
+    this.is3d = on;
+    if (on) {
+      m.setMaxPitch(PITCH_MAX_3D);
+      this._apply3D();
+      if (m.getPitch() < 30) m.easeTo({ pitch: PITCH_3D, duration });
+    } else {
+      this._remove3D();
+      m.easeTo({ pitch: 0, duration });
+      // lower the cap once the camera is flat, so 2D can't be tilted by accident
+      const flat = () => { if (!this.is3d) m.setMaxPitch(0); };
+      if (duration) setTimeout(flat, duration + 50); else flat();
+    }
+    bus.emit('map:3d', on);
+  }
+
+  /** "תלת-ממד" button of a card: switch 3D on and fly to the place with a tilted camera. */
+  show3D(target = {}) {
+    if (!this.is3d) this.set3D(true, { animate: false });
+    const duration = prefersReducedMotion() ? 0 : 1600;
+    let cam = null;
+    if (target.bbox) {
+      const [w, s, e, n] = target.bbox;
+      try {
+        cam = this.map.cameraForBounds([[w, s], [e, n]], { padding: this._padding() });
+      } catch {
+        cam = null;
+      }
+      if (!cam) cam = { center: [(w + e) / 2, (s + n) / 2], zoom: 13 };
+    } else if (target.point) {
+      cam = { center: [target.point.lon, target.point.lat], zoom: 15 };
+    }
+    if (!cam) return;
+    // a little closer than a flat fit (the tilt shows more ground), slight turn for depth
+    this.map.flyTo({ ...cam, zoom: Math.min((cam.zoom ?? 13) + 0.4, 16.5), pitch: PITCH_SITE_3D,
+      bearing: this.map.getBearing() || -20, duration, essential: true });
+  }
+
+  _apply3D() {
+    const m = this.map;
+    const style = m.getStyle?.() || {};
+    const layers = style.layers || [];
+    const firstLabel = layers.find((l) => l.type === 'symbol' && !OVERLAY_IDS.has(l.id))?.id;
+    const dark = this._resolvedTheme() === 'dark';
+    const t = THEMES[this._resolvedTheme()] || THEMES.light;
+    if (this.has3dTerrain) {
+      const d = this.meta.terrain.dem;
+      const dem = { type: 'raster-dem', tiles: [d.tiles], tileSize: 256, encoding: d.encoding || 'terrarium',
+        minzoom: d.minzoom, maxzoom: d.maxzoom, bounds: d.bounds };
+      // separate sources for the 3D mesh and the shading (MapLibre's recommendation)
+      if (!m.getSource('terrain-3d')) m.addSource('terrain-3d', dem);
+      if (!m.getSource('hillshade-3d-dem')) m.addSource('hillshade-3d-dem', dem);
+      if (!m.getLayer('hillshade') && !m.getLayer('hillshade-3d')) {
+        this._addLayerSafe({ id: 'hillshade-3d', type: 'hillshade', source: 'hillshade-3d-dem',
+          paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': dark ? '#000000' : '#5A6B5E',
+            'hillshade-highlight-color': dark ? '#3A4250' : '#FFFFFF', 'hillshade-accent-color': dark ? '#111827' : '#4B5B4F' } },
+        layers.find((l) => l.id === 'building')?.id || firstLabel);
+      }
+      try {
+        m.setTerrain({ source: 'terrain-3d', exaggeration: TERRAIN_EXAGGERATION });
+      } catch (e) {
+        console.warn('terrain failed', e);
+      }
+    }
+    // extruded buildings (OpenMapTiles basemap only; heights from OSM levels/height)
+    if (m.getSource('openmaptiles') && m.getLayer('building')) {
+      this._addLayerSafe({ id: 'building-3d', type: 'fill-extrusion', source: 'openmaptiles', 'source-layer': 'building',
+        minzoom: 14,
+        paint: {
+          'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0],
+            0, t.building, 60, dark ? '#4B5563' : '#CFC8BC'],
+          'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.2, ['coalesce', ['get', 'render_height'], 6]],
+          'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.2, ['coalesce', ['get', 'render_min_height'], 0]],
+          'fill-extrusion-opacity': 0.88,
+          'fill-extrusion-vertical-gradient': true,
+        } }, firstLabel);
+      m.setLayoutProperty('building', 'visibility', 'none');
+    }
+    if (m.setSky) {
+      m.setSky(dark
+        ? { 'sky-color': '#0B1220', 'horizon-color': '#1F2937', 'fog-color': '#111827', 'sky-horizon-blend': 0.5,
+          'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.6, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 12, 0] }
+        : { 'sky-color': '#8EC5F5', 'horizon-color': '#E8F1FB', 'fog-color': '#F4F3EF', 'sky-horizon-blend': 0.5,
+          'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.7, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 12, 0] });
+    }
+  }
+
+  _remove3D() {
+    const m = this.map;
+    try {
+      if (m.getTerrain?.()) m.setTerrain(null);
+    } catch {
+      /* style already gone */
+    }
+    for (const id of ['building-3d', 'hillshade-3d']) if (m.getLayer(id)) m.removeLayer(id);
+    for (const id of ['hillshade-3d-dem', 'terrain-3d']) if (m.getSource(id)) m.removeSource(id);
+    if (m.getLayer('building')) m.setLayoutProperty('building', 'visibility', 'visible');
+    if (m.setSky) m.setSky(undefined);
+  }
+
   // ----------------------------------------------------------------- overlays
   _addLayerSafe(layer, before) {
     try {
@@ -123,7 +247,7 @@ export class MapView {
     for (const [id, data] of Object.entries(this.data)) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data });
     }
-    if (!m.getSource('pois')) m.addSource('pois', { type: 'vector', tiles: [this._poiTilesUrl()], minzoom: 6, maxzoom: 17 });
+    if (!m.getSource('pois')) m.addSource('pois', { type: 'vector', tiles: [this._poiTilesUrl()], minzoom: 6, maxzoom: 18 });
     this._installOutdoor();
 
     this._addLayerSafe({ id: 'highlight-fill', type: 'fill', source: 'highlight',
@@ -159,16 +283,28 @@ export class MapView {
     this._addLayerSafe({ id: 'pois', type: 'symbol', source: 'pois', 'source-layer': 'pois', filter: ['!', ['has', 'count']],
       layout: {
         'icon-image': ['concat', 'poi:', ['get', 'icon'], ':', ['get', 'cat']],
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.75, 16, 1],
+        // the server already thinned the POIs (Google-style); here we only keep a little
+        // breathing room so neighbouring icons and labels never touch
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.62, 12, 0.72, 15, 0.86, 17, 1],
+        'icon-padding': 4,
         'icon-allow-overlap': false,
         'symbol-sort-key': ['-', 0, ['get', 'rank']],
-        'text-field': ['step', ['zoom'], '', 14, ['get', 'name']],
+        // names: important places from z13, everything shown from z15
+        'text-field': ['step', ['zoom'], '',
+          13, ['case', ['>=', ['coalesce', ['get', 'rank'], 0], 0.6], ['get', 'name'], ''],
+          15, ['get', 'name']],
         'text-font': ['Noto Sans Medium'],
-        'text-size': 11.5,
-        'text-anchor': 'top',
-        'text-offset': [0, 1.05],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 13, 11, 17, 12.5],
+        // like Google: the label sits beside the icon, on whichever side has room
+        'text-variable-anchor': ['right', 'left', 'top', 'bottom'],
+        'text-radial-offset': ['interpolate', ['linear'], ['zoom'], 13, 0.95, 17, 1.2],
+        'text-justify': 'auto',
         'text-max-width': 8,
-        'text-optional': true,
+        'text-padding': 3,
+        // Google-style: a named place is drawn with its name or not at all, so a crowded
+        // spot never turns into a carpet of unlabelled icons (unnamed / minor places have
+        // an empty label and still show as an icon)
+        'text-optional': false,
         visibility: this.showPois ? 'visible' : 'none',
       },
       paint: {
@@ -194,6 +330,7 @@ export class MapView {
           ['/', ['*', ['get', 'accuracy'], 2147483648], ['*', 40075016.686, ['cos', ['/', ['*', ['get', 'lat'], 3.14159265], 180]]]]] } });
     this._addLayerSafe({ id: 'location-dot', type: 'circle', source: 'location',
       paint: { 'circle-color': '#2563EB', 'circle-radius': 7, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
+    if (this.is3d) this._apply3D(); // a theme change rebuilds the style
     bus.emit('map:ready');
   }
 
@@ -242,6 +379,9 @@ export class MapView {
     if (id.startsWith('poi:')) {
       const [, icon, cat] = id.split(':');
       img = markerImage(icon, this.catColor[cat] || '#4B5563', { size: 26 });
+    } else if (id.startsWith('shield:')) {
+      const [, kind, ...ref] = id.split(':');
+      img = shieldImage(ref.join(':'), kind);
     } else if (id === 'pin:result') {
       img = markerImage('pin', '#DC2626', { size: 30, shape: 'pin' });
     } else if (id === 'pin:selected') {
@@ -363,7 +503,8 @@ export class MapView {
   }
 
   resetNorth() {
-    this.map.easeTo({ bearing: 0, pitch: 0, duration: prefersReducedMotion() ? 0 : 300 });
+    // in 3D keep the tilt, only face north
+    this.map.easeTo({ bearing: 0, pitch: this.is3d ? this.map.getPitch() : 0, duration: prefersReducedMotion() ? 0 : 300 });
   }
 
   /** POIs currently rendered (for the accessible list of places in view). */

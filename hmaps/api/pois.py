@@ -9,6 +9,8 @@ from datetime import datetime
 
 from ..core import categories, hours
 from ..core.text import tel_href
+from . import rich
+from .images import local_image
 from .search import KIND_LABEL, format_address
 
 CUISINE_HE = {
@@ -90,7 +92,9 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
     if extra.get("air_conditioning") == "yes":
         tags.append("ממוזג")
     phone = r["phone"]
-    images = [r["image"]] if r["image"] else []
+    gallery = rich.gallery(con, "poi", r["id"], r["image"])
+    main = local_image(r["image"], 640)
+    images = [main] if main else [g["src"] for g in gallery[:1]]
     full_address = format_address(r["street"], r["housenumber"], r["city"]) or None
     name = r["name"] or sub.name_he
     return {
@@ -109,7 +113,7 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
         "contact": {"phone": phone, "phone_href": tel_href(phone) if phone else None, "email": r["email"],
                     "website": r["website"]},
         "opening_hours": hours_block(r["opening_hours"], r["hours_json"]),
-        "media": {"images": images, "thumbnail": images[0] if images else None},
+        "media": {"images": images, "thumbnail": images[0] if images else None, "gallery": gallery},
         "metadata": {
             "rating": None, "review_count": None,
             "wheelchair_accessible": {"yes": True, "no": False}.get(r["wheelchair"] or ""),
@@ -121,12 +125,41 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
             "last_updated": r["updated"],
             "wikipedia_url": _wiki_url(r["wikipedia"]),
             "osm_url": _osm_url(r["osm"]),
-            "source": "OpenStreetMap",
+            "source": "נדרים פלוס" if (r["osm"] or "").startswith("zm:") else "OpenStreetMap",
         },
         "description_he": r["description"] or extra.get("description:he") or extra.get("description"),
         "description_en": None,
         **_outdoor_fields(con, r["id"], r["sub"], extra),
+        **_rich_fields(con, r, extra),
+        **_minyanim_fields(con, r),
     }
+
+
+def _minyanim_fields(con: sqlite3.Connection, r) -> dict:
+    """Prayer times (Nedarim Plus) of linked synagogues – see hmaps/api/minyanim.py."""
+    if r["sub"] not in ("synagogue", "yeshiva"):
+        return {}
+    from .minyanim import poi_block
+
+    block = poi_block(con, r["id"], r["lat"], r["lon"])
+    return {"minyanim": block} if block else {}
+
+
+def _rich_fields(con: sqlite3.Connection, r, extra: dict) -> dict:
+    """Long texts, Wikidata facts, trails passing by and trip sites around (trip sites only)."""
+    fact_rows, raw = rich.facts(con, "poi", r["id"], {"elevation": extra.get("ele"), "length_m": extra.get("length_m")})
+    out: dict = {"texts": rich.texts(con, "poi", r["id"]), "facts": fact_rows}
+    if raw.get("website") and not r["website"]:
+        out["official_website"] = raw["website"]
+    if raw.get("commons_category"):
+        out["commons_category_url"] = ("https://commons.wikimedia.org/wiki/Category:"
+                                       + urllib.parse.quote(raw["commons_category"].replace(" ", "_")))
+    if r["sub"] in rich.TRIP_SUBS:
+        bbox = extra.get("bbox")
+        area = tuple(bbox) if bbox and len(bbox) == 4 else None  # reserves, parks: trails in / at the edge of the area
+        out["nearby_trails"] = rich.nearby_trails(con, r["lat"], r["lon"], 400.0 if area else 300.0, bbox=area)
+        out["nearby_sites"] = rich.nearby_sites(con, r["id"], r["lat"], r["lon"])
+    return out
 
 
 FEE_HE = {"yes": "כניסה בתשלום", "no": "כניסה חופשית"}

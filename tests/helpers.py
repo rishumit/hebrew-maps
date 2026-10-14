@@ -26,7 +26,7 @@ def sample_db(bulk: int = 0) -> Path:
         return _built[key]
     from hmaps.core import db
     from hmaps.etl import build, osm, quality, search_index
-    from tools.sample_data import extras, generate
+    from tools.sample_data import add_sample_hikes, extras, generate
 
     tmp = Path(tempfile.mkdtemp(prefix="hmaps-test-"))
     poi, streets = generate(tmp / "src", bulk=bulk)
@@ -36,6 +36,7 @@ def sample_db(bulk: int = 0) -> Path:
     stats = build.run(con, osm.iter_features(poi), osm.iter_features(streets),
                       line_features=osm.iter_features(lines), relations=osm.iter_relations(rels))
     search_index.build(con)
+    add_sample_hikes(con)
     con.execute("INSERT OR REPLACE INTO meta VALUES ('built', 'test')")
     con.commit()
     quality.write(quality.compute(con, stats.as_dict()), tmp / "reports")

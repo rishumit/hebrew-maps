@@ -1,6 +1,8 @@
 // Panel views: search results, POI / place / street / address cards, lists.
 
+import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './gallery.js';
 import { svg } from './icons.js';
+import { minyanimHtml, wireMinyanim } from './minyanim.js';
 import { announce, copyText, esc, fmtDistance, fmtNumber, html, raw, render } from './util.js';
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -141,34 +143,66 @@ function hoursRow(h) {
   </div></li>`;
 }
 
+// trails passing by / trip sites around (site cards) – also used by the trail card
+export function nearbyTrailsHtml(trails, title = 'שבילים מסומנים במקום') {
+  if (!trails?.length) return '';
+  return `<h3 class="subtitle">${esc(title)}</h3><ul class="results nearby" aria-label="${esc(title)}">${trails.map((t, i) =>
+    `<li class="result"><button type="button" data-ntrail="${i}">${iconCircle({ ...t, type: 'trail' })}<span class="r-body">
+      <span class="r-name">${esc(t.name)}</span>
+      <span class="r-sub" style="display:block">${t.length_m ? esc(fmtDistance(t.length_m)) : ''}${t.distance > 30 ? ` · במרחק ${esc(fmtDistance(t.distance))}` : ''}</span>
+    </span></button></li>`).join('')}</ul>`;
+}
+
+export function nearbySitesHtml(sites, title = 'אתרים בסביבה') {
+  if (!sites?.length) return '';
+  return `<h3 class="subtitle">${esc(title)}</h3><ul class="results nearby" aria-label="${esc(title)}">${sites.map((r, i) =>
+    `<li class="result"><button type="button" data-nsite="${i}">${iconCircle(r)}<span class="r-body">
+      <span class="r-name">${esc(r.name)}</span>
+      <span class="r-sub" style="display:block">${esc(r.secondary || '')}${r.at_m != null ? ` · ק"מ ${esc((r.at_m / 1000).toFixed(1))}` : (r.distance != null ? ` · ${esc(fmtDistance(r.distance))}` : '')}</span>
+    </span>${r.thumbnail ? `<img class="r-thumb" src="${esc(r.thumbnail)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}</button></li>`).join('')}</ul>`;
+}
+
+export function wireNearby(body, app, trails, sites) {
+  body.querySelectorAll('[data-ntrail]').forEach((b) => b.addEventListener('click', () => app.openItem(trails[Number(b.dataset.ntrail)])));
+  body.querySelectorAll('[data-nsite]').forEach((b) => {
+    const r = sites[Number(b.dataset.nsite)];
+    b.addEventListener('click', () => app.openItem(r));
+    b.addEventListener('mouseenter', () => app.map.setSelection(r.location));
+  });
+  body.querySelectorAll('.nearby .r-thumb').forEach((img) => img.addEventListener('error', () => img.remove(), { once: true }));
+}
+
 export function poiView(app, poi) {
   const addr = poi.address?.full;
   const c = poi.contact || {};
   const md = poi.metadata || {};
-  const img = poi.media?.images?.[0];
+  const photos = poi.media?.gallery?.length ? poi.media.gallery
+    : (poi.media?.images || []).map((src) => ({ src, full: src, source_he: 'Wikimedia Commons' }));
   const loc = poi.location;
+  const site = poi.website || c.website || poi.official_website;
   const coords = `${loc.lat.toFixed(6)}, ${loc.lon.toFixed(6)}`;
   return {
     key: 'poi:' + poi.id, label: `פרטים: ${poi.name}`,
     render(body) {
       body.innerHTML = `${head(app, poi.name, { id: 'panel-title' })}
         <article aria-labelledby="panel-title">
-          ${img ? `<img class="card-hero" src="${esc(img)}" alt="${esc(poi.name)}" loading="lazy" referrerpolicy="no-referrer"><div class="card-credit">תמונה: Wikimedia Commons</div>` : ''}
+          ${galleryHtml(photos, poi.name)}
           <div class="card-head">
             ${poi.name_en && poi.name_en !== poi.name ? `<div class="name-en" lang="en">${esc(poi.name_en)}</div>` : ''}
             <span class="cat-badge"><span class="dot" style="background:${esc(poi.color)}" aria-hidden="true">${svg(poi.icon, { size: 14 })}</span>${esc(poi.sub_category_he)}</span>
             ${poi.opening_hours?.status ? `<div class="card-status ${poi.opening_hours.open_now ? 'open' : 'closed'}">${esc(poi.opening_hours.status)}</div>` : ''}
           </div>
-          ${actionsBar(poi, app, c.phone ? `<a class="action" href="${esc(c.phone_href)}" aria-label="התקשרות אל ${esc(poi.name)}: ${esc(c.phone)}"><span class="a-circle">${svg('phone')}</span>התקשרות</a>` : '')}
+          ${actionsBar(poi, app, (c.phone ? `<a class="action" href="${esc(c.phone_href)}" aria-label="התקשרות אל ${esc(poi.name)}: ${esc(c.phone)}"><span class="a-circle">${svg('phone')}</span>התקשרות</a>` : '')
+            + (poi.nearby_sites !== undefined ? `<button type="button" class="action" data-act="view3d"><span class="a-circle a-3d" aria-hidden="true">3D</span>תלת-ממד</button>` : ''))}
           ${md.tags?.length ? `<div class="tags" aria-label="מאפיינים" style="padding-top:12px">${md.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
-          ${poi.description_he ? `<div class="desc"><p style="margin:0">${esc(poi.description_he)}</p>
-            ${md.wikipedia_url ? `<a class="src" href="${esc(md.wikipedia_url)}" target="_blank" rel="noopener">מתוך ויקיפדיה<span class="sr-only"> (נפתח בלשונית חדשה)</span></a>` : ''}</div>` : ''}
+          ${textsHtml(poi.texts, poi.description_he ? { text: poi.description_he, url: md.wikipedia_url } : null)}
+          ${poi.nearby_sites !== undefined ? michlolHtml(poi.name_he || poi.name) : ''}
           <ul class="info-rows">
             ${addr ? `<li class="info-row">${svg('pin')}<div class="ir-body"><address style="font-style:normal">${esc(addr)}</address></div>
               <button type="button" class="ir-btn" data-copy="${esc(addr)}" data-copy-label="הכתובת הועתקה" aria-label="העתקת הכתובת">${svg('copy', { size: 18 })}</button></li>` : ''}
             ${hoursRow(poi.opening_hours)}
             ${c.phone ? `<li class="info-row">${svg('phone')}<div class="ir-body"><a href="${esc(c.phone_href)}" dir="ltr">${esc(c.phone)}</a></div></li>` : ''}
-            ${c.website ? `<li class="info-row">${svg('globe')}<div class="ir-body"><a href="${esc(c.website)}" target="_blank" rel="noopener nofollow" dir="ltr">${esc(c.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a><span class="sr-only"> (נפתח בלשונית חדשה)</span></div></li>` : ''}
+            ${site ? `<li class="info-row">${svg('globe')}<div class="ir-body"><a href="${esc(site)}" target="_blank" rel="noopener nofollow" dir="ltr">${esc(site.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a><span class="sr-only"> (נפתח בלשונית חדשה)</span></div></li>` : ''}
             ${c.email ? `<li class="info-row">${svg('mail')}<div class="ir-body"><a href="mailto:${esc(c.email)}" dir="ltr">${esc(c.email)}</a></div></li>` : ''}
             ${md.wheelchair_he ? `<li class="info-row">${svg('wheelchair')}<div class="ir-body">${esc(md.wheelchair_he)}</div></li>` : ''}
             ${md.operator ? `<li class="info-row">${svg('building')}<div class="ir-body">מפעיל: ${esc(md.operator)}</div></li>` : ''}
@@ -176,16 +210,25 @@ export function poiView(app, poi) {
             ${poi.nature_site?.fee_he ? `<li class="info-row">${svg('cash')}<div class="ir-body">${esc(poi.nature_site.fee_he)}</div></li>` : ''}
             ${poi.length_m ? `<li class="info-row">${svg('road')}<div class="ir-body">אורך: ${esc(fmtDistance(poi.length_m))}</div></li>` : ''}
             ${md.elevation ? `<li class="info-row">${svg('mountain')}<div class="ir-body">גובה: ${esc(md.elevation)} מ׳</div></li>` : ''}
+            ${(poi.facts || []).map((f) => `<li class="info-row">${svg(f.icon || 'info')}<div class="ir-body">${esc(f.label)}: ${esc(f.value)}</div></li>`).join('')}
             <li class="info-row">${svg('locate')}<div class="ir-body" dir="ltr" style="text-align:right">${esc(coords)}</div>
               <button type="button" class="ir-btn" data-copy="${esc(coords)}" data-copy-label="הקואורדינטות הועתקו" aria-label="העתקת הקואורדינטות">${svg('copy', { size: 18 })}</button></li>
           </ul>
-          <div class="card-foot">מקור: OpenStreetMap${md.last_updated ? ` · עודכן ${esc(md.last_updated)}` : ''}
+          ${minyanimHtml(poi)}
+          ${nearbyTrailsHtml(poi.nearby_trails)}
+          ${nearbySitesHtml(poi.nearby_sites)}
+          ${poi.commons_category_url ? `<p class="r-sub more-photos"><a href="${esc(poi.commons_category_url)}" target="_blank" rel="noopener">${svg('external', { size: 14 })} עוד תמונות בוויקישיתוף<span class="sr-only"> (נפתח בלשונית חדשה)</span></a></p>` : ''}
+          <div class="card-foot">מקור: OpenStreetMap${poi.texts?.length ? ' · ויקיפדיה' : ''}${photos.length ? ' · Wikimedia Commons' : ''}${md.last_updated ? ` · עודכן ${esc(md.last_updated)}` : ''}
             ${md.osm_url ? ` · <a href="${esc(md.osm_url)}" target="_blank" rel="noopener">הצעת תיקון<span class="sr-only"> ב-OpenStreetMap (נפתח בלשונית חדשה)</span></a>` : ''}</div>
         </article>`;
       wireHead(body, app);
       wireActions(body, poi, app);
-      const hero = body.querySelector('.card-hero');
-      hero?.addEventListener('error', () => { hero.nextElementSibling?.remove(); hero.remove(); });
+      wireGallery(body, photos, poi.name);
+      body.querySelector('[data-act="view3d"]')?.addEventListener('click', () =>
+        app.view3D(poi.bbox ? { bbox: poi.bbox } : { point: poi.location }));
+      wireTexts(body);
+      wireNearby(body, app, poi.nearby_trails, poi.nearby_sites);
+      wireMinyanim(body, app, poi);
       const tg = body.querySelector('.hours-toggle');
       tg?.addEventListener('click', () => {
         const open = tg.getAttribute('aria-expanded') === 'true';

@@ -26,8 +26,136 @@ def _tile_query_bbox(z: int, x: int, y: int, buffer: float = 0.08) -> tuple[floa
     return minx - bx, miny - by, maxx + bx, maxy + by
 
 
+# ------------------------------------------------------------------ POI decluttering
+#
+# Like Google Maps, the unfiltered POI layer is decluttered on the server before the
+# client ever sees it: candidates are taken in importance order and a POI is kept only
+# if no already-kept POI sits within a zoom-dependent spacing.  The thinning is
+# hierarchical - it is replayed from a few zooms out, and whatever was visible at a
+# coarser zoom is locked in - so icons do not blink out when zooming in.
+# The client then does a final collision pass (icon/text padding) on what remains.
+
+#: minimum distance between two POI icons, in screen pixels (512-px tiles)
+#: (tuned so a dense downtown keeps an even ~1 place per 50 px from z14 to z18,
+#: room for a ~22-px icon plus a label beside it; Google keeps thinning to z17)
+_SPACING_PX = {6: 72, 7: 72, 8: 72, 9: 68, 10: 64, 11: 60, 12: 58, 13: 56, 14: 52, 15: 48, 16: 42, 17: 34}
+#: deepest zoom that is still thinned; from the next zoom on everything is drawn
+_LAST_THINNED_ZOOM = 17
+#: how many zooms back the hierarchy is replayed
+_HISTORY = 6
+#: categories may ask to stay hidden until a deep zoom (bus stops, toilets ...);
+#: only values above the default are enforced, so landmarks still show early
+_DEFAULT_MIN_ZOOM = 15
+
+
+def poi_spacing_px(z: int) -> int:
+    """Minimum icon spacing in screen pixels at zoom ``z`` (0 = no thinning)."""
+    if z > _LAST_THINNED_ZOOM:
+        return 0
+    return _SPACING_PX.get(z, 72)
+
+
+def min_importance(z: int) -> float:
+    """Importance a POI needs to be drawn on the unfiltered map at zoom ``z``."""
+    return max(0.0, (18.5 - z) / 11.0) if z < 17 else 0.0
+
+
+def _poi_visible_from(r) -> int:
+    sub = categories.SUB_BY_ID.get(r[3])
+    return sub.min_zoom if sub is not None and sub.min_zoom > _DEFAULT_MIN_ZOOM else 0
+
+
+def declutter(points: list[tuple[int, int, object]], spacing: int,
+              locked: list[tuple[int, int, object]] = ()) -> list[tuple[int, int, object]]:
+    """Greedy importance-ordered thinning.
+
+    ``points`` must be sorted most-important first; ``locked`` points are always kept
+    and block their neighbours.  Returns locked + newly accepted points.  A hash grid
+    keeps it O(n) for thousands of candidates.
+    """
+    kept = list(locked)
+    if spacing <= 0:
+        seen = {id(p[2]) for p in kept}
+        return kept + [p for p in points if id(p[2]) not in seen]
+    grid: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
+    for px, py, _ in kept:
+        grid[(px // spacing, py // spacing)].append((px, py))
+    seen = {id(p[2]) for p in kept}
+    sq = spacing * spacing
+    for px, py, r in points:
+        if id(r) in seen:
+            continue
+        gx, gy = px // spacing, py // spacing
+        if any((qx - px) ** 2 + (qy - py) ** 2 < sq
+               for dx in (-1, 0, 1) for dy in (-1, 0, 1) for qx, qy in grid.get((gx + dx, gy + dy), ())):
+            continue
+        grid[(gx, gy)].append((px, py))
+        kept.append((px, py, r))
+        seen.add(id(r))
+    return kept
+
+
+def declutter_hierarchical(pts: list[tuple[int, int, object]], z: int) -> list[tuple[int, int, object]]:
+    """Thin the candidates of a zoom-``z`` tile so that zooming in only ever adds POIs."""
+    kept: list[tuple[int, int, object]] = []
+    for k in range(max(6, z - _HISTORY), z + 1):
+        thr = min_importance(k)
+        cand = [p for p in pts if p[2][6] >= thr and k >= _poi_visible_from(p[2])]
+        # spacing of zoom k measured in this tile's pixel units
+        spacing = poi_spacing_px(k) * (mvt.EXTENT // 512) * (1 << (z - k))
+        kept = declutter(cand, spacing, kept)
+    return kept
+
+
+def compute_poi_zooms(con: sqlite3.Connection) -> dict[int, int]:
+    """Zoom from which every POI is drawn on the unfiltered map (18 = only when fully zoomed in).
+
+    One global greedy pass per zoom over the whole dataset, in world-pixel units, so
+    the result is identical on both sides of every tile edge and a POI that appears at
+    zoom k stays visible at every deeper zoom - the way Google Maps behaves.
+    """
+    import math
+    zmax = _LAST_THINNED_ZOOM
+    world = 512 * (1 << zmax)  # world size in pixels of the deepest thinned zoom
+    pts = []
+    for pid, sub, lat, lon, imp in con.execute(
+            "SELECT id, sub, lat, lon, importance FROM pois ORDER BY importance DESC, id"):
+        if lat is None or lon is None:
+            continue
+        s = math.sin(math.radians(max(-85.0, min(85.0, lat))))
+        px = (lon + 180.0) / 360.0 * world
+        py = (0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi)) * world
+        sub_ = categories.SUB_BY_ID.get(sub)
+        vis = sub_.min_zoom if sub_ is not None and sub_.min_zoom > _DEFAULT_MIN_ZOOM else 0
+        pts.append((pid, px, py, imp or 0.0, vis))
+    zooms: dict[int, int] = {}
+    kept: list[tuple[float, float]] = []
+    for k in range(6, zmax + 1):
+        thr = min_importance(k)
+        spacing = poi_spacing_px(k) * (1 << (zmax - k))
+        sq = spacing * spacing
+        grid: dict[tuple[int, int], list[tuple[float, float]]] = defaultdict(list)
+        for px, py in kept:
+            grid[(int(px // spacing), int(py // spacing))].append((px, py))
+        for pid, px, py, imp, vis in pts:
+            if imp < thr:
+                break  # sorted by importance: nothing further qualifies at this zoom
+            if pid in zooms or k < vis:
+                continue
+            gx, gy = int(px // spacing), int(py // spacing)
+            if any((qx - px) ** 2 + (qy - py) ** 2 < sq
+                   for dx in (-1, 0, 1) for dy in (-1, 0, 1) for qx, qy in grid.get((gx + dx, gy + dy), ())):
+                continue
+            grid[(gx, gy)].append((px, py))
+            kept.append((px, py))
+            zooms[pid] = k
+    return zooms
+
+
 def poi_tile(con: sqlite3.Connection, z: int, x: int, y: int, cats: list[str] | None = None,
-             kosher: bool = False, max_features: int = 1500) -> bytes:
+             kosher: bool = False, max_features: int = 1500, zooms: dict[int, int] | None = None) -> bytes:
+    """POI overlay tile.  ``zooms`` (from :func:`compute_poi_zooms`) gives a globally
+    consistent declutter; without it each tile is thinned on its own."""
     minx, miny, maxx, maxy = _tile_query_bbox(z, x, y)
     sql = ("SELECT p.id, p.name, p.category, p.sub, p.lat, p.lon, p.importance, p.kosher FROM pois_rtree t "
            "JOIN pois p ON p.id = t.id WHERE t.min_lon <= ? AND t.max_lon >= ? AND t.min_lat <= ? AND t.max_lat >= ?")
@@ -49,9 +177,11 @@ def poi_tile(con: sqlite3.Connection, z: int, x: int, y: int, cats: list[str] | 
     if not cats:
         # unfiltered map: only what is important enough for this zoom
         sql += " AND p.importance >= ?"
-        args.append(max(0.0, (18.5 - z) / 11.0) if z < 17 else 0.0)
-    sql += " ORDER BY p.importance DESC LIMIT ?"
-    args.append(20000 if cats and z < 14 else max_features)
+        args.append(min_importance(z))
+    sql += " ORDER BY p.importance DESC, p.id LIMIT ?"
+    # unfiltered: the importance threshold bounds the set; a count cap would make the
+    # candidate set depend on the tile size and break zoom-to-zoom consistency
+    args.append(max_features if cats and z >= 14 else 20000)
     rows = [r for r in con.execute(sql, args).fetchall() if minx <= r[5] <= maxx and miny <= r[4] <= maxy]
     layer = mvt.Layer("pois")
     filtered_low_zoom = bool(cats) and z < 14
@@ -74,8 +204,22 @@ def poi_tile(con: sqlite3.Connection, z: int, x: int, y: int, cats: list[str] | 
                 layer.add_point(cx, cy, {"cluster": True, "count": len(items), "cat": top[2], "icon": sub.icon,
                                          "rank": float(len(items))})
     else:
+        pts = []
         for r in rows:
+            if not cats and z < _poi_visible_from(r):
+                continue
             px, py = geo.lonlat_to_tile_pixel(r[5], r[4], z, x, y)
+            pts.append((px, py, r))
+        if cats:
+            # the user asked for these: thin only enough to keep icons from piling up
+            pts = declutter(pts, poi_spacing_px(z) // 2 * (mvt.EXTENT // 512))
+        elif zooms is not None:
+            pts = [p for p in pts if zooms.get(p[2][0], _LAST_THINNED_ZOOM + 1) <= z]
+        else:
+            pts = declutter_hierarchical(pts, z)
+        # draw order = importance order (client sorts by rank as well)
+        pts.sort(key=lambda p: -p[2][6])
+        for px, py, r in pts:
             _add_poi(layer, px, py, r)
     return mvt.encode_tile([layer])
 

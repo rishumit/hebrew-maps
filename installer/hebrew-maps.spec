@@ -9,10 +9,16 @@
 import os
 from pathlib import Path
 import importlib.util as _ilu
+from PyInstaller.utils.hooks import collect_submodules
 
 # SPECPATH is set by PyInstaller to the directory containing this .spec file,
 # which is <project-root>\installer\.  One level up is the project root.
 ROOT = Path(SPECPATH).parent
+
+# Make the hmaps package importable for collect_submodules() below.
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def _tzdata_datas():
@@ -36,6 +42,17 @@ a = Analysis(
         # They are listed in the [Files] section of hebrew-maps.iss instead.
     ],
     hiddenimports=[
+        # The app is loaded by uvicorn from the string "hmaps.api.app:app", so
+        # PyInstaller's static analysis never sees it — collect the packages explicitly.
+        *collect_submodules('hmaps.api'),
+        *collect_submodules('hmaps.core'),
+        *collect_submodules('hmaps.route'),
+        *collect_submodules('hmaps.transit'),
+        # Runtime code imports these two ETL helpers (outdoor.py, transit/gtfs.py).
+        'hmaps.etl',
+        'hmaps.etl.trails',
+        'hmaps.etl.enrich',
+        'hmaps.etl.rich',  # Mapillary token lookup for /media/mly (hmaps/api/rich.py)
         # uvicorn uses importlib to load these at startup
         'uvicorn',
         'uvicorn.logging',
@@ -75,12 +92,9 @@ a = Analysis(
     ],
     excludes=[
         'tkinter',
-        'unittest',
-        'pydoc',
-        'doctest',
         'matplotlib',
-        # ETL pipeline is not needed at runtime; osmium binaries are heavy
-        'hmaps.etl',
+        # osmium is only used by the offline ETL pipeline; its binaries are heavy.
+        # (hmaps.etl itself must NOT be excluded — trails/enrich are used at runtime.)
         'osmium',
     ],
     noarchive=False,

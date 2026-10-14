@@ -105,6 +105,31 @@ def compute(con: sqlite3.Connection, build_stats: dict | None = None) -> dict:
          "unit": "", "ok": True},
     ]
 
+    # --- rich content (schema 5: galleries / texts / facts of trip sites and trails)
+    try:
+        from .rich import TRIP_SUBS
+        subs = sorted(TRIP_SUBS)
+        marks = ",".join("?" * len(subs))
+        n_sites = _one(con, f"SELECT COUNT(*) FROM pois WHERE name IS NOT NULL AND sub IN ({marks})", *subs)
+        with_gallery = _one(con, "SELECT COUNT(DISTINCT ref_id) FROM media WHERE entity = 'poi'")
+        photos = _one(con, "SELECT COUNT(*) FROM media WHERE entity = 'poi'")
+        with_text = _one(con, "SELECT COUNT(DISTINCT ref_id) FROM texts WHERE entity = 'poi'")
+        voy = _one(con, "SELECT COUNT(*) FROM texts WHERE entity = 'poi' AND source = 'wikivoyage'")
+        mly = _one(con, "SELECT COUNT(*) FROM media WHERE source = 'mapillary'")
+        tr_gallery = _one(con, "SELECT COUNT(DISTINCT ref_id) FROM media WHERE entity = 'trail'")
+        tr_text = _one(con, "SELECT COUNT(*) FROM texts WHERE entity = 'trail'")
+        kpis += [
+            {"name": "אתרי טיול עם גלריית תמונות", "value": pct(with_gallery, n_sites), "target": None, "unit": "%",
+             "ok": True, "note": f"{with_gallery:,} מתוך {n_sites:,} · {photos:,} תמונות (Wikimedia Commons"
+                                 f"{f' + {mly:,} Mapillary' if mly else ''})"},
+            {"name": "אתרי טיול עם טקסט מורחב", "value": pct(with_text, n_sites), "target": None, "unit": "%", "ok": True,
+             "note": f"{with_text:,} אתרים · ויקיפדיה{f' · {voy:,} מוויקימסע' if voy else ''}"},
+            {"name": "שבילים עם תמונות", "value": tr_gallery, "target": None, "unit": "", "ok": True,
+             "note": f"{tr_text:,} עם ערך בוויקיפדיה"},
+        ]
+    except sqlite3.OperationalError:
+        pass
+
     errors = {
         "POI מחוץ לגבולות ישראל": _one(con, "SELECT COUNT(*) FROM pois WHERE lat NOT BETWEEN 29.4 AND 33.45 OR lon NOT BETWEEN 34.15 AND 35.95"),
         "POI ללא שם בקטגוריה שמחייבת שם": sum(

@@ -5,7 +5,9 @@
     python -m hmaps.etl build --no-enrich   # OSM only, no other network access
     python -m hmaps.etl from-geojson --poi a.geojsonseq --streets b.geojsonseq --out x.db
     python -m hmaps.etl report              # re-create the quality report
+    python -m hmaps.etl enrich              # photos / texts / facts for trip sites and trails (hmaps.etl.rich)
     python -m hmaps.etl gtfs                # public transport timetables -> data/transit/ (hmaps.transit)
+    python -m hmaps.etl zmanim              # synagogue prayer times (Nedarim Plus) -> live maps.db (hmaps.etl.zmanim)
 
 The database is built under a temporary name and moved into place
 atomically, so a running API never sees a half-written file.
@@ -25,7 +27,7 @@ from pathlib import Path
 
 from ..core import db
 from . import build as builder
-from . import enrich, osm, quality, search_index
+from . import enrich, osm, quality, rich, search_index
 
 log = logging.getLogger("hmaps.etl")
 
@@ -89,6 +91,12 @@ def _build(fill, out: Path, do_enrich: bool, meta: dict, versioned: bool = False
         )
         enrich.enrich_wikidata(con)
         enrich.enrich_wikipedia(con)
+        if os.environ.get("HMAPS_RICH", "1") != "0":
+            try:
+                rich.run(con, DATA_DIR)
+            except Exception:  # noqa: BLE001 – the map must still be published
+                log.exception("rich content failed – continuing without it")
+    _zmanim_from_snapshot(con)
     search_index.build(con)
     meta = {**meta, "built": datetime.now(timezone.utc).isoformat(timespec="seconds"), "enriched": str(do_enrich)}
     con.executemany("INSERT OR REPLACE INTO meta VALUES (?, ?)", meta.items())
@@ -115,6 +123,18 @@ def _engine(requested: str) -> str:
     if osm_py.available():
         return "pyosmium"
     raise SystemExit("Neither osmium-tool nor the pyosmium package is installed (pip install osmium)")
+
+
+def _zmanim_from_snapshot(con) -> None:
+    """Re-attach the last prayer-times snapshot (offline) so a rebuild keeps synagogue times."""
+    from . import zmanim
+    snap = zmanim.snapshot_path(DATA_DIR)
+    if not snap.exists() or os.environ.get("HMAPS_ZMANIM", "1") == "0":
+        return
+    try:
+        zmanim.apply(con, zmanim.load_snapshot(DATA_DIR))
+    except Exception:  # noqa: BLE001 – the map must still be published
+        log.exception("prayer times failed – continuing without them")
 
 
 def cmd_build(args: argparse.Namespace) -> None:
@@ -165,6 +185,32 @@ def cmd_from_geojson(args: argparse.Namespace) -> None:
     _summary(report)
 
 
+def cmd_enrich(args: argparse.Namespace) -> None:
+    """Add rich content to the live database without rebuilding it from OpenStreetMap."""
+    import shutil
+    import sqlite3
+
+    logical = Path(args.db)
+    live = db.resolve(logical)
+    if not live.exists():
+        raise SystemExit(f"no database at {logical} – run the build first")
+    tmp = logical.with_suffix(".building")
+    log.info("copying %s", live)
+    shutil.copyfile(live, tmp)
+    con = sqlite3.connect(tmp)
+    try:
+        steps = [s.strip() for s in args.steps.split(",")] if args.steps else rich.ALL_STEPS
+        rich.run(con, logical.parent, steps=steps, limit=args.limit, workers=args.workers)
+        report = quality.compute(con)
+        con.execute("VACUUM")
+    finally:
+        con.close()
+    final = db.publish(tmp, logical)
+    quality.write(report, logical.parent / "reports")
+    log.info("published %s – the running map picks it up within a few seconds", final.name)
+    _summary(report)
+
+
 def cmd_report(args: argparse.Namespace) -> None:
     import sqlite3
     con = sqlite3.connect(db.resolve(args.db))
@@ -188,6 +234,10 @@ def main(argv: list[str] | None = None) -> None:
         except (AttributeError, ValueError):
             pass
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
+    if os.environ.get("HMAPS_LOG_FILE"):  # also keep a UTF-8 log (enrich-content.cmd)
+        fh = logging.FileHandler(os.environ["HMAPS_LOG_FILE"], encoding="utf-8")
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logging.getLogger().addHandler(fh)
     p = argparse.ArgumentParser(prog="hmaps.etl", description="Hebrew Maps data pipeline")
     sub = p.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("download", help="download the OSM extract")
@@ -208,6 +258,11 @@ def main(argv: list[str] | None = None) -> None:
     g.add_argument("--out", required=True)
     g.add_argument("--enrich", action="store_true")
     g.add_argument("--date")
+    e = sub.add_parser("enrich", help="photos, texts and facts for trip sites and trails (on the live database)")
+    e.add_argument("--db", default=str(DATA_DIR / "maps.db"))
+    e.add_argument("--steps", help=f"comma separated subset of: {','.join(rich.ALL_STEPS)}")
+    e.add_argument("--limit", type=int, help="only the N most important sites / trails (testing)")
+    e.add_argument("--workers", type=int, default=4, help="parallel requests (default 4)")
     r = sub.add_parser("report", help="re-create the quality report")
     r.add_argument("--db", default=str(DATA_DIR / "maps.db"))
     t = sub.add_parser("gtfs", help="download + convert the GTFS public transport feed (data/transit/)")
@@ -215,6 +270,12 @@ def main(argv: list[str] | None = None) -> None:
     t.add_argument("--zip", help="use a local GTFS zip instead of downloading")
     t.add_argument("--out-dir", help="output directory (default: data/transit)")
     t.add_argument("--force", action="store_true", help="download even if a recent copy exists")
+    z = sub.add_parser("zmanim", help="synagogue prayer times from Nedarim Plus (fetch snapshot + apply to the live database)")
+    z.add_argument("--db", default=str(DATA_DIR / "maps.db"))
+    z.add_argument("--fetch", action="store_true", help="only download -> data/sources/zmanim/zmanim.json")
+    z.add_argument("--apply", action="store_true", help="only load the existing snapshot into the database")
+    z.add_argument("--limit", type=int, help="only the first N synagogues (testing)")
+    z.add_argument("--workers", type=int, default=4, help="parallel requests (max 4)")
     args = p.parse_args(argv)
     if args.cmd == "download":
         download(force=args.force)
@@ -222,11 +283,16 @@ def main(argv: list[str] | None = None) -> None:
         cmd_build(args)
     elif args.cmd == "from-geojson":
         cmd_from_geojson(args)
+    elif args.cmd == "enrich":
+        cmd_enrich(args)
     elif args.cmd == "report":
         cmd_report(args)
     elif args.cmd == "gtfs":
         from ..transit import gtfs
         gtfs.cmd(args)
+    elif args.cmd == "zmanim":
+        from . import zmanim
+        zmanim.cmd(args)
 
 
 if __name__ == "__main__":

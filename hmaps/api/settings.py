@@ -28,8 +28,9 @@ class Settings:
     rate_burst: int = int(_env("HMAPS_RATE_BURST", "80"))
     cors_origins: tuple[str, ...] = tuple(o for o in _env("HMAPS_CORS_ORIGINS", "").split(",") if o)
     log_level: str = _env("HMAPS_LOG_LEVEL", "INFO")
-    # "1" = show images that were not downloaded yet straight from Wikimedia (needs internet)
-    remote_images: bool = _env("HMAPS_REMOTE_IMAGES", "0") == "1"
+    # "1" (default) = show images that were not downloaded yet straight from Wikimedia (needs internet);
+    # "0" = fully offline: only the copies downloaded by tools/media.py
+    remote_images: bool = _env("HMAPS_REMOTE_IMAGES", "1") == "1"
 
     @property
     def db_path(self) -> Path:

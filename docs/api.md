@@ -55,6 +55,48 @@ POST /api/search
 ```
 `mark` הוא צבע הסימון הישראלי (`red`, ‏`blue`, ‏`green`, ‏`black`, ‏`orange`, ‏`purple`, ‏`yellow` או `other`), שנגזר מ-`osmc:symbol`, ואם אין, מ-`colour` או מסוג הרשת. `parts` הוא מספר הקטעים הנפרדים (‏1 = רציף). לשבילים בלי שם יש שם תצוגה כמו "שביל מסומן כחול", והם לא מופיעים בחיפוש.
 
+## זמני תפילות (בתי כנסת)
+הנתונים מגיעים מ"פרוייקט זמני תפילות הארצי" של נדרים פלוס (https://www.matara.pro/nedarimplus/zmanim/), ונטענים למסד בפקודה `python -m hmaps.etl zmanim` (ראו `hmaps/etl/zmanim.py`). כל בית כנסת במאגר מקושר לבית הכנסת המתאים ב-OSM לפי מרחק ושם. בתי כנסת שלא נמצאו ב-OSM נוספים כנקודות עניין חדשות (`metadata.source` = "נדרים פלוס"). אם הנתונים לא נטענו, הרשימות ריקות.
+
+- בכרטיס של בית כנסת מקושר, `GET /api/poi/{id}` מחזיר גם `minyanim`:
+```json
+"minyanim": { "source": "נדרים פלוס – פרוייקט זמני תפילות הארצי", "source_url": "https://www.matara.pro/nedarimplus/zmanim/",
+  "mosad_id": "5772843", "name": "תורה ותפילה נוה יעקב", "address": "נוה יעקב",
+  "phone": "03-7630585 שלוחה 123", "updated": "2026-10-14",
+  "items": [ { "prayer": "שחרית", "time": "06:15", "days": "אבגדה", "hall": "אוהל מרדכי", "note": null } ],
+  "sun": { "sunrise": "06:41", "sunset": "18:08" }, "sun_note": "…בקירוב…" }
+```
+‏`days` הן אותיות הימים (א = ראשון … ו = שישי, ש = שבת). ‏`hall` הוא האולם או החדר בבניין. ‏`sun` מחושב בקירוב, בגובה פני הים, ואינו מחליף לוח זמנים הלכתי.
+
+### `GET /api/minyanim/near?lat=&lon=&radius=1000&prayer=&after=HH:MM&day=&limit=30`
+המניינים הבאים בסביבה ב-24 השעות הקרובות: מה שנשאר ביום `day` אחרי `after`, ואחריו היום הבא עד אותה שעה (`tomorrow: true`). המיון הוא לפי שעה ואחר כך לפי מרחק. ברירות המחדל הן עכשיו והיום לפי שעון ישראל. ‏`prayer` יכול להיות שחרית, מנחה, ערבית או שיעור. בלי `prayer` לא מוחזרים שיעורים. ‏`day` מקבל אות (א..ש) או מספר (0 = ראשון). כל תוצאה כוללת `name`, ‏`address`, ‏`poi_id`, ‏`lat`/`lon`, ‏`distance_m` ופרטי המניין.
+## מדריך מסלולי טיול
+מדריך מובנה (סיכום, שלבים, אתרים, מידע מעשי ובטיחות, קרדיטים) לכל קו הליכה – מסלול מתואר מטבלת `hikes`, שביל מסומן מ-OSM, או מסלול הליכה שתוכנן באפליקציה. המימוש: `hmaps/api/guide.py`.
+- `GET /api/hikes?lat=&lon=&radius=20000&limit=20[&geometry=1]` או `?bbox=minlon,minlat,maxlon,maxlat`: מסלולים מתוארים באזור (ממוינים לפי מרחק ממרכז החיפוש). מאגר בלי טבלת `hikes` מחזיר רשימה ריקה.
+- `GET /api/hikes/{id}` (‏`hike-12`): כרטיס מסלול – תיאור, דרגת קושי, משך, אורך, מעגלי/קווי, עונה, `waypoints`, ‏`tips`, ‏`water`, ‏`parking`, ‏`geometry`, תמונות וקרדיט המקור.
+- `GET /api/hikes/{id}/guide[?date=YYYY-MM-DD]`, ‏`GET /api/trails/{id}/guide[?date=]`: המדריך.
+- `POST /api/guide` עם `{"coordinates": [[lon, lat], …], "name": "…", "waypoints": [{"name","lat","lon","note"}], "date": "YYYY-MM-DD"}`: מדריך לקו כלשהו (עד 20,000 נקודות). ‏422 `route_too_long` מעל 300 ק"מ.
+```json
+{ "kind": "hike", "ref": "hike-1", "name": "…", "paragraphs": ["…"],
+  "summary": { "length_m": 6458, "length_text": "6.5 ק״מ", "duration_min": 120, "duration_text": "שעתיים",
+    "time_formula": "tobler|naismith|flat", "duration_source_min": 180, "ascent": 420, "descent": 120,
+    "min_ele": -350, "max_ele": 80, "max_grade_pct": 22, "difficulty": "moderate", "difficulty_he": "בינוני",
+    "difficulty_source": "source|estimated", "loop": false, "marks": [{"id": "trail-1", "name": "שביל ישראל", "mark": "orange", "color": "#E46F0A", "share": 0.79}],
+    "stream": false, "season": "…" },
+  "start": {"name": "חניון …", "lat": 31.41, "lon": 35.36}, "end": {…},
+  "stages": [ { "n": 1, "from": {"name": "…", "at_m": 0}, "to": {"name": "…", "at_m": 2418, "kind": "waypoint|junction|sight|distance"},
+    "distance_m": 2418, "duration_min": 36, "ascent": 120, "descent": 10, "marks": [...], "stream": "נחל דוד",
+    "sights": [ {"id": "poi-39", "name": "עין דוד", "sub": "spring", "at_m": 2300, "distance": 40, "text": {"text": "…", "source_he": "ויקיפדיה"}} ],
+    "instruction": "יוצאים מחניון … בשביל ישראל בעלייה כ-2.4 ק״מ עד מצפה …", "bbox": [...], "geometry": {"type": "LineString", …} } ],
+  "sights": [...], "elevation": {"profile": [[d, ele, lon, lat], …], "ascent": …} | null,
+  "practical": { "water": {"points": [...], "springs": [...], "liters": 2, "note": "…"}, "toilets": [...], "parking": [...],
+    "shelters": [...], "shade": "…", "daylight": {"sunrise": "06:40", "sunset": "18:08", "latest_start": "15:40", "note": "…"},
+    "emergency": {"phones": [{"number": "112", …}], "nearby": [...]}, "tips": [{"kind": "flood|heat|long|shuttle|steep|navigation|general|source", "text": "…"}] },
+  "credits": [{"role": "תיאור המסלול", "name": "עמוד ענן", "url": "…", "license": "…"}, …], "geometry": {…}, "bbox": [...] }
+```
+**זמן הליכה**: פונקציית ההליכה של טובלר, `v = 6·exp(-3.5·|שיפוע + 0.05|)` קמ"ש, לכל צעד של ~25–40 מ' בפרופיל הגובה, מוכפלת ב-0.8 כך שבשטח מישורי הקצב 4 קמ"ש. בלי נתוני גובה: 4 קמ"ש (ועוד שעה לכל 600 מ' עלייה – כלל נייסמית – כשהמקור מציין עלייה). המשך לפי המקור מוחזר בנפרד (`duration_source_min`).
+**חלוקה לשלבים**: לפי נקודות הציון של המקור; צמתים שבהם משתנה השביל המסומן שהולכים בו; אתרים בולטים (מעיין, תצפית, עתיקות, פסגה, מערה, מפל) כשהם רחוקים מספיק מחיתוכים אחרים; ושלב ארוך מ-4 ק"מ מתפצל באתר / ברזייה / סככה הקרובים לאמצעו, או שווה בשווה כל ~3 ק"מ. **דרגת קושי** כשאין במקור: ק"מ + עלייה/100 (<8 קל, <15 בינוני, <24 קשה), ודרגה אחת יותר כשיש שיפוע של מעל 25%. **שעות אור** מחושבות אסטרונומית (משוואת הזריחה) לנקודת המוצא, בשעון ישראל.
+
 ## גאוקודינג
 - `GET /api/geocode?address=דיזנגוף 50&city=תל אביב`: מחזיר `lat`, ‏`lon`, ‏`address`, ‏`confidence` ו-`accuracy`. ערכי `accuracy`: ‏`exact`, ‏`interpolated` (מספר קרוב), ‏`street` (מרכז הרחוב).
 - `GET /api/reverse?lat=&lon=`: מחזיר `street`, ‏`house_number`, ‏`city`, ‏`neighbourhood`, ‏`address` ו-`accuracy`.
@@ -139,6 +181,7 @@ POST /api/search
 | `/tiles/poi/{z}/{x}/{y}.pbf?cats=&kosher=` | שכבת נקודות העניין (שכבה `pois`: ‏id, ‏name, ‏cat, ‏sub, ‏icon, ‏rank; ובקיבוץ: ‏count, ‏cluster) |
 | `/tiles/fallback/{z}/{x}/{y}.pbf` | מפת גיבוי מהמאגר (שכבות `streets`, ‏`places`, ‏`boundaries`) |
 | `/tiles/trails/{z}/{x}/{y}.pbf` | שבילים מסומנים (שכבה `trails`: ‏id, ‏name, ‏route, ‏network, ‏mark, ‏bike, ‏rank). בזום 7–9 רק שבילים ארציים ואזוריים, מזום 12 כולם |
+| `/tiles/hikes/{z}/{x}/{y}.pbf` | מסלולי טיול מתוארים מזום 8 (שכבה `hikes`: ‏id, ‏name, ‏difficulty, ‏length_m, ‏circular). ‏204 כשאין |
 | `/tiles/parks/{z}/{x}/{y}.pbf` | שמורות טבע, גנים לאומיים ואתרי רט"ג מזום 8 (שכבה `parks`, פוליגונים: ‏id, ‏name, ‏sub, ‏inpa, ‏inpa_source) |
 
 | `/tiles/contours/{z}/{x}/{y}.pbf` | קווי גובה, z10–14 (שכבה `contour`: ‏`ele`, ‏`idx`=1 בקו ראשי; שכבה `spot`: ‏`ele`). ‏204 כשאין |

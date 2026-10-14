@@ -138,13 +138,25 @@ def fetch(url: str, timeout: int = 60, tries: int = 6) -> bytes:
     raise Temporary(f"{type(last).__name__}: {getattr(last, 'reason', None) or last}")
 
 
-def image_urls(db_path: Path) -> list[str]:
+def image_urls(db_path: Path, gallery: bool = True) -> list[str]:
+    """Main POI photos, plus (schema 5) every Commons photo of the site / trail galleries."""
+    import urllib.parse
+
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         rows = con.execute("SELECT DISTINCT image FROM pois WHERE image IS NOT NULL AND image != ''").fetchall()
+        files: list = []
+        if gallery:
+            try:
+                files = con.execute("SELECT DISTINCT file FROM media WHERE source = 'commons'").fetchall()
+            except sqlite3.OperationalError:  # database built before the galleries existed
+                files = []
     finally:
         con.close()
-    return sorted({r[0].strip() for r in rows if r[0].strip().startswith("http")})
+    urls = {r[0].strip() for r in rows if r[0].strip().startswith("http")}
+    # same URL form as the API uses for gallery photos (hmaps.api.rich.commons_url) → same /media/<key>
+    urls |= {media.COMMONS_FILEPATH + urllib.parse.quote(f[0]) for f in files if f[0]}
+    return sorted(urls)
 
 
 def _read_list(path: Path) -> dict[str, str]:

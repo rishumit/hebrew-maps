@@ -22,6 +22,18 @@ def ok(desc, schema=None):
     return r
 
 
+Photo = {"type": "object", "description": "תמונה עם קרדיט (חובה להציג: צלם, רישיון, קישור למקור)", "properties": {
+    "src": {"type": "string"}, "full": {"type": "string"}, "title": {"type": ["string", "null"]},
+    "author": {"type": ["string", "null"]}, "license": {"type": ["string", "null"]}, "license_url": {"type": ["string", "null"]},
+    "page_url": {"type": ["string", "null"]}, "source": {"type": "string", "enum": ["commons", "mapillary", "web"]}}}
+LongText = {"type": "object", "properties": {
+    "source": {"type": "string", "enum": ["wikipedia", "wikivoyage"]}, "title": {"type": "string"}, "text": {"type": "string"},
+    "paragraphs": {"type": "array", "items": {"type": "string"}}, "url": {"type": "string"}, "license": {"type": "string"}}}
+RICH = {
+    "media": {"type": "object", "properties": {"gallery": {"type": "array", "items": Photo}}},
+    "texts": {"type": "array", "items": LongText},
+}
+
 SearchResult = {"type": "object", "properties": {
     "id": {"type": "string", "examples": ["poi-123", "place-5", "street-9", "addr-9-50"]},
     "type": {"type": "string", "enum": ["poi", "place", "street", "address", "category", "coordinate", "trail"]},
@@ -60,7 +72,14 @@ spec = {
                                                                                               "open_now": {"type": "boolean"}}},
                                                  "limit": {"type": "integer"}, "offset": {"type": "integer"}}}}}},
                      "responses": ok("תוצאות")}},
-        "/api/poi/{id}": {"get": {"summary": "פרטי נקודת עניין", "parameters": [p("id", "poi-123")], "responses": ok("כרטיס מידע")}},
+        "/api/poi/{id}": {"get": {"summary": "פרטי נקודת עניין (באתרי טיול: גלריה, טקסט מוויקיפדיה / ויקימסע, עובדות, שבילים ואתרים בסביבה)",
+                                  "parameters": [p("id", "poi-123")], "responses": ok("כרטיס מידע", {"type": "object", "properties": {
+                                      **RICH,
+                                      "facts": {"type": "array", "items": {"type": "object", "properties": {
+                                          "label": {"type": "string"}, "value": {"type": "string"}, "icon": {"type": "string"}}}},
+                                      "nearby_trails": {"type": "array", "items": {"type": "object"}},
+                                      "nearby_sites": {"type": "array", "items": {"type": "object"}},
+                                      "official_website": {"type": "string"}, "commons_category_url": {"type": "string"}}})}},
         "/api/poi": {"get": {"summary": "נקודות עניין בסביבה", "parameters": [
             q("lat", "", "number", True), q("lon", "", "number", True), q("radius", "רדיוס במטרים (עד 50000)", "number"),
             q("category", "קטגוריה"), q("tags", "תגיות מופרדות בפסיק"), q("kosher", "", "boolean"), q("open_now", "", "boolean"),
@@ -106,7 +125,13 @@ spec = {
                                          "id": {"type": "string"}, "name": {"type": "string"}, "route": {"type": "string", "enum": ["hiking", "foot", "bicycle", "mtb"]},
                                          "network": {"type": ["string", "null"]}, "mark": {"type": "string"}, "color": {"type": "string"},
                                          "length_km": {"type": "number"}, "parts": {"type": "integer"}, "continuous": {"type": "boolean"},
-                                         "bbox": {"type": "array"}, "geometry": {"type": "object", "description": "GeoJSON MultiLineString"}}})}},
+                                         "bbox": {"type": "array"}, "geometry": {"type": "object", "description": "GeoJSON MultiLineString"},
+                                         **RICH,
+                                         "start": LatLon, "end": LatLon, "loop": {"type": "boolean"},
+                                         "duration_min": {"type": ["integer", "null"], "description": "זמן משוער ללא עליות"},
+                                         "difficulty_he": {"type": ["string", "null"]},
+                                         "sites_along": {"type": "array", "items": {"type": "object"},
+                                                         "description": "אתרים, מעיינות, ברזיות ותצפיות עד 150 מ׳ מהשביל, לפי סדר ההליכה"}}})}},
         "/tiles/trails/{z}/{x}/{y}.pbf": {"get": {"summary": "אריח שבילים מסומנים (שכבה trails)", "parameters": [p("z", ""), p("x", ""), p("y", "")],
                                                    "responses": {"200": {"description": "MVT"}, "204": {"description": "ריק"}}}},
         "/tiles/parks/{z}/{x}/{y}.pbf": {"get": {"summary": "אריח שמורות טבע, גנים לאומיים ואתרי רט\"ג (שכבה parks)",
@@ -121,6 +146,10 @@ spec = {
         "/fonts/{fontstack}/{range}.pbf": {"get": {"summary": "גליפים לתוויות המפה", "parameters": [p("fontstack", ""), p("range", "0-255")],
                                                     "responses": {"200": {"description": "PBF"}}}},
         "/metrics": {"get": {"summary": "מדדי Prometheus", "responses": {"200": {"description": "text"}}}},
+        "/media/{key}": {"get": {"summary": "עותק מקומי של תמונה (tools/media.py)", "parameters": [p("key", "24 תווי hex")],
+                                 "responses": {"200": {"description": "image"}, "404": {"description": "לא הורד"}}}},
+        "/media/mly/{id}": {"get": {"summary": "תמונת Mapillary (הפניה לכתובת עדכנית, דורש מפתח בשרת)", "parameters": [p("id", "")],
+                                    "responses": {"302": {"description": "הפניה"}, "404": {"description": "אין מפתח / לא נמצא"}}}},
     },
     "components": {"schemas": {"LatLon": LatLon, "Error": Error, "SearchResult": SearchResult}},
 }
@@ -138,6 +167,69 @@ spec["paths"].update({
         q("lat", "", "number", required=True), q("lon", "", "number", required=True), q("radius", "מטרים", "number")],
         "responses": ok("תחנות")}},
     "/api/transit/status": {"get": {"summary": "תאריכי לוח הזמנים ועדכניות הנתונים", "responses": ok("מצב")}},
+})
+
+# synagogue prayer times (hmaps/api/minyanim.py, data: hmaps/etl/zmanim.py – Nedarim Plus)
+Minyan = {"type": "object", "properties": {
+    "prayer": {"type": "string", "examples": ["שחרית", "מנחה", "ערבית", "שיעור"]}, "time": {"type": "string", "examples": ["06:30"]},
+    "days": {"type": "string", "description": "אותיות הימים: א..ו, ש (שבת)", "examples": ["אבגדה"]},
+    "hall": {"type": ["string", "null"], "description": "אולם / חדר בתוך הבניין"}, "note": {"type": ["string", "null"]}}}
+spec["paths"]["/api/poi/{id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]["minyanim"] = {
+    "type": "object", "description": "זמני תפילות (בתי כנסת המקושרים למאגר נדרים פלוס בלבד)", "properties": {
+        "source": {"type": "string"}, "source_url": {"type": "string"}, "mosad_id": {"type": "string"},
+        "name": {"type": ["string", "null"]}, "address": {"type": ["string", "null"]},
+        "phone": {"type": ["string", "null"], "description": "קו טלפוני לשמיעת הזמנים"},
+        "updated": {"type": "string", "description": "תאריך משיכת הנתונים"},
+        "items": {"type": "array", "items": Minyan},
+        "sun": {"type": ["object", "null"], "description": "זריחה / שקיעה להיום בקירוב (גובה פני הים)",
+                "properties": {"sunrise": {"type": "string"}, "sunset": {"type": "string"}}},
+        "sun_note": {"type": "string"}}}
+spec["paths"]["/api/minyanim/near"] = {"get": {
+    "summary": "מניינים קרובים: התפילות הבאות בסביבה (24 השעות הקרובות), לפי שעה ואז מרחק", "parameters": [
+        q("lat", "", "number", True), q("lon", "", "number", True), q("radius", "מטרים (50–10000, ברירת מחדל 1000)", "number"),
+        q("prayer", "שחרית | מנחה | ערבית | שיעור (ברירת מחדל: כל התפילות, בלי שיעורים)"),
+        q("after", "HH:MM (ברירת מחדל: עכשיו, שעון ישראל)"), q("day", "א..ש או 0..6 (0 = ראשון; ברירת מחדל: היום)"),
+        q("limit", "", "integer")],
+    "responses": ok("מניינים", {"type": "object", "properties": {"results": {"type": "array", "items": {"allOf": [Minyan, {
+        "type": "object", "properties": {
+            "mosad_id": {"type": "string"}, "poi_id": {"type": ["string", "null"], "examples": ["poi-123"]},
+            "name": {"type": "string"}, "address": {"type": ["string", "null"]}, "lat": {"type": "number"},
+            "lon": {"type": "number"}, "distance_m": {"type": "integer"},
+            "tomorrow": {"type": "boolean", "description": "המניין ביום שאחרי"}}}]}},
+        "meta": {"type": "object"}}})}}
+# hiking-route guide (hmaps/api/guide.py)
+Stage = {"type": "object", "properties": {
+    "n": {"type": "integer"}, "from": {"type": "object"}, "to": {"type": "object", "description": "kind: waypoint | junction | sight | distance"},
+    "distance_m": {"type": "integer"}, "duration_min": {"type": "integer"}, "ascent": {"type": ["integer", "null"]},
+    "descent": {"type": ["integer", "null"]}, "marks": {"type": "array", "items": {"type": "object"}}, "stream": {"type": ["string", "null"]},
+    "sights": {"type": "array", "items": {"type": "object"}}, "instruction": {"type": "string", "description": "הוראה בעברית"},
+    "bbox": {"type": "array"}, "geometry": {"type": "object"}}}
+Guide = {"type": "object", "properties": {
+    "kind": {"type": "string", "enum": ["hike", "trail", "route"]}, "ref": {"type": ["string", "null"]}, "name": {"type": "string"},
+    "summary": {"type": "object", "description": "אורך, זמן (time_formula: tobler | naismith | flat), עלייה/ירידה, גבהים, קושי, מעגלי, סימון שבילים"},
+    "start": {"type": "object"}, "end": {"type": "object"}, "stages": {"type": "array", "items": Stage},
+    "sights": {"type": "array", "items": {"type": "object"}}, "elevation": {"type": ["object", "null"]},
+    "practical": {"type": "object", "description": "מים, שירותים, חניה, צל, שעות אור (שקיעה), חירום, טיפים"},
+    "credits": {"type": "array", "items": {"type": "object"}}, "geometry": {"type": "object"}, "bbox": {"type": "array"}}}
+spec["paths"].update({
+    "/api/hikes": {"get": {"summary": "מסלולי טיול מתוארים באזור", "parameters": [
+        q("bbox", "minlon,minlat,maxlon,maxlat"), q("lat", "", "number"), q("lon", "", "number"),
+        q("radius", "מטרים (ברירת מחדל 20000)", "number"), q("limit", "", "integer"), q("geometry", "1 = כולל קו מפושט", "boolean")],
+        "responses": ok("מסלולים", {"type": "object", "properties": {"results": {"type": "array", "items": {"type": "object"}}}})}},
+    "/api/hikes/{id}": {"get": {"summary": "כרטיס מסלול טיול (תיאור, נקודות ציון, טיפים, גאומטריה)", "parameters": [p("id", "hike-12")],
+                                "responses": ok("מסלול")}},
+    "/api/hikes/{id}/guide": {"get": {"summary": "מדריך מסלול: סיכום, שלבים, אתרים, מידע מעשי ובטיחות",
+                                      "parameters": [p("id", "hike-12"), q("date", "YYYY-MM-DD לחישוב שעות האור")],
+                                      "responses": ok("מדריך", Guide)}},
+    "/api/trails/{id}/guide": {"get": {"summary": "מדריך מסלול לשביל מסומן", "parameters": [p("id", "trail-12"), q("date", "YYYY-MM-DD")],
+                                       "responses": ok("מדריך", Guide)}},
+    "/api/guide": {"post": {"summary": "מדריך מסלול לקו כלשהו (למשל מסלול הליכה שתוכנן)",
+                            "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {
+                                "coordinates": {"type": "array", "description": "[[lon, lat], …] מההתחלה לסוף"},
+                                "name": {"type": "string"}, "waypoints": {"type": "array"}, "date": {"type": "string"}}}}}},
+                            "responses": {**ok("מדריך", Guide), "422": {"description": "המסלול ארוך מדי / לא תקין"}}}},
+    "/tiles/hikes/{z}/{x}/{y}.pbf": {"get": {"summary": "אריח מסלולי טיול מתוארים (שכבה hikes)", "parameters": [p("z", ""), p("x", ""), p("y", "")],
+                                             "responses": {"200": {"description": "MVT"}, "204": {"description": "ריק"}}}},
 })
 
 if __name__ == "__main__":

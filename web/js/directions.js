@@ -3,6 +3,7 @@
 import { api } from './api.js';
 import { Combobox } from './combobox.js';
 import { elevationSlot, fillElevation } from './elevation.js';
+import { openGuide } from './guide.js';
 import { maneuverIcon, svg } from './icons.js';
 import { head, wireHead } from './views.js';
 import { TransitPlanner } from './transit.js';
@@ -185,6 +186,7 @@ export class Directions {
                 </button></li>`).join('')}
             </ul>
             ${elevationSlot(this.app.meta, this.mode, r)}
+            ${this.mode === 'foot' ? `<div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="guide">${svg('signpost', { size: 16 })}מדריך מסלול: שלבים, מים ובטיחות</button></div>` : ''}
             <h3 class="subtitle">הוראות הגעה</h3>
             <ol class="steps">
               ${r.steps.map((s, i) => `<li class="step"><button type="button" data-step="${i}">
@@ -258,6 +260,10 @@ export class Directions {
     }));
     const r = this.routes[this.selected];
     if (r) fillElevation(body, app.meta, this.mode, r);
+    body.querySelector('[data-act="guide"]')?.addEventListener('click', () => openGuide(app, {
+      kind: 'route', coordinates: r.geometry.coordinates,
+      name: this.from?.name && this.to?.name ? `${this.from.name} – ${this.to.name}` : 'מסלול הליכה',
+    }, { fly: false }).catch(() => {}));
     body.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
       const loc = r.steps[Number(b.dataset.step)].maneuver.location;
       if (loc) app.map.flyTo({ lon: loc[0], lat: loc[1] }, 17);

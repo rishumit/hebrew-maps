@@ -6,12 +6,14 @@ from ..core import media
 from .settings import settings
 
 
-def local_image(url: str | None) -> str | None:
-    """``/media/<key>`` when the image was downloaded; otherwise None (offline),
-    or the original URL when HMAPS_REMOTE_IMAGES=1."""
+def local_image(url: str | None, width: int | None = None) -> str | None:
+    """``/media/<key>`` when the image was downloaded; otherwise the original URL
+    (a resized Commons thumbnail when *width* is given), or None with HMAPS_REMOTE_IMAGES=0."""
     if not url:
         return None
     k = media.key(url)
     if (settings.media_dir / k).is_file():
         return f"/media/{k}"
-    return url if settings.remote_images else None
+    if not settings.remote_images:
+        return None
+    return media.download_url(url, width) if width else url

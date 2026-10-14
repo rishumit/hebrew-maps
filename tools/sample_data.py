@@ -301,6 +301,46 @@ def generate(out: Path, bulk: int = 0, seed: int = 7) -> tuple[Path, Path]:
     return poi_path, streets_path
 
 
+#: described hiking routes (``hikes`` table, normally filled from guide sources such as Amud Anan);
+#: invented sample content for tests and the demo map
+SAMPLE_HIKES = [
+    {"src_id": "1", "name": "מחניון הדרום אל עין דוד (מסלול לדוגמה)", "difficulty": "moderate", "duration_min": 180,
+     "circular": 0, "season": "סתיו, חורף ואביב",
+     "description": "מסלול לדוגמה לאורך שביל ישראל במדבר יהודה, מהחניון הדרומי ועד מעיין עין דוד.\n\n"
+                    "המסלול עולה בהדרגה אל מצפה הדקלים ומשם יורד אל הנחל.",
+     "coords": [(35.365, 31.410), (35.370, 31.420), (35.375, 31.430), (35.380, 31.440), (35.385, 31.452),
+                (35.3865, 31.4585), (35.3878, 31.4645)],
+     "extra": {"waypoints": [{"name": "חניון הדרום (לדוגמה)", "lat": 31.410, "lon": 35.365, "note": "חניה מוסדרת"},
+                             {"name": "מצפה הדקלים (לדוגמה)", "lat": 31.430, "lon": 35.375, "note": "תצפית לים המלח"},
+                             {"name": "עין דוד", "lat": 31.4648, "lon": 35.3878}],
+               "tips": ["בקיץ מומלץ לצאת עם שחר."], "water": "ברזייה ליד הכניסה לשמורה", "parking": "חניון מוסדר בתחילת המסלול"}},
+    {"src_id": "2", "name": "לולאת עין דוד (מסלול לדוגמה)", "difficulty": "קל", "duration_min": 75, "circular": 1,
+     "season": "כל השנה", "description": "מסלול מעגלי קצר לדוגמה לאורך נחל דוד ובחזרה דרך המעיין.",
+     "coords": [(35.3850, 31.4638), (35.3800, 31.4632), (35.3750, 31.4642), (35.3720, 31.4648), (35.3760, 31.4660),
+                (35.3820, 31.4655), (35.3880, 31.4652), (35.3870, 31.4642), (35.3850, 31.4638)],
+     "extra": {}},
+]
+
+
+def add_sample_hikes(con) -> int:
+    """Insert :data:`SAMPLE_HIKES` into a built database (needs the ``hikes`` table of db.RICH_DDL)."""
+    from hmaps.core import geo
+
+    n = 0
+    for h in SAMPLE_HIKES:
+        c = h["coords"]
+        minx, miny, maxx, maxy = geo.bbox_of(c)
+        cur = con.execute(
+            "INSERT OR REPLACE INTO hikes (source, src_id, name, description, difficulty, duration_min, length_m, circular, season,"
+            " geom, lat, lon, min_lon, min_lat, max_lon, max_lat, url, license, extra) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("sample", h["src_id"], h["name"], h["description"], h["difficulty"], h["duration_min"], round(geo.line_length_m(c), 1),
+             h["circular"], h["season"], geo.encode_polyline(c), c[0][1], c[0][0], minx, miny, maxx, maxy, None,
+             "תוכן לדוגמה", json.dumps(h["extra"], ensure_ascii=False)))
+        con.execute("INSERT OR REPLACE INTO hikes_rtree VALUES (?,?,?,?,?)", (cur.lastrowid, minx, maxx, miny, maxy))
+        n += 1
+    return n
+
+
 def extras(out: Path) -> tuple[Path, Path]:
     """``lines.geojsonseq`` and ``relations.jsonl`` written by :func:`generate` next to the other files."""
     return out / "lines.geojsonseq", out / "relations.jsonl"

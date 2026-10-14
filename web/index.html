@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/vendor/maplibre-gl.css">
   <link rel="stylesheet" href="/css/app.css">
   <link rel="stylesheet" href="/css/transit.css">
+  <link rel="stylesheet" href="/css/guide.css">
 </head>
 <body>
   <a class="skip-link" href="#q">דילוג לחיפוש</a>
@@ -52,6 +53,7 @@
 
     <div class="map-controls" role="group" aria-label="פקדי מפה">
       <button type="button" id="btn-layers" class="ctrl-btn" aria-label="סוג מפה ושכבות" aria-haspopup="dialog" aria-controls="layers-pop" aria-expanded="false"><span data-icon="layers"></span></button>
+      <button type="button" id="btn-3d" class="ctrl-btn ctrl-3d" aria-pressed="false" aria-label="תצוגה בתלת-ממד" title="תלת-ממד (T)"><span aria-hidden="true">3D</span></button>
       <button type="button" id="btn-north" class="ctrl-btn" aria-label="איפוס כיוון המפה לצפון" hidden><span class="compass" aria-hidden="true"></span></button>
       <button type="button" id="btn-locate" class="ctrl-btn" aria-label="הצגת המיקום שלי" aria-pressed="false"><span data-icon="locate"></span></button>
       <div class="zoom-group">
@@ -71,6 +73,7 @@
       <h3 class="popover-sub">שכבות</h3>
       <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
       <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
+      <button type="button" id="btn-hikes-near" class="btn btn-secondary btn-sm popover-btn"><span data-icon="hiker"></span>מסלולי טיול באזור</button>
       <label class="switch"><input type="checkbox" id="toggle-kosher"><span>להציג רק מקומות כשרים</span></label>
       <h3 class="popover-sub">מראה הממשק</h3>
       <div class="segmented" role="radiogroup" aria-label="מראה הממשק">
@@ -98,6 +101,7 @@
       <ul class="menu-list">
         <li><button type="button" data-menu="nearby-list"><span data-icon="list"></span>רשימת המקומות שבמפה</button></li>
         <li><button type="button" data-menu="directions"><span data-icon="directions"></span>תכנון מסלול</button></li>
+        <li><button type="button" data-menu="hikes"><span data-icon="hiker"></span>מסלולי טיול באזור</button></li>
         <li><button type="button" data-menu="recent"><span data-icon="history"></span>חיפושים אחרונים</button></li>
         <li><button type="button" data-menu="shortcuts"><span data-icon="keyboard"></span>קיצורי מקלדת</button></li>
         <li><button type="button" data-menu="data"><span data-icon="info"></span>מקורות הנתונים</button></li>

@@ -7,8 +7,8 @@
 
 #define MyAppName      "מפות בעברית"
 #define MyAppNameEn    "HebrewMaps"
-#define MyAppVersion   GetEnv("MyAppVersion")
-#if MyAppVersion == ""
+; build.ps1 passes /DMyAppVersion=x.y.z; default to 1.0.0 otherwise
+#ifndef MyAppVersion
   #define MyAppVersion "1.0.0"
 #endif
 #define MyAppPublisher "Hebrew Maps"

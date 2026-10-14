@@ -25,6 +25,7 @@ from ..core import categories, geo, hours
 from ..core.hebrew import (edit_distance, fix_keyboard_layout, max_typos, normalize, query_variants,
                            restore_finals, trigrams)
 from ..core.query import ParsedQuery, parse
+from .images import local_image
 from .store import Dataset
 
 KIND_LABEL = {
@@ -529,7 +530,7 @@ def poi_summary(r: sqlite3.Row, distance: float | None = None, score: float | No
         "address": format_address(r["street"], r["housenumber"], r["city"]) or None,
         "open_now": hours.is_open(week) if week else None,
         "kosher": bool(r["kosher"]) if r["kosher"] is not None else None,
-        "thumbnail": r["image"],
+        "thumbnail": local_image(r["image"], 160),
         "distance": _r(distance), "score": score,
     }
 

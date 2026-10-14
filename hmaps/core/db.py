@@ -11,7 +11,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -172,6 +172,76 @@ CREATE TABLE official_streets (
 );
 """
 
+#: rich content of trip sites and trails (schema 5, filled by hmaps.etl.rich); older databases
+#: get these tables when ``python -m hmaps.etl enrich`` runs on them, the API copes without them.
+RICH_DDL = """
+CREATE TABLE IF NOT EXISTS media (
+    id INTEGER PRIMARY KEY,
+    entity TEXT NOT NULL,          -- poi | trail
+    ref_id INTEGER NOT NULL,
+    rank INTEGER NOT NULL,         -- 0 = best
+    source TEXT NOT NULL,          -- commons | mapillary
+    file TEXT NOT NULL,            -- Commons file name (no "File:") / Mapillary image id
+    width INTEGER, height INTEGER,
+    title TEXT, author TEXT, license TEXT, license_url TEXT, page_url TEXT,
+    lat REAL, lon REAL,
+    UNIQUE (entity, ref_id, source, file)
+);
+CREATE INDEX IF NOT EXISTS media_ref ON media(entity, ref_id, rank);
+CREATE TABLE IF NOT EXISTS texts (
+    entity TEXT NOT NULL, ref_id INTEGER NOT NULL,
+    source TEXT NOT NULL,          -- wikipedia | wikivoyage
+    title TEXT, text TEXT NOT NULL, url TEXT, license TEXT,
+    PRIMARY KEY (entity, ref_id, source)
+);
+CREATE TABLE IF NOT EXISTS facts (
+    entity TEXT NOT NULL, ref_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+    PRIMARY KEY (entity, ref_id, key)
+);
+
+-- described hiking routes from guide sources (Amud Anan …); shown by the hike guide (entity "hike")
+CREATE TABLE IF NOT EXISTS hikes (
+    id INTEGER PRIMARY KEY,
+    source TEXT NOT NULL,          -- amudanan | …
+    src_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,              -- plain text, paragraphs separated by blank lines
+    difficulty TEXT,               -- easy | moderate | hard | very_hard (NULL = unknown)
+    duration_min INTEGER,
+    length_m REAL,
+    circular INTEGER,              -- 1 loop, 0 one-way, NULL unknown
+    season TEXT,
+    geom TEXT NOT NULL,            -- encoded polyline (geo.encode_polyline), start -> end
+    lat REAL NOT NULL, lon REAL NOT NULL,      -- start point
+    min_lon REAL, min_lat REAL, max_lon REAL, max_lat REAL,
+    url TEXT, license TEXT,
+    extra TEXT,                    -- JSON: waypoints [{name,lat,lon,note}], tips, water, parking …
+    UNIQUE (source, src_id)
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS hikes_rtree USING rtree(id, min_lon, max_lon, min_lat, max_lat);
+
+-- prayer times of synagogues (Nedarim Plus "זמני תפילות" project); poi_id links to pois
+CREATE TABLE IF NOT EXISTS synagogues_ext (
+    mosad_id TEXT PRIMARY KEY,
+    poi_id INTEGER,                -- matched or newly inserted pois row
+    name TEXT, address TEXT,
+    lat REAL NOT NULL, lon REAL NOT NULL,
+    phone_line TEXT,               -- dial-in line for times
+    updated TEXT
+);
+CREATE INDEX IF NOT EXISTS synagogues_ext_poi ON synagogues_ext(poi_id);
+CREATE TABLE IF NOT EXISTS minyanim (
+    mosad_id TEXT NOT NULL,
+    prayer TEXT NOT NULL,          -- שחרית | מנחה | ערבית | שיעור | …
+    hall TEXT,                     -- room inside the building ("בית המדרש")
+    time TEXT NOT NULL,            -- HH:MM
+    days TEXT NOT NULL,            -- Hebrew day letters א..ש
+    note TEXT
+);
+CREATE INDEX IF NOT EXISTS minyanim_mosad ON minyanim(mosad_id);
+"""
+
+
 
 def create(path: str | Path) -> sqlite3.Connection:
     p = Path(path)
@@ -179,6 +249,7 @@ def create(path: str | Path) -> sqlite3.Connection:
         p.unlink()
     con = sqlite3.connect(p)
     con.executescript(DDL)
+    con.executescript(RICH_DDL)
     con.execute("INSERT INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
     return con
 

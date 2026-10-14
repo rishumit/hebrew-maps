@@ -110,6 +110,13 @@ class ApiTest(unittest.TestCase):
         s, body, _ = self.api.get("/api/route", **{"from": "bad", "to": "29,35"})
         self.assertEqual(s, 400)
 
+    def test_app_code_is_revalidated(self):
+        """JS/CSS must not be cached heuristically, or code updates never reach the browser."""
+        for path in ("/js/map.js", "/css/app.css", "/index.html", "/sw.js"):
+            s, _, h = self.api.get(path)
+            self.assertEqual(s, 200, path)
+            self.assertEqual(h.get("cache-control"), "no-cache", path)
+
     def test_tiles(self):
         x, y = geo.lonlat_to_tile(34.7752, 32.0753, 15)
         s, data, h = self.api.get(f"/tiles/poi/15/{x}/{y}.pbf")

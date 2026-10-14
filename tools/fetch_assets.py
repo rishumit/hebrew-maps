@@ -103,7 +103,7 @@ def demo_db() -> None:
         return
     sys.path.insert(0, str(ROOT))
     from hmaps.etl import build, osm, quality, search_index  # noqa: F401
-    from tools.sample_data import extras, generate
+    from tools.sample_data import add_sample_hikes, extras, generate
 
     src = ROOT / "data" / "sample" / "src"
     poi, streets = generate(src)
@@ -113,6 +113,7 @@ def demo_db() -> None:
     build.run(con, osm.iter_features(poi), osm.iter_features(streets),
               line_features=osm.iter_features(lines), relations=osm.iter_relations(rels))
     search_index.build(con)
+    add_sample_hikes(con)
     con.execute("INSERT OR REPLACE INTO meta VALUES ('built', 'demo')")
     con.commit()
     dbmod.finalize(con)

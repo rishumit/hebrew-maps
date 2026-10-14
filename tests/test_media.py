@@ -84,7 +84,7 @@ class MediaApiTest(unittest.TestCase):
         cls.with_img, cls.without = _db_with_images(cls.data)
         (cls.data / "media").mkdir()
         (cls.data / "media" / media.key(COMMONS)).write_bytes(JPEG)
-        cls.api = ApiServer(cls.data)
+        cls.api = ApiServer(cls.data, extra_env={"HMAPS_REMOTE_IMAGES": "0"})  # fully offline mode
 
     @classmethod
     def tearDownClass(cls):
@@ -117,13 +117,15 @@ class MediaApiTest(unittest.TestCase):
 
 
 class RemoteImagesOptionTest(unittest.TestCase):
-    def test_remote_fallback_when_enabled(self):
+    def test_remote_fallback_by_default(self):
+        """Not downloaded → the card loads a resized copy straight from Commons (the default)."""
         data = Path(tempfile.mkdtemp(prefix="hmaps-media-remote-"))
         _, without = _db_with_images(data)
-        api = ApiServer(data, extra_env={"HMAPS_REMOTE_IMAGES": "1"})
+        api = ApiServer(data)
         try:
             _, poi, _ = api.get(f"/api/poi/poi-{without}")
-            self.assertEqual(poi["media"]["images"], [MISSING])
+            self.assertEqual(poi["media"]["images"], [MISSING + "?width=640"])
+            self.assertEqual(poi["media"]["gallery"][0]["full"], MISSING + "?width=1600")
             _, _, h = api.get("/")
             self.assertIn("upload.wikimedia.org", h["content-security-policy"])
         finally:

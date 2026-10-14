@@ -285,13 +285,31 @@ export function omtStyle(themeName, { tilejson, glyphs, terrain }) {
         'symbol-placement': 'line', 'text-rotation-alignment': 'map', 'symbol-spacing': 350, 'text-max-angle': 30 },
       paint: { 'text-color': t.roadText, 'text-halo-color': t.halo, 'text-halo-width': 1.5 },
     },
-    {
-      id: 'road-shield', type: 'symbol', source: 'openmaptiles', 'source-layer': 'transportation_name', minzoom: 8,
-      filter: ['all', ['has', 'ref'], ['<=', ['get', 'ref_length'], 4], cls('motorway', 'trunk', 'primary')],
-      layout: { 'text-field': ['get', 'ref'], 'text-font': MED, 'text-size': 11, 'symbol-placement': 'line',
-        'symbol-spacing': 500, 'text-rotation-alignment': 'viewport' },
-      paint: { 'text-color': t.shieldText, 'text-halo-color': t.shieldHalo, 'text-halo-width': 3 },
-    },
+    // route-number shields, Google style: a coloured badge per Israeli sign class
+    // (freeway blue, 1-2 digit red, 3 digit green, 4 digit black) drawn by map.js
+    ...[
+      { id: 'road-shield', classes: ['motorway', 'trunk', 'primary'], minzoom: 7, spacing: 420 },
+      { id: 'road-shield-minor', classes: ['secondary', 'tertiary'], minzoom: 11, spacing: 380 },
+    ].map(({ id, classes, minzoom, spacing }) => ({
+      id, type: 'symbol', source: 'openmaptiles', 'source-layer': 'transportation_name', minzoom,
+      filter: ['all', ['has', 'ref'], ['<=', ['get', 'ref_length'], 4], cls(...classes)],
+      layout: {
+        'icon-image': ['concat', 'shield:',
+          ['case',
+            ['==', ['get', 'class'], 'motorway'], 'fw',
+            ['<=', ['get', 'ref_length'], 2], 'nat',
+            ['==', ['get', 'ref_length'], 3], 'reg',
+            'loc'],
+          ':', ['get', 'ref']],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 12, 1, 16, 1.1],
+        'icon-rotation-alignment': 'viewport',
+        'icon-padding': 6,
+        'symbol-placement': 'line',
+        'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 8, spacing, 14, spacing * 1.3],
+        // the most important roads win when shields compete for space
+        'symbol-sort-key': ['match', ['get', 'class'], 'motorway', 0, 'trunk', 1, 'primary', 2, 'secondary', 3, 4],
+      },
+    })),
     {
       id: 'housenumber', type: 'symbol', source: 'openmaptiles', 'source-layer': 'housenumber', minzoom: 17,
       layout: { 'text-field': ['get', 'housenumber'], 'text-font': REG, 'text-size': 10 },

@@ -49,6 +49,7 @@ export class Panel {
     this.el.setAttribute('aria-label', view.label || 'חלונית מידע');
     this.body.scrollTop = 0;
     view.render(this.body);
+    bus.emit('panel:view', view);
     if (isMobile()) this.setSnap(view.snap || this.el.dataset.snap || 'half');
     if (focus) {
       const target = this.body.querySelector('[data-autofocus]') || this.body.querySelector('h2') || this.el;

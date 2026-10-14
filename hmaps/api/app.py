@@ -14,6 +14,8 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/reverse?lat=&lon=          reverse geocoding
     GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
+    GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
+    GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)
     GET  /api/transit?from=&to=&time=&mode=depart|arrive   public transport (+ /stop/{id}, /stops, /status)
     GET  /tiles/base.json  /tiles/base/{z}/{x}/{y}.pbf      OpenMapTiles basemap
     GET  /tiles/fallback/{z}/{x}/{y}.pbf                    basemap from our data
@@ -51,11 +53,14 @@ from starlette.staticfiles import StaticFiles
 
 from .. import __version__
 from ..core import categories
+from . import guide as guide_api
 from . import outdoor
 from . import pois as poi_mod
 from . import elevation as elev_mod
 from . import routing, tiles
+from . import rich as rich_api
 from . import transit as transit_api
+from . import minyanim as minyanim_api
 from .search import SearchEngine, nearby, reverse
 from .settings import settings
 from .store import Basemap, Dataset
@@ -80,6 +85,37 @@ class State:
         self.terrain = Basemap(settings.data_dir / "tiles" / "terrain.mbtiles")
         self.elevation = elev_mod.Elevation(self.terrain)
         self._routing_cache: tuple[float, dict] = (0.0, {})
+        self._poi_zooms: tuple[str, dict[int, int]] | None = None
+        self._poi_zooms_building: str | None = None
+        self._poi_zooms_lock = threading.Lock()
+
+    def poi_zooms(self) -> dict[int, int] | None:
+        """Global POI declutter (zoom from which each POI shows), per dataset version.
+
+        Built once in a background thread; until it is ready, tiles fall back to
+        per-tile thinning (and are cached only briefly)."""
+        ver = self.ds.version
+        cur = self._poi_zooms
+        if cur is not None and cur[0] == ver:
+            return cur[1]
+        with self._poi_zooms_lock:
+            if self._poi_zooms_building == ver:
+                return None
+            self._poi_zooms_building = ver
+
+        def build() -> None:
+            try:
+                t0 = time.monotonic()
+                zooms = tiles.compute_poi_zooms(self.ds.conn())
+                self._poi_zooms = (ver, zooms)
+                log.info("POI declutter ready: %d POIs placed in %.1fs", len(zooms), time.monotonic() - t0)
+            except Exception:  # noqa: BLE001 - tiles keep working with the per-tile fallback
+                log.exception("POI declutter failed")
+                with self._poi_zooms_lock:
+                    self._poi_zooms_building = None  # retry on a later tile request
+
+        threading.Thread(target=build, name="poi-zooms", daemon=True).start()
+        return None
 
     def routing_status(self) -> dict:
         ts, val = self._routing_cache
@@ -196,7 +232,7 @@ async def meta(req: Request) -> Response:
                     "tilejson": f"{base}/tiles/base.json" if st.basemap.available else None,
                     "fallback_tiles": f"{base}/tiles/fallback/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}",
                     "glyphs": f"{base}/fonts/{{fontstack}}/{{range}}.pbf"},
-        "poi_tiles": f"{base}/tiles/poi/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}",
+        "poi_tiles": f"{base}/tiles/poi/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}-d3",
         "routing": rs,
         "attribution": ATTRIBUTION + (" · " + elev_mod.ATTRIBUTION if st.terrain.available else ""),
         "bounds": [34.15, 29.40, 35.95, 33.45],
@@ -464,8 +500,9 @@ async def tile_poi(req: Request) -> Response:
         return _pbf(None, 3600)
     cats = [c for c in (req.query_params.get("cats") or "").split(",") if c in categories.SUB_BY_ID or c in categories.CATEGORY_BY_ID]
     kosher = req.query_params.get("kosher") in ("1", "true")
-    data = await run_in_threadpool(lambda: tiles.poi_tile(st.ds.conn(), z, x, y, cats or None, kosher))
-    return _pbf(data, 3600)
+    zooms = None if cats else state().poi_zooms()
+    data = await run_in_threadpool(lambda: tiles.poi_tile(st.ds.conn(), z, x, y, cats or None, kosher, zooms=zooms))
+    return _pbf(data, 3600 if cats or zooms is not None else 60)
 
 
 async def tile_contours(req: Request) -> Response:
@@ -636,10 +673,19 @@ async def metrics_ep(req: Request) -> Response:
 
 # ----------------------------------------------------------------------------- middleware
 
-CSP = ("default-src 'self'; img-src 'self' data: blob: https://commons.wikimedia.org https://upload.wikimedia.org; "
-       "style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; "
-       "child-src 'self' blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; "
-       "form-action 'self'")
+REMOTE_IMG_HOSTS = "https://commons.wikimedia.org https://upload.wikimedia.org https://*.fbcdn.net"
+
+
+def _csp() -> str:
+    """Photos may come from Wikimedia / Mapillary unless the map runs fully offline (HMAPS_REMOTE_IMAGES=0)."""
+    img = "'self' data: blob:" + (" " + REMOTE_IMG_HOSTS if settings.remote_images else "")
+    return (f"default-src 'self'; img-src {img}; "
+            "style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; "
+            "child-src 'self' blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; "
+            "form-action 'self'")
+
+
+CSP = _csp()
 
 
 class ServiceMiddleware:
@@ -744,6 +790,8 @@ async def lifespan(app):
     log.info("Hebrew Maps API %s – dataset %s%s, basemap %s", __version__,
              "ready" if st.ds.available else "missing", " (demo)" if st.ds.demo else "",
              "ready" if st.basemap.available else "fallback")
+    if st.ds.available:
+        st.poi_zooms()  # start the POI declutter in the background
     yield
 
 
@@ -772,8 +820,10 @@ def build_app() -> Starlette:
         Route("/api/geocode", geocode),
         Route("/api/reverse", reverse_ep),
         Route("/api/route", route_ep),
+        *guide_api.ROUTES,  # /api/hikes…, /api/trails/{id}/guide, POST /api/guide, /tiles/hikes
         *outdoor.ROUTES,  # /api/trails/{id}, /tiles/trails, /tiles/parks
         *transit_api.routes(),  # public transport (hmaps/api/transit.py)
+        *minyanim_api.ROUTES,  # /api/minyanim/near (prayer times, hmaps/api/minyanim.py)
         Route("/api/elevation", elevation_ep, methods=["GET", "POST"]),
         Route("/api/{rest:path}", api_not_found),
         Route("/tiles/base.json", tile_base_json),
@@ -786,6 +836,7 @@ def build_app() -> Starlette:
         Route("/reports/{name}", reports),
         Route("/reports", lambda req: RedirectResponse("/reports/quality-report.html")),
         Route("/metrics", metrics_ep),
+        *rich_api.ROUTES,  # /media/<key> (downloaded photos), /media/mly/<id> (Mapillary)
     ]
     if settings.web_dir.is_dir():
         routes.append(Mount("/", app=StaticFiles(directory=str(settings.web_dir), html=True), name="web"))

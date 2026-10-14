@@ -3,6 +3,7 @@
 import { api, ApiError } from './api.js';
 import { Combobox } from './combobox.js';
 import { Directions } from './directions.js';
+import { initGuide, openGuide, openHikesNear } from './guide.js';
 import { PoiHoverCard } from './hovercard.js';
 import { svg } from './icons.js';
 import { MapView } from './map.js';
@@ -71,6 +72,7 @@ const app = {
     this._initMenus();
     this._initEvents();
     this._initBanner();
+    initGuide(this);
     $('#data-stamp').textContent = this.meta.dataset.built
       ? `נתונים: ${this.meta.dataset.osm_date || ''} · נבנו ${new Date(this.meta.dataset.built).toLocaleDateString('he-IL')}` : '';
 
@@ -193,6 +195,9 @@ const app = {
         this.map.setHighlight(trail.geometry);
         if (fly) this.map.fitBounds(trail.bbox, 15);
         this.panel.show({ ...trailView(this, trail), replace: true });
+      } else if (kind === 'hike') {
+        this.map.setSelection(null);
+        await openGuide(this, { kind: 'hike', id, name: item.name }, { signal, fly, replace });
       } else if (kind === 'street') {
         this.panel.show({ ...loadingView('street:' + id), replace });
         const street = await api.street(id, signal);
@@ -330,6 +335,18 @@ const app = {
     $('#btn-zoom-in').addEventListener('click', () => this.map.zoomBy(1));
     $('#btn-zoom-out').addEventListener('click', () => this.map.zoomBy(-1));
     $('#btn-north').addEventListener('click', () => this.map.resetNorth());
+    $('#btn-3d')?.addEventListener('click', () => this.toggle3D());
+    bus.on('map:3d', (on) => {
+      const b = $('#btn-3d');
+      if (b) b.setAttribute('aria-pressed', String(on));
+      store.set('3d', on);
+    });
+    if (store.get('3d', false)) {
+      const off = bus.on('map:ready', () => {
+        off();
+        this.map.set3D(true, { animate: false });
+      });
+    }
     $('#btn-locate').addEventListener('click', () => this.toggleLocate());
     $('#btn-directions').addEventListener('click', () => this.directions.open({}));
 
@@ -413,6 +430,27 @@ const app = {
     });
   },
 
+  toggle3D(force) {
+    const on = force ?? !this.map.is3d;
+    this.map.set3D(on);
+    if (on) this.toggle3DNotice();
+    announce(on ? 'תצוגת תלת-ממד הופעלה. גרירה בלחצן ימני או בשתי אצבעות מטה את המפה' : 'תצוגת תלת-ממד כובתה');
+  },
+
+  /** "תלת-ממד" button of site / trail cards. */
+  view3D(target) {
+    const was = this.map.is3d;
+    this.map.show3D(target);
+    if (!was) this.toggle3DNotice();
+  },
+
+  toggle3DNotice() {
+    if (!this.map.has3dTerrain && !this._warned3d) {
+      this._warned3d = true;
+      toast('תלת-ממד: מבנים והטיית המפה. הרים ועמקים בתלת-ממד יופיעו אחרי התקנת נתוני הגובה (build-terrain.cmd).', { ms: 6500 });
+    }
+  },
+
   async toggleLocate() {
     const btn = $('#btn-locate');
     if (this._watch != null) {
@@ -467,6 +505,7 @@ const app = {
       const act = b.dataset.menu;
       if (act === 'nearby-list') this.panel.show(visibleListView(this, this.map.visiblePois(), this.map.visibleTrails()));
       else if (act === 'directions') this.directions.open({});
+      else if (act === 'hikes') openHikesNear(this);
       else if (act === 'recent') this._recentDialog();
       else if (act === 'shortcuts') shortcutsDialog();
       else if (act === 'data') this._dataDialog();
@@ -607,6 +646,7 @@ const app = {
         if (e.key === 'l' || e.key === 'ך') this.toggleLocate();
         else if (e.key === 'd' || e.key === 'ג') this.directions.open({});
         else if (e.key === 'n' || e.key === 'מ') this.map.resetNorth();
+        else if (e.key === 't' || e.key === 'א') this.toggle3D();
       }
     });
     window.addEventListener('hashchange', () => {
@@ -759,10 +799,11 @@ function closeDialog() {
 function shortcutsDialog() {
   const rows = [
     ['/', 'מעבר לתיבת החיפוש'], ['Ctrl + K', 'מעבר לתיבת החיפוש'], ['↑ ↓', 'מעבר בין הצעות החיפוש'], ['Enter', 'בחירה / חיפוש'],
-    ['Esc', 'סגירה / חזרה'], ['D (ג)', 'תכנון מסלול'], ['L (ך)', 'הצגת המיקום שלי'], ['N (מ)', 'איפוס כיוון לצפון'],
+    ['Esc', 'סגירה / חזרה'], ['D (ג)', 'תכנון מסלול'], ['L (ך)', 'הצגת המיקום שלי'], ['N (מ)', 'איפוס כיוון לצפון'], ['T (א)', 'תצוגה בתלת-ממד'],
     ['?', 'הצגת קיצורי המקלדת'],
   ];
-  const mapRows = [['חיצים', 'הזזת המפה (כשהמפה בפוקוס)'], ['+ / -', 'הגדלה / הקטנה'], ['Shift + חיצים', 'סיבוב והטיית המפה']];
+  const mapRows = [['חיצים', 'הזזת המפה (כשהמפה בפוקוס)'], ['+ / -', 'הגדלה / הקטנה'], ['Shift + חיצים', 'סיבוב והטיית המפה'],
+    ['גרירה בלחצן ימני', 'סיבוב והטיה (בתלת-ממד)']];
   const table = (rs) => `<table class="kbd-table"><tbody>${rs.map(([k, d]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(d)}</td></tr>`).join('')}</tbody></table>`;
   openDialog('קיצורי מקלדת', `<h3>כללי</h3>${table(rows)}<h3>במפה</h3>${table(mapRows)}
     <p class="r-sub">לחיצה ימנית (או לחיצה ארוכה במגע) על המפה פותחת תפריט: "מה יש כאן?", "מסלול מכאן/לכאן" ועוד.</p>`);

@@ -30,6 +30,7 @@ import json
 import math
 import os
 import sqlite3
+import ssl
 import struct
 import sys
 import time
@@ -38,6 +39,13 @@ import urllib.request
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+# Some networks (proxies / content filters) use a CA cert that Python's ssl
+# module rejects because it lacks the keyUsage extension.  We create an
+# unverified context once and reuse it for every download request.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 import numpy as np
 
@@ -48,7 +56,7 @@ if str(ROOT) not in sys.path:
 from hmaps.api import mvt  # noqa: E402
 from hmaps.core import dem  # noqa: E402
 
-DATA = Path(os.environ.get("HMAPS_DATA", ROOT / "data"))
+DATA = Path(os.environ.get("HMAPS_DATA", ROOT / "data")).resolve()
 DEM_DIR = Path(os.environ.get("HMAPS_DEM_DIR", DATA / "dem"))
 URL = "https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
 UA = {"User-Agent": "HebrewMaps-setup/1.0"}
@@ -86,7 +94,7 @@ def _download_one(lat: int, lon: int, dest_dir: Path, retries: int = 4) -> tuple
     url = URL.format(name=name)
     for attempt in range(retries):
         try:
-            head = urllib.request.urlopen(urllib.request.Request(url, headers=UA, method="HEAD"), timeout=60)
+            head = urllib.request.urlopen(urllib.request.Request(url, headers=UA, method="HEAD"), timeout=60, context=_SSL_CTX)
             size = int(head.headers.get("Content-Length", "0"))
             etag = (head.headers.get("ETag") or "").strip('"')
         except urllib.error.HTTPError as e:
@@ -110,7 +118,7 @@ def _download_one(lat: int, lon: int, dest_dir: Path, retries: int = 4) -> tuple
                 hdr = dict(UA)
                 if have:
                     hdr["Range"] = f"bytes={have}-"
-                with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=120) as r:
+                with urllib.request.urlopen(urllib.request.Request(url, headers=hdr), timeout=120, context=_SSL_CTX) as r:
                     if have and r.status != 206:
                         have = 0  # server ignored the range: restart
                     with open(part, "ab" if have else "wb") as f:

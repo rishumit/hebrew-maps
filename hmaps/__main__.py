@@ -68,6 +68,16 @@ if getattr(sys, "frozen", False):
             def flush(self) -> None:
                 pass
 
+            # uvicorn/logging probe these on the stream; a log file is not a TTY.
+            def isatty(self) -> bool:
+                return False
+
+            def writable(self) -> bool:
+                return True
+
+            encoding = "utf-8"
+            errors = "replace"
+
         if sys.stdout is None:
             sys.stdout = _FileStream(logging.INFO)  # type: ignore[assignment]
         if sys.stderr is None:
@@ -136,6 +146,7 @@ def main() -> None:
         host=_host,
         port=_port,
         log_level="warning",
+        use_colors=False,
     )
     server = uvicorn.Server(config)
     server.run()

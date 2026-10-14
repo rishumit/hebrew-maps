@@ -26,7 +26,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "tools-bin"
-DATA = Path(os.environ.get("HMAPS_DATA", ROOT / "data"))
+# absolute: Planetiler runs with cwd=DATA, so a relative HMAPS_DATA (as in CI: "data")
+# would otherwise turn every path below into data/data/... and the build "fails" silently
+DATA = Path(os.environ.get("HMAPS_DATA", ROOT / "data")).resolve()
 PLANETILER_URL = "https://github.com/onthegomap/planetiler/releases/latest/download/planetiler.jar"
 UA = {"User-Agent": "HebrewMaps-setup/1.0"}
 

@@ -149,6 +149,10 @@
       this._center = { lng: opts.center?.[0] ?? 35, lat: opts.center?.[1] ?? 31.6 };
       this._zoom = opts.zoom ?? 7;
       this._bearing = 0;
+      this._pitch = 0;
+      this._maxPitch = opts.maxPitch ?? 60;
+      this._terrain = null;
+      this._sky = null;
       this._images = new Set();
       this._applyStyle(opts.style);
       window.__map = this;
@@ -173,6 +177,20 @@
     removeSource(id) { delete this._sources[id]; }
     addLayer(layer) { validateLayer(layer, this._sources); this._layers.push(layer); }
     getLayer(id) { return this._layers.find((l) => l.id === id); }
+    removeLayer(id) { this._layers = this._layers.filter((l) => l.id !== id); }
+    getPitch() { return this._pitch; }
+    setMaxPitch(p) { this._maxPitch = p; if (this._pitch > p) this._pitch = p; return this; }
+    getMaxPitch() { return this._maxPitch; }
+    setTerrain(t) {
+      if (t && !this._sources[t.source]) errors.push(`terrain source ${t.source} missing`);
+      this._terrain = t; window.__terrain = t; return this;
+    }
+    getTerrain() { return this._terrain; }
+    setSky(s) { this._sky = s; window.__sky = s; return this; }
+    cameraForBounds(b) {
+      const [[w, s], [e, n]] = b;
+      return { center: [(w + e) / 2, (s + n) / 2], zoom: 13 };
+    }
     getStyle() { return { ...this.style, layers: this._layers, sources: this._sources }; }
     setLayoutProperty(id, p, v) { const l = this.getLayer(id); if (l) (l.layout = l.layout || {})[p] = v; }
     setPaintProperty(id, p, v) { const l = this.getLayer(id); if (l) (l.paint = l.paint || {})[p] = v; }
@@ -201,9 +219,10 @@
       if (o.center) this._center = Array.isArray(o.center) ? { lng: o.center[0], lat: o.center[1] } : { lng: o.center.lng ?? o.center.lon, lat: o.center.lat };
       if (o.zoom != null) this._zoom = o.zoom;
       if (o.bearing != null) { this._bearing = o.bearing; this.fire('rotate'); }
+      if (o.pitch != null) this._pitch = Math.min(o.pitch, this._maxPitch);
       this.fire('movestart');
       setTimeout(() => this.fire('moveend'), 5);
-      window.__lastCamera = { center: this._center, zoom: this._zoom };
+      window.__lastCamera = { center: this._center, zoom: this._zoom, pitch: this._pitch, bearing: this._bearing };
     }
     jumpTo(o) { this._move(o); }
     flyTo(o) { this._move(o); }
