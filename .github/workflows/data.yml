@@ -153,10 +153,13 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 10. Enrich maps.db with Wikidata facts, Wikipedia texts,
-      #     Wikivoyage travel guides and Wikimedia Commons photo metadata
+      #     Wikivoyage travel guides and Wikimedia Commons photo metadata.
+      #     Pass --db explicitly pointing at the canonical copy from step 9.
       # -----------------------------------------------------------------------
       - name: Enrich DB (Wikidata + Wikipedia + Wikivoyage + Commons)
-        run: python -m hmaps.etl enrich --steps wikidata,wikipedia,wikivoyage,commons,trails
+        run: |
+          python -c "import hmaps.etl.__main__; print('hmaps from:', hmaps.__file__)"
+          python -m hmaps.etl enrich --db data/maps.db --steps wikidata,wikipedia,wikivoyage,commons,trails
         env:
           HMAPS_DATA: data
 
