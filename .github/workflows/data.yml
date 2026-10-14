@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     # Data build takes up to ~60 min; default timeout is 6 h
     timeout-minutes: 180
+    permissions:
+      contents: write   # required for creating/updating GitHub Releases
 
     steps:
       # -----------------------------------------------------------------------
