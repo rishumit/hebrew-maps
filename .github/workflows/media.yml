@@ -86,7 +86,20 @@ jobs:
         run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 6. Download images
+      # 6. Enrich maps.db with image URLs from Wikimedia Commons / Wikipedia
+      #    The data release is built with --no-enrich (fast), so image URLs
+      #    are not yet in the DB. This step populates pois.image and the
+      #    media table so that tools/media.py has something to download.
+      # -----------------------------------------------------------------------
+      - name: Enrich DB with image URLs
+        env:
+          HMAPS_DATA: data
+        run: |
+          python -m hmaps.etl enrich --steps commons,wikipedia,wikidata,wikivoyage
+        continue-on-error: false   # no point downloading if enrichment fails
+
+      # -----------------------------------------------------------------------
+      # 7. Download images
       # -----------------------------------------------------------------------
       - name: Download POI images
         env:
@@ -98,7 +111,7 @@ jobs:
             ${{ github.event.inputs.retry_failed == 'true' && '--retry-failed' || '' }}
 
       # -----------------------------------------------------------------------
-      # 7. Summary
+      # 8. Summary
       # -----------------------------------------------------------------------
       - name: Show results
         run: |
@@ -115,7 +128,7 @@ jobs:
           wc -l < data/media/failed.txt 2>/dev/null && head -20 data/media/failed.txt || echo "  (none)"
 
       # -----------------------------------------------------------------------
-      # 8. Pack data/media/ into a zip
+      # 9. Pack data/media/ into a zip
       # -----------------------------------------------------------------------
       - name: Package images
         run: |
@@ -126,7 +139,7 @@ jobs:
           ls -lh "media-${{ steps.date.outputs.value }}.zip"
 
       # -----------------------------------------------------------------------
-      # 9. Upload as workflow artifact (7-day retention)
+      # 10. Upload as workflow artifact (7-day retention)
       # -----------------------------------------------------------------------
       - name: Upload images artifact
         uses: actions/upload-artifact@v4
@@ -136,7 +149,7 @@ jobs:
           retention-days: 7
 
       # -----------------------------------------------------------------------
-      # 10. Attach to rolling "media-latest" GitHub Release
+      # 11. Attach to rolling "media-latest" GitHub Release
       # -----------------------------------------------------------------------
       - name: Upload to rolling "media-latest" release
         uses: softprops/action-gh-release@v2
