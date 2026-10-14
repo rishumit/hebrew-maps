@@ -126,9 +126,15 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 9. Package and upload maps.zip  (OSM core DB — smallest, always needed)
+      #    The build uses versioned filenames (maps-YYYYMMDD-HHMMSS.db) with a
+      #    pointer file (maps.current) — resolve the real name before zipping.
       # -----------------------------------------------------------------------
       - name: Package maps.zip
-        run: zip -j maps-${{ steps.date.outputs.value }}.zip data/maps.db
+        run: |
+          DB=$(cat data/maps.current 2>/dev/null || echo "maps.db")
+          echo "Resolved live DB: data/$DB"
+          cp "data/$DB" data/maps.db
+          zip -j maps-${{ steps.date.outputs.value }}.zip data/maps.db
 
       - name: Upload maps.zip → release
         uses: softprops/action-gh-release@v2
@@ -156,6 +162,7 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 11. Package and upload rich.zip  (enriched DB — adds texts + gallery metadata)
+      #     Re-use the data/maps.db copy created in step 9 (already canonical name)
       # -----------------------------------------------------------------------
       - name: Package rich.zip
         run: zip -j rich-${{ steps.date.outputs.value }}.zip data/maps.db
