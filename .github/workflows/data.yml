@@ -1,21 +1,33 @@
 name: Build Data Package
 
-# Builds the full Israel data package from public sources and uploads it
-# as a GitHub Release asset (data-<date>.zip, ~600 MB compressed).
+# Builds the full Israel data package from public sources and uploads each
+# component as a separate GitHub Release asset so users can download only
+# what they need:
+#
+#   maps.zip     – maps.db (OSM core: POIs, streets, addresses, routing graph)
+#   rich.zip     – maps.db after Wikidata/Wikipedia/Commons/Wikivoyage enrichment
+#   media.zip    – offline image thumbnails (data/media/)
+#   transit.zip  – GTFS public-transport timetables (data/transit/)
+#   terrain.zip  – terrain.mbtiles + contours.mbtiles
+#   basemap.zip  – basemap.mbtiles vector tiles
 #
 # Triggers:
 #   - Manual dispatch (on demand)
 #   - Weekly on Sunday 02:00 UTC (OSM data updates weekly)
-#   - On version tags — so the installer release and data release are in sync
+#   - On version tags — installer release and data release stay in sync
 on:
   workflow_dispatch:
     inputs:
       skip_terrain:
-        description: "Skip terrain/DEM build (faster, ~10 min vs ~30 min)"
+        description: "Skip terrain/DEM build (~20 min, ~500 MB Copernicus download)"
         type: boolean
         default: false
       skip_basemap:
-        description: "Skip basemap MBTiles build (faster)"
+        description: "Skip basemap MBTiles build (~30 min, requires Java)"
+        type: boolean
+        default: false
+      skip_media:
+        description: "Skip image download (can be slow — hundreds of MB from Wikimedia)"
         type: boolean
         default: false
   schedule:
@@ -27,8 +39,7 @@ jobs:
   build-data:
     name: Build Israel Data
     runs-on: ubuntu-latest
-    # Data build takes up to ~60 min; default timeout is 6 h
-    timeout-minutes: 180
+    timeout-minutes: 360
     permissions:
       contents: write   # required for creating/updating GitHub Releases
 
@@ -48,9 +59,7 @@ jobs:
           python-version: "3.12"
 
       # -----------------------------------------------------------------------
-      # 3. System tools needed for the build
-      #    osmium-tool   — fast OSM PBF parser used by the ETL
-      #    gdal-bin      — used by terrain builder (gdal_translate etc.)
+      # 3. System tools
       # -----------------------------------------------------------------------
       - name: Install system dependencies
         run: |
@@ -70,14 +79,36 @@ jobs:
           pip install -r requirements-native.txt
 
       # -----------------------------------------------------------------------
-      # 5. Resolve the date tag used for the release asset name
+      # 5. Date tag
       # -----------------------------------------------------------------------
       - name: Set date tag
         id: date
         run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 6. Download OSM extract (Israel+Palestine, ~150 MB from Geofabrik)
+      # 6. Determine release tag
+      #    - version push  → attach to that tag's release
+      #    - schedule/manual → rolling "data-latest" pre-release
+      # -----------------------------------------------------------------------
+      - name: Set release tag
+        id: release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false"       >> "$GITHUB_OUTPUT"
+            echo "name=מפות בעברית ${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=data-latest"        >> "$GITHUB_OUTPUT"
+            echo "prerelease=true"        >> "$GITHUB_OUTPUT"
+            echo "name=נתונים עדכניים — ${{ steps.date.outputs.value }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # =======================================================================
+      # CORE BUILD
+      # =======================================================================
+
+      # -----------------------------------------------------------------------
+      # 7. Download OSM extract (Israel+Palestine, ~150 MB from Geofabrik)
       # -----------------------------------------------------------------------
       - name: Download OSM extract
         run: python -m hmaps.etl download
@@ -85,18 +116,93 @@ jobs:
           HMAPS_DATA: data
 
       # -----------------------------------------------------------------------
-      # 7. Build maps.db  (POIs, streets, addresses, routing graph)
-      #    pyosmium engine — no Docker needed
-      #    --no-enrich skips Wikidata/Wikipedia to keep CI fast and offline-safe;
-      #    remove the flag if you want full enrichment (adds ~10-20 min)
+      # 8. Build maps.db  (POIs, streets, addresses, routing graph)
+      #    --no-enrich: fast OSM-only pass; enrichment runs separately below
       # -----------------------------------------------------------------------
-      - name: Build maps database
-        run: python -m hmaps.etl build --engine pyosmium
+      - name: Build maps database (OSM core)
+        run: python -m hmaps.etl build --engine pyosmium --no-enrich
         env:
           HMAPS_DATA: data
 
       # -----------------------------------------------------------------------
-      # 8. GTFS public transport timetables (Ministry of Transport)
+      # 9. Package and upload maps.zip  (OSM core DB — smallest, always needed)
+      # -----------------------------------------------------------------------
+      - name: Package maps.zip
+        run: zip -j maps-${{ steps.date.outputs.value }}.zip data/maps.db
+
+      - name: Upload maps.zip → release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.name }}
+          prerelease: ${{ steps.release.outputs.prerelease }}
+          body: |
+            נתוני ישראל — ${{ steps.date.outputs.value }}
+            Built from ${{ github.sha }}
+          files: maps-${{ steps.date.outputs.value }}.zip
+
+      # =======================================================================
+      # RICH CONTENT  (Wikidata · Wikipedia · Wikivoyage · Commons)
+      # =======================================================================
+
+      # -----------------------------------------------------------------------
+      # 10. Enrich maps.db with Wikidata facts, Wikipedia texts,
+      #     Wikivoyage travel guides and Wikimedia Commons photo metadata
+      # -----------------------------------------------------------------------
+      - name: Enrich DB (Wikidata + Wikipedia + Wikivoyage + Commons)
+        run: python -m hmaps.etl enrich --steps wikidata,wikipedia,wikivoyage,commons,trails
+        env:
+          HMAPS_DATA: data
+
+      # -----------------------------------------------------------------------
+      # 11. Package and upload rich.zip  (enriched DB — adds texts + gallery metadata)
+      # -----------------------------------------------------------------------
+      - name: Package rich.zip
+        run: zip -j rich-${{ steps.date.outputs.value }}.zip data/maps.db
+
+      - name: Upload rich.zip → release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: rich-${{ steps.date.outputs.value }}.zip
+
+      # =======================================================================
+      # OFFLINE IMAGES  (Wikimedia Commons thumbnails)
+      # =======================================================================
+
+      # -----------------------------------------------------------------------
+      # 12. Download image thumbnails to data/media/
+      #     Skippable via workflow_dispatch input; always runs on schedule/tag
+      # -----------------------------------------------------------------------
+      - name: Download POI images (Wikimedia Commons thumbnails)
+        if: ${{ github.event.inputs.skip_media != 'true' }}
+        run: python tools/media.py --workers 3 --interval 0.8
+        env:
+          HMAPS_DATA: data
+        continue-on-error: true   # images are optional; don't fail the whole run
+
+      - name: Package media.zip
+        if: ${{ github.event.inputs.skip_media != 'true' }}
+        run: |
+          cd data
+          zip -r "../media-${{ steps.date.outputs.value }}.zip" media/ \
+            --exclude "media/*.part" --exclude "media/*.tmp"
+          cd ..
+          ls -lh media-${{ steps.date.outputs.value }}.zip
+
+      - name: Upload media.zip → release
+        if: ${{ github.event.inputs.skip_media != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: media-${{ steps.date.outputs.value }}.zip
+
+      # =======================================================================
+      # TRANSIT  (GTFS public-transport timetables)
+      # =======================================================================
+
+      # -----------------------------------------------------------------------
+      # 13. Download + convert GTFS feed (Ministry of Transport)
       # -----------------------------------------------------------------------
       - name: Build GTFS transit data
         run: python -m hmaps.etl gtfs
@@ -104,18 +210,29 @@ jobs:
           HMAPS_DATA: data
         continue-on-error: true   # transit feed sometimes has outages; not fatal
 
-      # -----------------------------------------------------------------------
-      # 9. Basemap MBTiles (optional — slow, ~600 MB Java tool)
-      # -----------------------------------------------------------------------
-      - name: Build basemap
-        if: ${{ github.event.inputs.skip_basemap != 'true' }}
-        run: python tools/basemap.py
-        env:
-          HMAPS_DATA: data
-        continue-on-error: true   # basemap build can fail; fallback tile server still works
+      - name: Package transit.zip
+        run: |
+          if [ -d data/transit ] && [ "$(ls -A data/transit)" ]; then
+            zip -r transit-${{ steps.date.outputs.value }}.zip data/transit/
+            echo "transit_built=true" >> "$GITHUB_ENV"
+          else
+            echo "transit_built=false" >> "$GITHUB_ENV"
+            echo "No transit data built — skipping upload"
+          fi
+
+      - name: Upload transit.zip → release
+        if: env.transit_built == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: transit-${{ steps.date.outputs.value }}.zip
+
+      # =======================================================================
+      # TERRAIN  (Copernicus DEM → terrain.mbtiles + contours.mbtiles)
+      # =======================================================================
 
       # -----------------------------------------------------------------------
-      # 10. Terrain / DEM (optional — downloads ~530 MB Copernicus DEM)
+      # 14. Install terrain Python dependencies (rio-cogeo, rio-mbtiles, etc.)
       # -----------------------------------------------------------------------
       - name: Install terrain dependencies
         if: ${{ github.event.inputs.skip_terrain != 'true' }}
@@ -127,81 +244,78 @@ jobs:
         run: python -m tools.terrain build --if-missing --clean
         env:
           HMAPS_DATA: data
-        continue-on-error: true   # terrain is optional
+        continue-on-error: true
+
+      - name: Package terrain.zip
+        if: ${{ github.event.inputs.skip_terrain != 'true' }}
+        run: |
+          FILES=""
+          [ -f data/terrain.mbtiles ]  && FILES="$FILES data/terrain.mbtiles"
+          [ -f data/contours.mbtiles ] && FILES="$FILES data/contours.mbtiles"
+          if [ -n "$FILES" ]; then
+            zip -j terrain-${{ steps.date.outputs.value }}.zip $FILES
+            echo "terrain_built=true" >> "$GITHUB_ENV"
+          else
+            echo "terrain_built=false" >> "$GITHUB_ENV"
+            echo "No terrain files found — skipping upload"
+          fi
+
+      - name: Upload terrain.zip → release
+        if: ${{ github.event.inputs.skip_terrain != 'true' && env.terrain_built == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: terrain-${{ steps.date.outputs.value }}.zip
+
+      # =======================================================================
+      # BASEMAP  (vector tiles MBTiles)
+      # =======================================================================
 
       # -----------------------------------------------------------------------
-      # 11. Web assets (fonts, vendor JS)
+      # 15. Build basemap MBTiles (optional — slow, ~600 MB Java tool)
       # -----------------------------------------------------------------------
       - name: Download web assets
         run: python tools/fetch_assets.py
         continue-on-error: true
 
-      # -----------------------------------------------------------------------
-      # 12. Pack data/ into a zip — exclude sources/ and tmp/
-      # -----------------------------------------------------------------------
-      - name: Package data
+      - name: Build basemap
+        if: ${{ github.event.inputs.skip_basemap != 'true' }}
+        run: python tools/basemap.py
+        env:
+          HMAPS_DATA: data
+        continue-on-error: true
+
+      - name: Package basemap.zip
+        if: ${{ github.event.inputs.skip_basemap != 'true' }}
         run: |
-          cd data
-          # Remove build-time artifacts before packaging
-          rm -rf sources/ tmp/
-          # Create the zip preserving directory structure
-          zip -r "../data-${{ steps.date.outputs.value }}.zip" . \
-            --exclude "*.part" \
-            --exclude "*.building" \
-            --exclude "work/*"
-          cd ..
-          ls -lh "data-${{ steps.date.outputs.value }}.zip"
+          if [ -f data/basemap.mbtiles ]; then
+            zip -j basemap-${{ steps.date.outputs.value }}.zip data/basemap.mbtiles
+            echo "basemap_built=true" >> "$GITHUB_ENV"
+          else
+            echo "basemap_built=false" >> "$GITHUB_ENV"
+            echo "No basemap.mbtiles found — skipping upload"
+          fi
 
-      # -----------------------------------------------------------------------
-      # 13. Show what ended up in the zip
-      # -----------------------------------------------------------------------
-      - name: Show package contents
-        run: |
-          echo "=== Package summary ==="
-          du -sh data/*/  2>/dev/null || true
-          echo ""
-          echo "=== Zip size ==="
-          ls -lh data-${{ steps.date.outputs.value }}.zip
-
-      # -----------------------------------------------------------------------
-      # 14. Upload as workflow artifact (always available for 7 days)
-      # -----------------------------------------------------------------------
-      - name: Upload data artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: data-${{ steps.date.outputs.value }}
-          path: data-${{ steps.date.outputs.value }}.zip
-          retention-days: 7
-
-      # -----------------------------------------------------------------------
-      # 15. Attach to GitHub Release
-      #     - On a version tag: attach to the matching release
-      #     - On schedule / manual: create or update a rolling "data-latest" release
-      # -----------------------------------------------------------------------
-      - name: Upload to GitHub Release (version tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload basemap.zip → release
+        if: ${{ github.event.inputs.skip_basemap != 'true' && env.basemap_built == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          files: data-${{ steps.date.outputs.value }}.zip
-          name: "מפות בעברית ${{ github.ref_name }}"
-          body: |
-            נתוני ישראל מלאים — ${{ steps.date.outputs.value }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: basemap-${{ steps.date.outputs.value }}.zip
 
-            **כולל:** מסד נתונים, ניווט, תחבורה ציבורית, tiles, טופוגרפיה
+      # =======================================================================
+      # SUMMARY
+      # =======================================================================
 
-            Built from commit ${{ github.sha }}
-
-      - name: Upload to rolling "data-latest" release (schedule / manual)
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: data-latest
-          name: "נתונים עדכניים — ${{ steps.date.outputs.value }}"
-          body: |
-            נתוני ישראל מלאים — עודכן ${{ steps.date.outputs.value }}
-
-            **כולל:** מסד נתונים, ניווט, תחבורה ציבורית, tiles, טופוגרפיה
-
-            Built from commit ${{ github.sha }}
-          files: data-${{ steps.date.outputs.value }}.zip
-          prerelease: true
+      - name: Show build summary
+        if: always()
+        run: |
+          echo "=== Release assets built ==="
+          for f in maps rich media transit terrain basemap; do
+            ZIP="${f}-${{ steps.date.outputs.value }}.zip"
+            if [ -f "$ZIP" ]; then
+              echo "  ✓ $ZIP  $(du -sh $ZIP | cut -f1)"
+            else
+              echo "  – $ZIP  (not built)"
+            fi
+          done
