@@ -163,10 +163,15 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 11. Package and upload rich.zip  (enriched DB — adds texts + gallery metadata)
-      #     Re-use the data/maps.db copy created in step 9 (already canonical name)
+      #     enrich publishes a new versioned file (maps-YYYYMMDD-HHMMSS.db) so
+      #     we resolve the pointer again and copy to the canonical name.
       # -----------------------------------------------------------------------
       - name: Package rich.zip
-        run: zip -j rich-${{ steps.date.outputs.value }}.zip data/maps.db
+        run: |
+          DB=$(cat data/maps.current 2>/dev/null || echo "maps.db")
+          echo "Resolved enriched DB: data/$DB"
+          cp "data/$DB" data/maps.db
+          zip -j rich-${{ steps.date.outputs.value }}.zip data/maps.db
 
       - name: Upload rich.zip → release
         uses: softprops/action-gh-release@v2
