@@ -1,0 +1,95 @@
+name: Build Rich (Enrichment)
+
+# Standalone workflow for Wikidata/Wikipedia/Wikivoyage/Commons enrichment.
+# Requires a maps-db artifact produced by build-maps.yml (or data-modular.yml).
+#
+# Trigger manually after build-maps has finished and uploaded the maps-db artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the asset to (default: data-latest)"
+        default: "data-latest"
+        required: false
+      run_id:
+        description: "Run ID that produced the maps-db artifact (leave blank to use latest from build-maps)"
+        required: false
+
+jobs:
+  build-rich:
+    name: Build Rich (Enrichment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            osmium-tool \
+            gdal-bin \
+            libgdal-dev \
+            zip
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-native.txt
+
+      - name: Set date tag
+        id: date
+        run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set release tag
+        id: release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag || 'data-latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download maps.db artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: maps-db
+          # Optional: pull artifact from a specific run
+          run-id: ${{ github.event.inputs.run_id || '' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: data
+
+      - name: Enrich DB (Wikidata + Wikipedia + Wikivoyage + Commons)
+        run: python -m hmaps.etl enrich --db data/maps.db --steps wikidata,wikipedia,wikivoyage,commons,trails
+        env:
+          HMAPS_DATA: data
+
+      - name: Package rich.zip
+        run: |
+          DB=$(cat data/maps.current 2>/dev/null || echo "maps.db")
+          cp "data/$DB" data/maps.db
+          zip -j rich-${{ steps.date.outputs.value }}.zip data/maps.db
+
+      - name: Upload rich.zip → release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          prerelease: true
+          files: rich-${{ steps.date.outputs.value }}.zip
+
+      - name: Upload rich.db artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rich-db
+          path: data/maps.db
+          retention-days: 1

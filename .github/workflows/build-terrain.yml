@@ -1,0 +1,91 @@
+name: Build Terrain (DEM)
+
+# Standalone workflow for building terrain + contour MBTiles from Copernicus DEM.
+# Fully independent — does not depend on OSM or GTFS jobs.
+#
+# Terrain data changes rarely; run manually or monthly.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the asset to (default: data-latest)"
+        default: "data-latest"
+        required: false
+  schedule:
+    - cron: "0 4 1 * *"   # 1st of every month at 04:00 UTC
+
+jobs:
+  build-terrain:
+    name: Build Terrain (DEM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gdal-bin \
+            libgdal-dev \
+            zip
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-native.txt
+
+      - name: Install terrain dependencies
+        run: pip install -r requirements-terrain.txt
+        continue-on-error: true
+
+      - name: Set date tag
+        id: date
+        run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set release tag
+        id: release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag || 'data-latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build terrain layers
+        run: python -m tools.terrain build --if-missing --clean
+        env:
+          HMAPS_DATA: data
+
+      - name: Package terrain.zip
+        id: package
+        run: |
+          FILES=""
+          [ -f data/terrain.mbtiles ]  && FILES="$FILES data/terrain.mbtiles"
+          [ -f data/contours.mbtiles ] && FILES="$FILES data/contours.mbtiles"
+          if [ -n "$FILES" ]; then
+            zip -j terrain-${{ steps.date.outputs.value }}.zip $FILES
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "No terrain files found — skipping upload"
+          fi
+
+      - name: Upload terrain.zip → release
+        if: steps.package.outputs.built == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          prerelease: true
+          files: terrain-${{ steps.date.outputs.value }}.zip

@@ -1,0 +1,85 @@
+name: Build Media (Images)
+
+# Standalone workflow for downloading Wikimedia Commons thumbnails.
+# Requires a rich-db artifact produced by build-rich.yml (or data-modular.yml).
+#
+# This job is marked continue-on-error because Wikimedia rate-limits are
+# inconsistent. A partial download is still useful.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the asset to (default: data-latest)"
+        default: "data-latest"
+        required: false
+      run_id:
+        description: "Run ID that produced the rich-db artifact (leave blank for latest)"
+        required: false
+
+jobs:
+  build-media:
+    name: Build Media (Images)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zip
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-native.txt
+
+      - name: Set date tag
+        id: date
+        run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set release tag
+        id: release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag || 'data-latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download rich.db artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rich-db
+          run-id: ${{ github.event.inputs.run_id || '' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: data
+
+      - name: Download POI images (Wikimedia Commons thumbnails)
+        run: python tools/media.py --workers 3 --interval 0.8
+        env:
+          HMAPS_DATA: data
+
+      - name: Package media.zip
+        run: |
+          cd data
+          zip -r "../media-${{ steps.date.outputs.value }}.zip" media/ \
+            --exclude "media/*.part" --exclude "media/*.tmp"
+
+      - name: Upload media.zip → release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          prerelease: true
+          files: media-${{ steps.date.outputs.value }}.zip

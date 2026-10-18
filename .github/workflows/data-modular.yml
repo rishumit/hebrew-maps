@@ -3,6 +3,15 @@
 # Modular workflow with 6 independent jobs for parallel execution and
 # individual job retry capability. Each data package can be built separately.
 #
+# Fixes applied (2026-10-18):
+#   - OSM PBF is cached via actions/cache (keyed by weekly date) to avoid
+#     repeated Geofabrik downloads and transient TimeoutException failures.
+#   - build-maps: pre-download step with wget --tries=5 --retry-connrefused
+#     instead of relying solely on urllib timeout.
+#   - build-basemap: pre-download PBF with retry, then pass --osm_path to
+#     Planetiler so it never calls Geofabrik itself; also raises
+#     --http_timeout to 120 s for coastline/NaturalEarth downloads.
+#
 # Jobs:
 #   build-maps     – OSM core (POIs, streets, addresses, routing graph)
 #   build-rich     – Wikidata/Wikipedia/Wikivoyage/Commons enrichment (depends on maps)
@@ -35,6 +44,15 @@ on:
     - cron: "0 2 * * 0"   # every Sunday 02:00 UTC
   push:
     tags: ["v*.*.*"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared env / reusable fragment (referenced by both OSM-consuming jobs)
+# ─────────────────────────────────────────────────────────────────────────────
+env:
+  # Geofabrik URL — override via repo secret HMAPS_PBF_URL to use a mirror
+  PBF_URL: ${{ vars.HMAPS_PBF_URL || 'https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf' }}
+  # Weekly cache key — invalidates once per week so data stays fresh
+  OSM_CACHE_KEY: osm-pbf-${{ github.run_id }}   # overridden per-job below
 
 jobs:
   # =========================================================================
@@ -69,6 +87,7 @@ jobs:
             osmium-tool \
             gdal-bin \
             libgdal-dev \
+            wget \
             zip
 
       - name: Install Python dependencies
@@ -93,15 +112,35 @@ jobs:
             echo "name=נתונים עדכניים — ${{ steps.date.outputs.value }}" >> "$GITHUB_OUTPUT"
           fi
 
+      # ── OSM PBF cache (weekly key) ────────────────────────────────────────
+      - name: Restore OSM PBF cache
+        id: osm-cache
+        uses: actions/cache@v4
+        with:
+          path: data/sources/israel-and-palestine.osm.pbf
+          # Invalidate cache once a week (Sunday) so we always build from fresh data
+          key: osm-pbf-weekly-${{ steps.date.outputs.value != '' && steps.date.outputs.value || 'init' }}
+          restore-keys: osm-pbf-weekly-
+
+      # ── Download OSM PBF with retry (skipped when cache hit) ─────────────
       - name: Download OSM extract
-        run: python -m hmaps.etl download
-        env:
-          HMAPS_DATA: data
+        if: steps.osm-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data/sources
+          wget \
+            --tries=5 \
+            --retry-connrefused \
+            --waitretry=30 \
+            --timeout=120 \
+            --show-progress \
+            -O data/sources/israel-and-palestine.osm.pbf \
+            "${{ env.PBF_URL }}"
 
       - name: Build maps database (OSM core)
         run: python -m hmaps.etl build --engine pyosmium --no-enrich
         env:
           HMAPS_DATA: data
+          HMAPS_PBF_URL: file:///${{ github.workspace }}/data/sources/israel-and-palestine.osm.pbf
 
       - name: Package maps.zip
         run: |
@@ -248,7 +287,6 @@ jobs:
         with:
           tag_name: ${{ needs.build-maps.outputs.release-tag }}
           files: media-${{ needs.build-maps.outputs.date-tag }}.zip
-
 
   # =========================================================================
   # Job 4: Build Transit (GTFS Public Transport)
@@ -417,7 +455,9 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends zip
+          sudo apt-get install -y --no-install-recommends \
+            wget \
+            zip
 
       - name: Install Python dependencies
         run: |
@@ -437,14 +477,42 @@ jobs:
             echo "tag=data-latest" >> "$GITHUB_OUTPUT"
           fi
 
+      # ── OSM PBF cache (shared key with build-maps) ────────────────────────
+      - name: Restore OSM PBF cache
+        id: osm-cache
+        uses: actions/cache@v4
+        with:
+          path: data/sources/israel-and-palestine.osm.pbf
+          key: osm-pbf-weekly-${{ steps.date.outputs.value }}
+          restore-keys: osm-pbf-weekly-
+
+      # ── Pre-download PBF with retry so Planetiler never calls Geofabrik ───
+      - name: Download OSM PBF (with retry)
+        if: steps.osm-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data/sources
+          wget \
+            --tries=5 \
+            --retry-connrefused \
+            --waitretry=30 \
+            --timeout=120 \
+            --show-progress \
+            -O data/sources/israel-and-palestine.osm.pbf \
+            "${{ env.PBF_URL }}"
+
       - name: Download web assets
         run: python tools/fetch_assets.py
         continue-on-error: true
 
+      # Build basemap — pass pre-downloaded PBF via HMAPS_PBF_PATH so
+      # basemap.py forwards it as --osm_path, bypassing Planetiler's own
+      # downloader entirely. Also raise http_timeout for coastline/NaturalEarth.
       - name: Build basemap
         run: python tools/basemap.py
         env:
           HMAPS_DATA: data
+          HMAPS_PBF_PATH: ${{ github.workspace }}/data/sources/israel-and-palestine.osm.pbf
+          PLANETILER_EXTRA_ARGS: "--http_timeout=120"
 
       - name: Package basemap.zip
         id: package
@@ -482,9 +550,9 @@ jobs:
           echo "Release tag: ${{ needs.build-maps.outputs.release-tag }}"
           echo ""
           echo "Job Status:"
-          echo "  build-maps: ${{ needs.build-maps.result }}"
-          echo "  build-rich: ${{ needs.build-rich.result }}"
-          echo "  build-media: ${{ needs.build-media.result }}"
+          echo "  build-maps:    ${{ needs.build-maps.result }}"
+          echo "  build-rich:    ${{ needs.build-rich.result }}"
+          echo "  build-media:   ${{ needs.build-media.result }}"
           echo "  build-transit: ${{ needs.build-transit.result }}"
           echo "  build-terrain: ${{ needs.build-terrain.result }}"
           echo "  build-basemap: ${{ needs.build-basemap.result }}"

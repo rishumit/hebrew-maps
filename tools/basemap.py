@@ -103,12 +103,21 @@ def main() -> int:
         # trust the Windows certificate store: needed behind filtering/inspecting proxies
         # (e.g. NetFree, Rimon, corporate firewalls) whose root certificate Windows knows but Java does not
         jvm.append("-Djavax.net.ssl.trustStoreType=Windows-ROOT")
-    pbf = DATA / "sources" / "israel-and-palestine.osm.pbf"
+    # HMAPS_PBF_PATH lets CI pre-download the PBF with retry logic so that
+    # Planetiler never needs to call Geofabrik itself (avoids TimeoutException).
+    pbf_env = os.environ.get("HMAPS_PBF_PATH", "")
+    pbf = Path(pbf_env) if pbf_env else DATA / "sources" / "israel-and-palestine.osm.pbf"
+
+    # PLANETILER_EXTRA_ARGS passes additional flags, e.g. "--http_timeout=120"
+    extra_args = os.environ.get("PLANETILER_EXTRA_ARGS", "").split()
+
     cmd = [java, *jvm, "-jar", str(jar), "--download", "--area=israel-and-palestine",
            f"--output={out}", "--force", "--languages=he,en,ar", "--maxzoom=14",
-           f"--download_dir={DATA / 'sources'}", f"--tmpdir={DATA / 'tmp'}"]
+           f"--download_dir={DATA / 'sources'}", f"--tmpdir={DATA / 'tmp'}",
+           *extra_args]
     if pbf.exists():
-        cmd.append(f"--osm_path={pbf}")  # reuse the extract downloaded by the setup
+        # Pass the pre-downloaded PBF so Planetiler skips its own OSM download
+        cmd.append(f"--osm_path={pbf}")
     print("  building the basemap (15-40 minutes; downloads ~1 GB of coastline data the first time)…")
     t0 = time.time()
     rc = subprocess.run(cmd, cwd=DATA).returncode

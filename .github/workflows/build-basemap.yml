@@ -1,0 +1,127 @@
+name: Build Basemap (Vector Tiles)
+
+# Standalone workflow for building the Planetiler-based vector tile basemap.
+# Fully independent — downloads its own OSM PBF with retry logic.
+#
+# Key fixes vs. original:
+#   - OSM PBF is pre-downloaded by wget (5 retries, 120 s timeout) before
+#     Planetiler starts, so Planetiler's own downloader (which had a hard
+#     30 s timeout and no retry) never touches Geofabrik.
+#   - --osm_path points Planetiler at the local file.
+#   - --http_timeout=120 is passed for coastline/NaturalEarth downloads.
+#   - PBF is cached weekly so repeat runs don't re-download 300 MB.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the asset to (default: data-latest)"
+        default: "data-latest"
+        required: false
+      memory:
+        description: "JVM heap size for Planetiler (default: 3g)"
+        default: "3g"
+        required: false
+
+env:
+  PBF_URL: ${{ vars.HMAPS_PBF_URL || 'https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf' }}
+
+jobs:
+  build-basemap:
+    name: Build Basemap (Vector Tiles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: true
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            wget \
+            zip
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements-native.txt
+
+      - name: Set date tag
+        id: date
+        run: echo "value=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Set release tag
+        id: release
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.release_tag || 'data-latest' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── OSM PBF cache (weekly key, shared with build-maps) ───────────────
+      - name: Restore OSM PBF cache
+        id: osm-cache
+        uses: actions/cache@v4
+        with:
+          path: data/sources/israel-and-palestine.osm.pbf
+          key: osm-pbf-weekly-${{ steps.date.outputs.value }}
+          restore-keys: osm-pbf-weekly-
+
+      # ── Pre-download PBF with retry (skipped on cache hit) ───────────────
+      - name: Download OSM PBF (with retry)
+        if: steps.osm-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data/sources
+          wget \
+            --tries=5 \
+            --retry-connrefused \
+            --waitretry=30 \
+            --timeout=120 \
+            --show-progress \
+            -O data/sources/israel-and-palestine.osm.pbf \
+            "${{ env.PBF_URL }}"
+
+      - name: Download web assets
+        run: python tools/fetch_assets.py
+        continue-on-error: true
+
+      # basemap.py reads HMAPS_PBF_PATH → passes --osm_path to Planetiler
+      # PLANETILER_EXTRA_ARGS raises http_timeout for NaturalEarth/coastline
+      # PLANETILER_MEMORY overrides the default 3 g heap
+      - name: Build basemap
+        run: python tools/basemap.py
+        env:
+          HMAPS_DATA: data
+          HMAPS_PBF_PATH: ${{ github.workspace }}/data/sources/israel-and-palestine.osm.pbf
+          PLANETILER_EXTRA_ARGS: "--http_timeout=120"
+          PLANETILER_MEMORY: ${{ github.event.inputs.memory || '3g' }}
+
+      - name: Package basemap.zip
+        id: package
+        run: |
+          if [ -f data/basemap.mbtiles ]; then
+            zip -j basemap-${{ steps.date.outputs.value }}.zip data/basemap.mbtiles
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            echo "No basemap.mbtiles found — skipping upload"
+          fi
+
+      - name: Upload basemap.zip → release
+        if: steps.package.outputs.built == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          prerelease: true
+          files: basemap-${{ steps.date.outputs.value }}.zip
