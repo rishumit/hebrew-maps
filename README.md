@@ -39,6 +39,18 @@
 
 הניווט בגרסה זו פועל במנוע ניווט פנימי (רכב, הליכה ואופניים), ולכן אין צורך בשרת ניווט נפרד.
 
+### אפליקציית שולחן העבודה (חלון במקום דפדפן)
+
+המתקין (`installer\build.ps1`, או מתקין מוכן מה-Releases) כולל את `hebrew-maps-desktop.exe`. זו אפליקציית Tauri שפותחת את המפה **בחלון משלה** ולא בדפדפן:
+- השרת מופעל ברקע, ובזמן הטעינה מוצג מסך "טוען את המפה…".
+- סגירת החלון עוצרת את השרת. גם אם האפליקציה קורסת, השרת לא נשאר לרוץ ברקע.
+- הפעלה כפולה רק מביאה את החלון הפתוח לחזית. גודל החלון ומיקומו נשמרים.
+- קישורים חיצוניים, כמו ויקיפדיה, נפתחים בדפדפן הרגיל.
+
+האפליקציה צריכה את WebView2 של Microsoft. הוא מותקן מראש ב-Windows 11 וב-Windows 10 מעודכן. במחשב בלי WebView2, קיצור הדרך פותח את הדפדפן כמו קודם.
+גם `start-windows.cmd` משתמש באפליקציה כשהיא בנויה (`src-tauri\target\release`) או מותקנת. אחרת הוא פותח את הדפדפן. כדי לכפות דפדפן: `set HMAPS_BROWSER=1`.
+פרטים טכניים: [ADR 0009](docs/adr/0009-desktop-tauri.md) ו-[installer/README.md](installer/README.md).
+
 ## התקנה עם Docker (חלופה)
 
 1. התקינו Docker Desktop מהכתובת https://www.docker.com/products/docker-desktop/ והפעילו אותו. מומלץ להקצות לו 6GB זיכרון.
@@ -108,7 +120,7 @@
 ```bash
 pip install -r requirements-dev.txt
 python -m playwright install chromium
-python -m unittest tests.test_core tests.test_etl tests.test_api tests.test_router tests.test_native tests.test_terrain
+python -m unittest tests.test_core tests.test_etl tests.test_api tests.test_router tests.test_native tests.test_terrain tests.test_icons
 python -m unittest tests.e2e.test_ui                                # דפדפן, נגישות, סגנון מפה
 python -m tests.perf_bench 120000                                   # ביצועים בקנה מידה ארצי
 ```
@@ -121,6 +133,18 @@ uvicorn hmaps.api.app:app --reload --port 8080
 ```
 (לתצוגת המפה נדרשים קבצי `web/vendor/`. הם נוצרים אוטומטית בבניית Docker.)
 
+האייקונים (PWA, מתקין ואפליקציית שולחן העבודה) נוצרים מקומית מקובץ המקור `web/icons/icon.svg`, ושום דבר לא מורד:
+```bash
+pip install -r requirements-icons.txt
+python tools/make_icons.py          # --check: רק בדיקה שהקבצים מעודכנים
+```
+
+אפליקציית שולחן העבודה (`src-tauri/`, ‏Rust + Tauri 2) מול שרת פיתוח:
+```bash
+cd src-tauri && cargo build                         # Linux: libwebkit2gtk-4.1-dev libgtk-3-dev
+HMAPS_URL=http://127.0.0.1:8080/map.html ./target/debug/hebrew-maps-desktop
+```
+
 CI: הקובץ `ci/github-actions.yml` מריץ את כל הבדיקות ובונה את האימג'. כדי להפעיל אותו ב-GitHub, מעתיקים אותו ל-`.github/workflows/ci.yml`.
 
 ```
@@ -130,6 +154,8 @@ hmaps/api    API, מנוע חיפוש, אריחים וקטוריים, ניווט
 hmaps/route  מנוע ניווט פנימי (גרף דרכים + A*), לשימוש בלי Docker
 web/         ממשק המשתמש (ללא שלב build): js/, css/, sw.js, manifest
 docker/      Dockerfile ושירות הניווט
+src-tauri/   אפליקציית שולחן העבודה (Tauri 2): חלון, הפעלת השרת ועצירתו
+installer/   PyInstaller + Inno Setup (מתקין Windows)
 tests/       יחידה, אינטגרציה, דפדפן (Playwright), ביצועים
 docs/        מסמכי הפרויקט + מימוש, החלטות, תפעול, API
 ```

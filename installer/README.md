@@ -10,6 +10,9 @@
 | Windows | 10/11 x64 | — |
 | Python 3.12 + `.venv` | כלול בפרויקט / Included | הריצו `setup-windows.cmd` |
 | Inno Setup 6 | 6.x | https://jrsoftware.org/isinfo.php |
+| Rust (MSVC) — לאפליקציית שולחן העבודה / for the desktop app | stable | https://rustup.rs (+ Visual Studio Build Tools, "Desktop development with C++") |
+
+Rust אופציונלי: בלעדיו המתקין נבנה כמו קודם (פתיחה בדפדפן). / Rust is optional: without it the installer is built as before (opens the browser).
 
 **אין צורך בתוכנה נוספת.** Python מוטמע בתוך ה-EXE שנוצר — המשתמש הסופי אינו צריך להתקין Python.
 
@@ -33,10 +36,34 @@ powershell -ExecutionPolicy Bypass installer\build.ps1
 
 ## מה הסקריפט עושה (שלב אחר שלב) / What the script does
 
-1. **מתקין PyInstaller 6.10** בתוך ה-`.venv` של הפרויקט.
-2. **יוצר `installer\icon.ico`** מתמונת PNG מ-`web\icons\` (או כחול מוצק כגיבוי).
+1. **מתקין PyInstaller ו-resvg** (`requirements-icons.txt`) בתוך ה-`.venv` של הפרויקט.
+2. **מרנדר את כל האייקונים מקומית** מ-`web\icons\icon.svg` (`tools\make_icons.py`): `installer\icon.ico`, ‏`web\icons\*.png`, ‏`src-tauri\icons\*`. שום דבר לא מורד (נטפרי).
+   Renders all icons locally from the SVG master — nothing is downloaded.
 3. **מריץ PyInstaller** → `installer\dist\hebrew-maps\` (EXE + `_internal\`)
-4. **מריץ Inno Setup** (`iscc.exe`) → `installer\HebrewMaps-Setup-1.0.0.exe`
+4. **בונה את אפליקציית שולחן העבודה** (`cargo build --release` ב-`src-tauri\`) ומעתיק את `hebrew-maps-desktop.exe` ל-`installer\dist\hebrew-maps\`. מדלגים עם `-SkipDesktop`, או אוטומטית כש-Rust לא מותקן.
+   Builds the Tauri desktop exe and copies it next to `hebrew-maps.exe` (skipped with `-SkipDesktop` or when Rust is missing).
+5. **מריץ Inno Setup** (`iscc.exe`) → `installer\HebrewMaps-Setup-1.0.0.exe`. אם `hebrew-maps-desktop.exe` קיים, קיצורי הדרך מפעילים אותו (כשיש WebView2). אחרת הם מפעילים את `hebrew-maps.exe`.
+
+---
+
+## אפליקציית שולחן העבודה / Desktop app (Tauri)
+
+- `hebrew-maps-desktop.exe` מפעיל את `hebrew-maps.exe --no-browser --port N` מאותה תיקייה, מציג מסך טעינה עד ש-`/api/health` עונה, וטוען את `http://127.0.0.1:N/map.html` בחלון משלו.
+- **פורט:** ‏48080, או הפורט האחרון שעבד. פורט תפוס מדולג, ואת השרת שמחזיק בו לא סוגרים. אפשר לקבוע פורט עם `HMAPS_DESKTOP_PORT`.
+- **סגירה:** סגירת החלון עוצרת את השרת. השרת רץ בתוך Windows Job Object, ולכן הוא נסגר גם אם האפליקציה קורסת.
+- **מצב פיתוח:** `set HMAPS_URL=http://127.0.0.1:8080/map.html` פותח את הכתובת בלי להפעיל שרת. `HMAPS_SERVER_EXE` מגדיר נתיב אחר ל-exe של השרת.
+- **יומן:** `%LOCALAPPDATA%\il.hebrewmaps.desktop\logs\hebrew-maps-desktop.log`. יומן השרת נשאר `{app}\hebrew-maps.log`.
+- **WebView2:** מותקן מראש ב-Windows 11. אם הוא חסר, המתקין יוצר קיצורי דרך ל-`hebrew-maps.exe` (דפדפן).
+
+בנייה ידנית של האפליקציה בלבד / Build only the desktop exe:
+```powershell
+cargo build --release --locked --manifest-path src-tauri\Cargo.toml
+copy src-tauri\target\release\hebrew-maps-desktop.exe installer\dist\hebrew-maps\
+```
+לא צריך tauri CLI או Node: התכונה `custom-protocol` מופעלת ב-`Cargo.toml`, ו-`bundle.active=false`, כי Inno Setup הוא שאורז את המתקין.
+No tauri CLI/Node needed. If you have it, `cargo tauri build --no-bundle` works too.
+
+תכנון ונימוקים / Design rationale: [docs/adr/0009-desktop-tauri.md](../docs/adr/0009-desktop-tauri.md)
 
 ---
 
@@ -50,12 +77,17 @@ If you prefer to run each step separately:
 # 1. Install PyInstaller
 .venv\Scripts\pip.exe install pyinstaller==6.10.0
 
-# 2. Generate icon
-.venv\Scripts\python.exe installer\make_icon.py
+# 2. Generate icons (from web\icons\icon.svg; needs requirements-icons.txt)
+.venv\Scripts\pip.exe install -r requirements-icons.txt
+.venv\Scripts\python.exe tools\make_icons.py
 
 # 3. Run PyInstaller
 .venv\Scripts\pyinstaller.exe installer\hebrew-maps.spec ^
     --distpath installer\dist --workpath installer\build --noconfirm
+
+# 3b. Desktop app (optional, needs Rust)
+cargo build --release --locked --manifest-path src-tauri\Cargo.toml
+copy src-tauri\target\release\hebrew-maps-desktop.exe installer\dist\hebrew-maps\
 
 # 4. Compile installer (requires Inno Setup 6 installed)
 iscc installer\hebrew-maps.iss
@@ -110,7 +142,8 @@ C:\Users\<user>\AppData\Local\Programs\HebrewMaps\
 
 ```
 {app}\
-  hebrew-maps.exe        ← Main executable (opens browser automatically)
+  hebrew-maps-desktop.exe ← Desktop app (Tauri window; starts/stops the server) – shortcuts point here
+  hebrew-maps.exe        ← Server (opens the browser when started on its own; --no-browser from the desktop app)
   _internal\             ← Python runtime + all libraries (PyInstaller)
   web\                   ← Web assets (HTML, JS, CSS, fonts)
   data\
@@ -133,6 +166,8 @@ C:\Users\<user>\AppData\Local\Programs\HebrewMaps\
 | `"missing module name 'X'"` during PyInstaller | הוסיפו את `'X'` ל-`hiddenimports` ב-`installer\hebrew-maps.spec` / Add `'X'` to `hiddenimports` in the spec |
 | `"Inno Setup not found"` | התקינו מ-https://jrsoftware.org/isdl.php והריצו עם `-IsccPath` / Install and rerun with `-IsccPath` |
 | האפליקציה לא עולה — בדקו את הלוג / App doesn't start — check the log | פתחו `hebrew-maps.log` בתיקיית ההתקנה / Open `hebrew-maps.log` in the install folder |
+| החלון נשאר על "טוען את המפה…" או מציג שגיאה / Window stuck loading or shows an error | בדקו את `hebrew-maps.log` ואת יומן האפליקציה (`%LOCALAPPDATA%\il.hebrewmaps.desktop\logs`) / Check both logs |
+| קיצור הדרך פותח דפדפן ולא חלון / Shortcut opens the browser | WebView2 לא מותקן בזמן ההתקנה, או שהמתקין נבנה בלי Rust. התקינו WebView2 Runtime והתקינו מחדש / WebView2 was missing at install time or the installer was built without Rust |
 | `"settings reads wrong paths"` | ודאו ש-`HMAPS_DATA` ו-`HMAPS_WEB` מוגדרים לפני import של `hmaps.api.app` / Ensure vars are set before `hmaps.api.app` is imported |
 
 ---
