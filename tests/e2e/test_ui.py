@@ -90,7 +90,7 @@ class UiTest(unittest.TestCase):
         self.errors = []
         page.on("pageerror", lambda e: self.errors.append(str(e)))
         page.on("console", lambda m: m.type == "error" and self.errors.append(m.text))
-        page.goto(self.api.url("/?nosw=1"))
+        page.goto(self.api.url("/map.html?nosw=1"))
         page.wait_for_selector('#chips [data-chip="__more"]')
         wait_js(page, "!!window.__map")
         page.wait_for_timeout(150)
@@ -306,7 +306,7 @@ class UiTest(unittest.TestCase):
 
     def test_deep_link_restores_item(self):
         page = self.new_page()
-        page.goto(self.api.url("/?nosw=1#map=16.00/31.77620/35.22830&item=poi-19"))
+        page.goto(self.api.url("/map.html?nosw=1#map=16.00/31.77620/35.22830&item=poi-19"))
         wait_js(page, "window.__map")
         expect(page.locator("#panel-title")).to_be_visible()
         self.assertTrue(page.locator("#panel-title").inner_text())

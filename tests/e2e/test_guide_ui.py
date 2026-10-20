@@ -49,7 +49,7 @@ class GuideUiTest(unittest.TestCase):
         page.route("**/fonts-ui/**", lambda r: r.fulfill(status=404, body=""))
         self.errors = []
         page.on("pageerror", lambda e: self.errors.append(str(e)))
-        page.goto(self.api.url("/?nosw=1" + hash_))
+        page.goto(self.api.url("/map.html?nosw=1" + hash_))
         page.wait_for_selector('#chips [data-chip="__more"]')
         wait_js(page, "!!window.__map")
         return page

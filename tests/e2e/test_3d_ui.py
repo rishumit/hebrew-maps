@@ -59,7 +59,7 @@ class ThreeDTest(unittest.TestCase):
             page.add_init_script(f"for (const [k, v] of Object.entries({json.dumps(storage)})) localStorage.setItem('hmaps:' + k, JSON.stringify(v));")
         self.errors = []
         page.on("pageerror", lambda e: self.errors.append(str(e)))
-        page.goto(self.api.url("/?nosw=1"))
+        page.goto(self.api.url("/map.html?nosw=1"))
         page.wait_for_selector('#chips [data-chip="__more"]')
         wait_js(page, "!!window.__map")
         page.wait_for_timeout(100)
