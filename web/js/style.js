@@ -100,6 +100,58 @@ export function terrainLayers(t, terrain) {
   return { sources, under, labels };
 }
 
+// ------------------------------------------------------------------ satellite imagery
+// Aerial orthophotos from the Israeli Survey Department via govmap.gov.il CDN.
+// The CDN uses a non-standard {z}/{y}/{x} path order (row-major / TMS column convention)
+// so we request the tiles directly and let the browser fetch them.
+//
+// `satellite` parameter accepted by omtStyle / fallbackStyle:
+//   false | null  — no satellite layer (default)
+//   true          — satellite on with default opacity (0.85)
+//   number        — satellite on with that opacity (0–1)
+
+// govmap.gov.il CDN — 2023 orthophotos, zoom 7–20, covers all of Israel.
+// Tiles are proxied through our own server (/tiles/satellite/{z}/{x}/{y}.jpg)
+// because the CDN blocks direct browser requests (CORS + Referer check).
+const GOVMAP_ATTRIBUTION = '© <a href="https://www.govmap.gov.il" target="_blank" rel="noopener">מרכז מיפוי ישראל</a>';
+
+/**
+ * Returns a MapLibre raster source definition for the govmap orthophotos.
+ * Pass to `omtStyle` / `fallbackStyle` via the `satellite` option.
+ */
+export function satelliteSource() {
+  return {
+    type: 'raster',
+    tiles: ['/tiles/satellite/{z}/{x}/{y}.jpg'],
+    tileSize: 256,
+    minzoom: 7,
+    maxzoom: 20,
+    bounds: [34.2, 29.4, 35.9, 33.4], // Israel bounding box
+    attribution: GOVMAP_ATTRIBUTION,
+  };
+}
+
+/**
+ * Inject the satellite raster layer at the very bottom of an existing style
+ * (before `background`), so vector layers render on top.
+ * `opacity` (0–1, default 0.85) controls blending.
+ * Idempotent: safe to call even if the source is already present.
+ */
+export function addSatellite(style, opacity = 0.85) {
+  if (!style.sources.satellite) {
+    style.sources.satellite = satelliteSource();
+  }
+  if (!style.layers.find((l) => l.id === 'satellite')) {
+    style.layers.unshift({
+      id: 'satellite',
+      type: 'raster',
+      source: 'satellite',
+      paint: { 'raster-opacity': opacity, 'raster-saturation': 0.05 },
+    });
+  }
+  return style;
+}
+
 /** Insert the terrain groups into a style: `under` before `underId`, labels before `labelId`. */
 function addTerrain(style, t, terrain, underId, labelId) {
   const { sources, under, labels } = terrainLayers(t, terrain);
@@ -147,7 +199,7 @@ function road(id, theme, classes, widthKey, fill, casing, minzoom, extraFilter) 
   return layers;
 }
 
-export function omtStyle(themeName, { tilejson, glyphs, terrain }) {
+export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = false }) {
   const t = THEMES[themeName] || THEMES.light;
   const nature = themeName === 'nature' || themeName === 'topo';
   const layers = [
@@ -376,11 +428,15 @@ export function omtStyle(themeName, { tilejson, glyphs, terrain }) {
     sources: { openmaptiles: { type: 'vector', url: tilejson } },
     layers,
   };
-  return themeName === 'topo' ? addTerrain(style, t, terrain, 'aeroway-area', 'water-name') : style;
+  const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'aeroway-area', 'water-name') : style;
+  if (satellite !== false && satellite != null) {
+    addSatellite(result, typeof satellite === 'number' ? satellite : 0.85);
+  }
+  return result;
 }
 
 /** Basemap drawn from our own tiles while the full basemap is not built. */
-export function fallbackStyle(themeName, { tiles, glyphs, terrain }) {
+export function fallbackStyle(themeName, { tiles, glyphs, terrain, satellite = false }) {
   const t = THEMES[themeName] || THEMES.light;
   const W = {
     motorway: [[6, 1], [12, 4], [16, 12], [18, 26]], trunk: [[7, 1], [12, 3.5], [16, 11], [18, 24]],
@@ -420,7 +476,11 @@ export function fallbackStyle(themeName, { tiles, glyphs, terrain }) {
           'text-halo-color': t.halo, 'text-halo-width': 1.6 } },
     ],
   };
-  return themeName === 'topo' ? addTerrain(style, t, terrain, 'boundaries', 'street-names') : style;
+  const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'boundaries', 'street-names') : style;
+  if (satellite !== false && satellite != null) {
+    addSatellite(result, typeof satellite === 'number' ? satellite : 0.85);
+  }
+  return result;
 }
 
 // ------------------------------------------------------------------ outdoor overlay

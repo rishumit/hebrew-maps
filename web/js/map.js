@@ -2,7 +2,7 @@
 /* global maplibregl */
 
 import { markerImage, shieldImage } from './icons.js';
-import { fallbackStyle, omtStyle, outdoorLayers, THEMES } from './style.js';
+import { fallbackStyle, omtStyle, outdoorLayers, addSatellite, THEMES } from './style.js';
 import { bus, prefersReducedMotion } from './util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -23,6 +23,7 @@ export class MapView {
     this.categories = categories;
     this.catColor = Object.fromEntries(categories.map((c) => [c.id, c.color]));
     this.theme = initial.theme || 'light';
+    this.satellite = initial.satellite || false;
     this.poiFilter = { cats: [], kosher: false };
     this.is3d = false;
     this.showPois = true;
@@ -102,12 +103,19 @@ export class MapView {
     const theme = this._resolvedTheme();
     const b = this.meta.basemap;
     const terrain = this.meta.terrain;
-    if (b.type === 'openmaptiles' && b.tilejson) return omtStyle(theme, { tilejson: b.tilejson, glyphs: b.glyphs, terrain });
-    return fallbackStyle(theme, { tiles: b.fallback_tiles, glyphs: b.glyphs, terrain });
+    const satellite = this.satellite || false;
+    if (b.type === 'openmaptiles' && b.tilejson) return omtStyle(theme, { tilejson: b.tilejson, glyphs: b.glyphs, terrain, satellite });
+    return fallbackStyle(theme, { tiles: b.fallback_tiles, glyphs: b.glyphs, terrain, satellite });
   }
 
   setTheme(theme) {
     this.theme = theme;
+    this.map.setStyle(this._baseStyle(), { diff: false });
+  }
+
+  /** הצגה/הסתרה של שכבת תצלומי לוויין (אורתופוטו govmap). */
+  setSatellite(on) {
+    this.satellite = on;
     this.map.setStyle(this._baseStyle(), { diff: false });
   }
 

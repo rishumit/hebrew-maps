@@ -58,6 +58,7 @@ const app = {
     const saved = store.get('view');
     const initial = {
       theme: effectiveMapTheme(),
+      satellite: store.get('satellite', false),
       center: hash.center || saved?.center,
       zoom: hash.zoom ?? saved?.zoom,
     };
@@ -390,6 +391,12 @@ const app = {
     });
     $('#toggle-pois').addEventListener('change', (e) => this.map.setPoisVisible(e.target.checked));
     $('#toggle-trails')?.addEventListener('change', (e) => this.map.setOutdoorVisible(e.target.checked));
+    $('#toggle-satellite')?.addEventListener('change', (e) => {
+      store.set('satellite', e.target.checked);
+      this.map.setSatellite(e.target.checked);
+    });
+    const satEl = $('#toggle-satellite');
+    if (satEl) satEl.checked = !!store.get('satellite', false);
     const kosher = $('#toggle-kosher');
     kosher.checked = !!store.get('kosherOnly', false);
     kosher.addEventListener('change', () => {

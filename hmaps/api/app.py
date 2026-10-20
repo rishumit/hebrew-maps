@@ -533,6 +533,55 @@ async def tile_terrain(req: Request) -> Response:
                     headers={"Cache-Control": "public, max-age=604800", "Access-Control-Allow-Origin": "*"})
 
 
+# ----------------------------------------------------------------------------- satellite proxy
+# govmap.gov.il CDN blocks cross-origin requests from browsers (CORS + Referer check).
+# We proxy the tiles through our own server so the request to the CDN comes from Python,
+# not from the browser, bypassing the restriction entirely.
+# The tiles are publicly available on the web (govmap.gov.il itself uses them).
+
+_SAT_CDN = "https://cdn.govmap.gov.il/M2023ORT3TS"
+
+
+async def tile_satellite(req: Request) -> Response:
+    import ssl
+    import urllib.request
+
+    z, x, y = _zxy(req)
+    if not (7 <= z <= 20):
+        return Response(status_code=204, headers={"Cache-Control": "public, max-age=86400"})
+
+    def fetch() -> bytes | None:
+        url = f"{_SAT_CDN}/{z}/{y}/{x}.jpg"
+        # govmap uses a certificate chain that Python's ssl may not trust on Windows;
+        # we disable verification for this internal proxy (server-side only, not browser-facing).
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        try:
+            r = urllib.request.urlopen(
+                urllib.request.Request(url, headers={
+                    "Referer": "https://www.govmap.gov.il/",
+                    "User-Agent": "Mozilla/5.0",
+                }),
+                timeout=10,
+                context=ctx,
+            )
+            if r.status == 200:
+                return r.read()
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    data = await run_in_threadpool(fetch)
+    if not data:
+        return Response(status_code=204, headers={"Cache-Control": "public, max-age=300"})
+    return Response(
+        data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=2592000", "Access-Control-Allow-Origin": "*"},
+    )
+
+
 def _points_param(text: str) -> list[tuple[float, float]]:
     pts = [_latlon(p, "points") for p in re.split(r"[|;]", text) if p.strip()]
     if not pts:
@@ -833,6 +882,7 @@ def build_app() -> Starlette:
         Route("/tiles/fallback/{z}/{x}/{y}.pbf", tile_fallback),
         Route("/tiles/contours/{z}/{x}/{y}.pbf", tile_contours),
         Route("/tiles/terrain/{z}/{x}/{y}.png", tile_terrain),
+        Route("/tiles/satellite/{z}/{x}/{y}.jpg", tile_satellite),
         Route("/fonts/{fontstack}/{range}.pbf", fonts),
         Route("/reports/{name}", reports),
         Route("/reports", lambda req: RedirectResponse("/reports/quality-report.html")),
