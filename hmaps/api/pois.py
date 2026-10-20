@@ -7,7 +7,7 @@ import sqlite3
 import urllib.parse
 from datetime import datetime
 
-from ..core import categories, hours
+from ..core import categories, hours, logos
 from ..core.text import tel_href
 from . import rich
 from .images import local_image
@@ -97,6 +97,7 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
     images = [main] if main else [g["src"] for g in gallery[:1]]
     full_address = format_address(r["street"], r["housenumber"], r["city"]) or None
     name = r["name"] or sub.name_he
+    op_brand = logos.poi_brand(extra)
     return {
         "id": f"poi-{r['id']}",
         "type": "poi",
@@ -127,6 +128,9 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
             "osm_url": _osm_url(r["osm"]),
             "source": "נדרים פלוס" if (r["osm"] or "").startswith("zm:") else "OpenStreetMap",
         },
+        # operating organisation's logo (INPA, KKL, a bus company, …) – see hmaps/core/logos.py
+        "operator_brand": op_brand,
+        "operator_logo": op_brand["logo"] if op_brand else None,
         "description_he": r["description"] or extra.get("description:he") or extra.get("description"),
         "description_en": None,
         **_outdoor_fields(con, r["id"], r["sub"], extra),
