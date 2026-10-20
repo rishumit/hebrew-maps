@@ -232,6 +232,48 @@ spec["paths"].update({
                                              "responses": {"200": {"description": "MVT"}, "204": {"description": "ריק"}}}},
 })
 
+# online data updates from the weekly GitHub release (hmaps/api/updates.py)
+UpdComponent = {"type": "object", "properties": {
+    "id": {"type": "string", "enum": ["maps", "basemap", "terrain", "transit", "media", "zmanim"]},
+    "name_he": {"type": "string", "examples": ["מפת בסיס"]}, "description_he": {"type": "string"},
+    "installed": {"type": ["object", "null"], "description": "version (YYYYMMDD), date, release, sha256, source: online | local | file"},
+    "available": {"type": ["object", "null"], "description": "מתוך manifest.json: version, date, file, size, sha256, "
+                                                            "status (full | unchanged | unavailable), min_app_version, release"},
+    "update_available": {"type": "boolean"}, "compatible": {"type": "boolean", "description": "גרסת התוכנה ≥ min_app_version"},
+    "job": {"type": ["object", "null"], "description": "משימת עדכון אחרונה (ראו /api/updates/status)"}}}
+UpdJob = {"type": "object", "properties": {
+    "component": {"type": "string"},
+    "state": {"type": "string", "enum": ["queued", "downloading", "verifying", "installing", "done", "error"]},
+    "downloaded": {"type": "integer"}, "total": {"type": "integer"}, "percent": {"type": ["number", "null"]},
+    "version": {"type": ["string", "null"]}, "error": {"type": ["string", "null"], "description": "הודעה בעברית"},
+    "code": {"type": ["string", "null"], "examples": ["checksum", "offline", "rate_limited", "busy"]},
+    "started": {"type": "string"}, "finished": {"type": ["string", "null"]}}}
+spec["paths"].update({
+    "/api/updates": {"get": {"summary": "עדכוני נתונים: הגרסה המותקנת והגרסה הזמינה של כל רכיב", "parameters": [
+        q("refresh", "1 = לקרוא שוב את manifest.json מ-GitHub (אחרת נשמר בזיכרון 15 דקות)")],
+        "responses": ok("מצב העדכונים (גם כשאין חיבור: online=false ו-error עם הודעה בעברית)", {"type": "object", "properties": {
+            "app_version": {"type": "string"}, "online": {"type": "boolean"}, "error": {"type": ["object", "null"]},
+            "release": {"type": ["string", "null"], "examples": ["data-2026-10-22"]}, "generated": {"type": ["string", "null"]},
+            "checked_at": {"type": ["string", "null"]}, "updates_available": {"type": "integer"},
+            "total_size": {"type": "integer", "description": "בתים להורדה"}, "busy": {"type": "boolean"},
+            "components": {"type": "array", "items": UpdComponent}}})}},
+    "/api/updates/status": {"get": {"summary": "התקדמות משימות העדכון שרצות ברקע", "responses": ok("משימות", {
+        "type": "object", "properties": {"busy": {"type": "boolean"},
+                                         "jobs": {"type": "object", "additionalProperties": UpdJob}}})}},
+    "/api/updates/{component}": {"post": {
+        "summary": "הורדה, בדיקת SHA-256 והתקנה ברקע של רכיב (או all – כל מה שיש לו עדכון)",
+        "description": "מותר רק מהמחשב המקומי (HMAPS_UPDATES=local|any|off) ודורש כותרת X-HMaps-Update: 1.",
+        "parameters": [p("component", "maps | basemap | terrain | transit | media | zmanim | all"),
+                       q("force", "1 = התקנה מחדש גם אם הגרסה עדכנית"),
+                       {"name": "X-HMaps-Update", "in": "header", "required": True, "schema": {"type": "string", "enum": ["1"]}}],
+        "responses": {"202": {"description": "המשימות נוספו לתור", "content": {"application/json": {"schema": {
+            "type": "object", "properties": {"jobs": {"type": "array", "items": UpdJob}}}}}},
+                      "200": {"description": "all: אין מה לעדכן"},
+                      "403": {"description": "לא מהמחשב המקומי", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                      "404": {"description": "רכיב לא מוכר", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                      "502": {"description": "all: שרת העדכונים לא זמין", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}}}},
+})
+
 if __name__ == "__main__":
     out = Path(__file__).resolve().parents[1] / "hmaps" / "api" / "openapi.json"
     out.write_text(json.dumps(spec, ensure_ascii=False, indent=1), encoding="utf-8")

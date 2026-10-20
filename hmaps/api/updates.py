@@ -300,7 +300,7 @@ def detect_installed(data: Path, component_id: str) -> dict | None:
             from ..etl import zmanim
             p = zmanim.snapshot_path(data)
             return _stamp(p.stat().st_mtime) if p.exists() else None
-    except OSError:
+    except (OSError, ImportError):
         return None
     return None
 

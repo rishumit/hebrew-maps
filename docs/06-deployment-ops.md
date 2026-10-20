@@ -74,6 +74,28 @@ GitHub Actions / GitLab CI
     (Blue-Green or Canary)
 ```
 
+### 2.1.1 Data releases (weekly) and app releases
+
+The repository has exactly two GitHub Actions workflows:
+
+| Workflow | Trigger | Output |
+|----------|---------|--------|
+| `.github/workflows/weekly-data.yml` | Thursday 20:00 UTC (night in Israel) + manual dispatch with one checkbox per component | dated release `data-YYYY-MM-DD` with `hmaps-<component>-<YYYYMMDD>.zip` + `manifest.json`; the pre-release `data-latest` holds only the newest `manifest.json` |
+| `.github/workflows/installer.yml` | push / PR to `main`, tags `v*.*.*` | Windows installer; tagged builds become the "Latest" app release |
+
+Components (`hmaps/core/components.py`): `maps` (maps.db + routing graph + quality report), `basemap`
+(Planetiler MBTiles), `terrain` (contours + terrain-RGB MBTiles; rebuilt monthly), `transit` (GTFS → npz),
+`media` (Commons thumbnails), `zmanim` (Nedarim Plus prayer-times snapshot). Every package is verified
+(`tools/release.py verify`) before publishing; `manifest.json` lists every component with version, date,
+file, size, SHA-256, Hebrew description, `min_app_version` and `status` (`full` = rebuilt in this run,
+`unchanged` = carried forward from an earlier dated release, `unavailable`). Dated releases older than six
+weeks are pruned unless the manifest still references them.
+
+Clients update themselves from `data-latest/manifest.json` (map menu → "עדכונים", `python -m hmaps update`,
+`update-online-windows.cmd`); see [12-operations.md](12-operations.md#עדכון-נתונים). No secrets are needed:
+the workflow uses the built-in `GITHUB_TOKEN` (`contents: write` only in the publish job). Optional repository
+variables: `HMAPS_PBF_URL` (OSM extract mirror), `HMAPS_PLANETILER_MEMORY` (JVM heap, default `3g`).
+
 ---
 
 ### 2.2 Blue-Green Deployment
