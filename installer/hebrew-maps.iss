@@ -1,9 +1,17 @@
-; installer\hebrew-maps.iss
+﻿; installer\hebrew-maps.iss
 ; Inno Setup 6 script for Hebrew Maps / מפות בעברית
 ;
 ; Compile from project root:
 ;   iscc installer\hebrew-maps.iss
-; or via build.ps1 which passes /DMyAppVersion=x.y.z
+;   or via build.ps1 which passes /DMyAppVersion=x.y.z
+;
+; Saved as UTF-8 *with BOM* – Inno Setup reads a file without BOM as ANSI and would
+; garble the Hebrew strings.
+;
+; Desktop app: if build.ps1 / CI put the Tauri exe (hebrew-maps-desktop.exe) into
+; dist\hebrew-maps\, the shortcuts start it (native window; it starts hebrew-maps.exe
+; itself, with --no-browser). Without it – or on a PC without the WebView2 runtime –
+; the shortcuts start hebrew-maps.exe, which opens the browser as before.
 
 #define MyAppName      "מפות בעברית"
 #define MyAppNameEn    "HebrewMaps"
@@ -14,6 +22,10 @@
 #define MyAppPublisher "Hebrew Maps"
 #define MyAppURL       "http://localhost:8080"
 #define MyAppExeName   "hebrew-maps.exe"
+#define MyDesktopExe   "hebrew-maps-desktop.exe"
+#if FileExists(AddBackslash(SourcePath) + "dist\hebrew-maps\" + MyDesktopExe)
+  #define HasDesktop
+#endif
 
 [Setup]
 AppId={{6F8A3C2E-1D4B-4E7A-9F0C-HEBREW0MAPS1}
@@ -34,6 +46,10 @@ PrivilegesRequired=lowest
 WizardStyle=modern
 Uninstallable=yes
 ShowLanguageDialog=no
+UninstallDisplayIcon={app}\{#MyAppExeName}
+#if FileExists(AddBackslash(SourcePath) + "icon.ico")
+SetupIconFile=icon.ico
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -80,16 +96,62 @@ Source: "..\data\sample\*"; DestDir: "{app}\data\sample"; Flags: ignoreversion r
 Name: "{app}\data\reports"
 
 [Icons]
+#ifdef HasDesktop
+; Native window (Tauri) when the WebView2 runtime is present (always on Windows 11)
+Name: "{group}\{#MyAppName}";           Filename: "{app}\{#MyDesktopExe}"; Check: HasWebView2
+Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyDesktopExe}"; Tasks: desktopicon; Check: HasWebView2
+Name: "{group}\{#MyAppName}";           Filename: "{app}\{#MyAppExeName}"; Check: not HasWebView2
+Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: not HasWebView2
+#else
 Name: "{group}\{#MyAppName}";           Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+#endif
 
 [Run]
+#ifdef HasDesktop
+Filename: "{app}\{#MyDesktopExe}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: HasWebView2
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: not HasWebView2
+#else
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+#endif
 
 [UninstallRun]
-Filename: "taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden skipifdoesntexist
+Filename: "taskkill.exe"; Parameters: "/F /IM {#MyDesktopExe}"; Flags: runhidden; RunOnceId: "KillDesktop"
+Filename: "taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillServer"
 
 [Code]
+const
+  WebView2Key = '\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function WebView2VersionOk(RootKey: Integer; SubKey: String): Boolean;
+var
+  V: String;
+begin
+  Result := False;
+  if RegQueryStringValue(RootKey, SubKey, 'pv', V) then
+    Result := (V <> '') and (V <> '0.0.0.0');
+end;
+
+{ Microsoft Edge WebView2 runtime – needed by the desktop window. Preinstalled on
+  Windows 11 and on updated Windows 10; otherwise the browser is used. }
+function HasWebView2(): Boolean;
+begin
+  Result := WebView2VersionOk(HKLM, 'SOFTWARE\WOW6432Node' + WebView2Key)
+    or WebView2VersionOk(HKLM, 'SOFTWARE' + WebView2Key)
+    or WebView2VersionOk(HKCU, 'Software' + WebView2Key);
+end;
+
+{ Upgrades: running copies (the desktop app and its server, or an older browser-mode
+  server) lock their files – stop them before copying. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Code: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM {#MyDesktopExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Result := '';
+end;
+
 function InitializeSetup(): Boolean;
 begin
   if not IsWin64 then

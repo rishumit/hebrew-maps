@@ -74,7 +74,7 @@ jobs:
           python -m venv .venv
           .venv\Scripts\pip.exe install --upgrade pip
           .venv\Scripts\pip.exe install -r requirements.txt
-          .venv\Scripts\pip.exe install "pyinstaller==6.10.0" "Pillow>=10"
+          .venv\Scripts\pip.exe install "pyinstaller==6.10.0" -r requirements-icons.txt
 
       # -----------------------------------------------------------------------
       # 5. Ensure Inno Setup 6 is available
@@ -92,11 +92,17 @@ jobs:
           }
 
       # -----------------------------------------------------------------------
-      # 6. Generate icon
+      # 6. Render all icons locally from web/icons/icon.svg (resvg, no download):
+      #    installer/icon.ico, web/icons/*.png, src-tauri/icons/*.
+      #    --check first only reports committed PNGs that are out of date.
       # -----------------------------------------------------------------------
-      - name: Generate icon.ico
+      - name: Generate icons
         shell: pwsh
-        run: .venv\Scripts\python.exe installer\make_icon.py
+        run: |
+          .venv\Scripts\python.exe tools\make_icons.py --check
+          if ($LASTEXITCODE -ne 0) { Write-Host "::warning::Committed icons are out of date - run python tools/make_icons.py" }
+          .venv\Scripts\python.exe tools\make_icons.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # -----------------------------------------------------------------------
       # 7. Run PyInstaller
@@ -108,6 +114,27 @@ jobs:
             --distpath installer\dist `
             --workpath installer\build `
             --noconfirm
+
+      # -----------------------------------------------------------------------
+      # 7b. Tauri desktop app (src-tauri). Only the exe is built (bundle.active=false,
+      #     no tauri CLI needed - tauri's custom-protocol feature is on in Cargo.toml);
+      #     it is copied next to hebrew-maps.exe and Inno Setup packages it.
+      # -----------------------------------------------------------------------
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Tauri - build desktop exe
+        shell: pwsh
+        run: |
+          cargo build --release --locked --manifest-path src-tauri\Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item src-tauri\target\release\hebrew-maps-desktop.exe installer\dist\hebrew-maps\ -Force
+          Get-Item installer\dist\hebrew-maps\hebrew-maps-desktop.exe | Format-List Name, Length
 
       # -----------------------------------------------------------------------
       # 8. Fetch web assets (vendor JS, fonts-ui) — gitignored but needed by ISS
