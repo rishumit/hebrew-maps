@@ -87,6 +87,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "      PyInstaller done: installer\dist\hebrew-maps\" -ForegroundColor Green
 
+& powershell -ExecutionPolicy Bypass -File installer\smoke-test.ps1
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "The bundled server does not start - see the smoke test output above."
+    exit 1
+}
+
 # ---------------------------------------------------------------------------
 # 4. Build the Tauri desktop app (src-tauri) and put it next to hebrew-maps.exe.
 #    Only the exe is built (bundle.active=false) – Inno Setup packages it. A plain

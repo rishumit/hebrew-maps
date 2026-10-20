@@ -81,9 +81,11 @@ a = Analysis(
         'uvicorn.protocols.http.httptools_impl',
         'uvicorn.protocols.websockets.wsproto',
         'watchfiles',
-        # numpy C-extensions (sometimes missed on Windows)
-        'numpy.core._methods',
-        'numpy._core._methods',
+        # numpy: modules imported only from C code (e.g. numpy._core._exceptions,
+        # imported by _multiarray_umath) are invisible to PyInstaller's analysis and
+        # numpy's own hook misses some of them -> "Importing the numpy C-extensions
+        # failed ... No module named numpy._core._exceptions". Collect all of _core.
+        *collect_submodules('numpy._core', filter=lambda m: '.tests' not in m),
         # sqlite3 is stdlib but occasionally missed on Windows builds
         '_sqlite3',
         # Pillow

@@ -116,6 +116,14 @@ jobs:
             --noconfirm
 
       # -----------------------------------------------------------------------
+      # 7a. Smoke test: the bundled server must start and answer /api/health
+      #     (catches missing hidden imports, e.g. numpy._core._exceptions).
+      # -----------------------------------------------------------------------
+      - name: Smoke test server bundle
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File installer\smoke-test.ps1
+
+      # -----------------------------------------------------------------------
       # 7b. Tauri desktop app (src-tauri). Only the exe is built (bundle.active=false,
       #     no tauri CLI needed - tauri's custom-protocol feature is on in Cargo.toml);
       #     it is copied next to hebrew-maps.exe and Inno Setup packages it.
