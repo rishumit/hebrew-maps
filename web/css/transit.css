@@ -66,6 +66,58 @@
 .tr-dep-time small, .tr-dep-head small { font-weight: 400; color: var(--text-muted); font-size: var(--text-xs); }
 .tr-dep-head { display: flex; flex-direction: column; min-width: 0; }
 
+/* clickable line badges (departures, itinerary legs, stop chips) */
+.tr-line-btn { background: none; border: 0; padding: 2px; margin: -2px; border-radius: var(--radius-md); cursor: pointer; display: inline-flex;
+  min-height: 28px; align-items: center; }
+.tr-line-btn:hover .tr-badge { filter: brightness(1.1); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--border); }
+.tr-line-btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 1px; }
+.tr-lines .tr-line-btn { margin: 0; }
+
+/* every line at a stop */
+.tr-mode-h { display: flex; align-items: center; gap: 6px; margin: var(--space-3) var(--space-4) var(--space-1); font-size: var(--text-sm);
+  color: var(--text-muted); font-weight: 600; }
+.tr-routes { list-style: none; margin: 0; padding: 0 0 var(--space-2); }
+.tr-route { display: grid; grid-template-columns: 4.5rem 1fr; gap: var(--space-2); align-items: start; padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border); }
+.tr-route-badge { padding-top: 4px; }
+.tr-route-body { display: flex; flex-direction: column; min-width: 0; }
+.tr-route-dirs { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); }
+.tr-route.ends .tr-route-badge { opacity: .75; }
+.tr-dir-btn { background: none; border: 0; padding: 2px 0; color: var(--link); cursor: pointer; text-align: right; display: inline-flex; gap: 4px;
+  align-items: center; min-height: 32px; text-decoration: underline; text-underline-offset: 3px; }
+.tr-dir-btn:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm, 4px); }
+.tr-routes-sec { padding-bottom: var(--space-6); }
+
+/* line view */
+.tr-line-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; padding: var(--space-3) var(--space-4) 0; color: var(--text-strong); }
+.tr-line-dir { display: flex; flex-direction: column; gap: 4px; padding: var(--space-3) var(--space-4) 0; font-size: var(--text-sm); color: var(--text-muted); }
+.tr-line-dir select { min-height: 40px; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0 var(--space-2); background: var(--surface-2);
+  color: var(--text); font: inherit; font-size: var(--text-base, 1rem); max-width: 100%; }
+.tr-line-dir select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+.tr-line-stops { list-style: none; margin: 0; padding: 0 0 var(--space-6); }
+.tr-ls button { width: 100%; display: grid; grid-template-columns: 1.5rem 1fr auto; gap: var(--space-2); align-items: center; text-align: right;
+  background: none; border: 0; padding: 0 var(--space-4); min-height: 44px; color: inherit; cursor: pointer; font: inherit; position: relative; }
+.tr-ls button:hover { background: var(--hover); }
+.tr-ls button:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
+/* the route line runs through the dots */
+.tr-ls button::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: calc(var(--space-4) + .75rem - 2px); width: 4px;
+  background: var(--line-color, var(--gray-400)); }
+.tr-ls.first button::before { inset-block-start: 50%; }
+.tr-ls.last button::before { inset-block-end: 50%; }
+.tr-ls-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--line-color, var(--gray-400));
+  justify-self: center; position: relative; z-index: 1; box-sizing: border-box; }
+.tr-ls-name { display: flex; flex-direction: column; padding: var(--space-1) 0; min-width: 0; }
+.tr-ls-name small { color: var(--text-muted); font-size: var(--text-xs); }
+.tr-ls-time { color: var(--text-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tr-ls.past .tr-ls-name { color: var(--text-muted); }
+.tr-ls.past button::before { opacity: .45; }
+.tr-ls.from button { background: var(--primary-50); }
+.tr-ls.from .tr-ls-name { font-weight: 700; color: var(--text-strong); }
+.tr-ls.from .tr-ls-dot { width: 18px; height: 18px; background: var(--line-color, var(--gray-400)); border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--line-color, var(--gray-400)); }
+.tr-ls.from .tr-ls-time { color: var(--link); font-weight: 700; }
+
 @media (forced-colors: active) {
   .tr-badge { border: 1px solid CanvasText; forced-color-adjust: none; }
+  .tr-ls button::before, .tr-ls-dot { forced-color-adjust: none; }
 }
