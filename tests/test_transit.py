@@ -342,6 +342,7 @@ class TransitApiTest(unittest.TestCase):
         types = [lg["type"] for lg in it["legs"]]
         self.assertIn("bus", types)
         self.assertIn("walk", types)
+        self.assertEqual({lg["agency_logo"] for lg in it["legs"] if lg["type"] == "bus"}, {"/logos/egged.svg"})
         self.assertIn("max-age", h.get("cache-control", ""))
         self.assertTrue(body["feed"]["available"])
         s, body, _ = self.api.get("/api/transit", **{"from": "32.0,34.8", "to": "32.01,34.83",
@@ -365,6 +366,7 @@ class TransitApiTest(unittest.TestCase):
         s, body, _ = self.api.get("/api/transit/stop/A", time=f"{gtfs_fixture.WEDNESDAY}T07:00")
         self.assertEqual(s, 200)
         self.assertEqual(body["departures"][0]["time_text"], "08:00")
+        self.assertEqual(body["departures"][0]["agency_logo"], "/logos/egged.svg")  # operator logo (hmaps.core.logos)
         s, body2, _ = self.api.get("/api/transit/stop/code-1000", time=f"{gtfs_fixture.WEDNESDAY}T07:00")
         self.assertEqual(body2["stop"]["id"], "A")
         s, body, _ = self.api.get("/api/transit/stop/nope")

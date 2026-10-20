@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 
+from ..core import logos
 from ..core.hebrew import format_distance, format_duration
 from . import raptor
 from .data import MODE_COLORS, TransitData, mode_of
@@ -31,6 +32,12 @@ HORIZONS = (4 * 3600, 10 * 3600)
 TIME_BUDGET = 1.2            # seconds; extra alternative passes stop after this
 ESTIMATED_TEXT = "זמנים משוערים לפי לוח הזמנים"
 WEEKDAYS = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
+
+
+def _agency(d: TransitData, route: int) -> tuple[str, dict | None]:
+    """Agency name of *route* and its brand (logo / text badge, see :mod:`hmaps.core.logos`)."""
+    name = d.agency_names[int(d.route_agency[route])]
+    return name, logos.brand(name)
 
 
 class TransitError(Exception):
@@ -338,7 +345,7 @@ def _ride_leg(ctx: _Ctx, pat: int, inst: int, i: int, j: int, dep: int, arr: int
     a = int(d.pat_ptr[pat])
     stops = d.pat_stops[a + i:a + j + 1]
     n = j - i
-    agency = d.agency_names[int(d.route_agency[route])]
+    agency, brand = _agency(d, route)
     line = _line_label(d, route, mode, mode_he)
     bg, fg = _color(d, route, mode)
     frm, to = _place(d, int(stops[0])), _place(d, int(stops[-1]))
@@ -359,6 +366,7 @@ def _ride_leg(ctx: _Ctx, pat: int, inst: int, i: int, j: int, dep: int, arr: int
     return {"type": mode, "mode_he": mode_he, "line": line, "route_id": d.route_ids[route],
             "route_short_name": d.route_short[route] or None,
             "route_long_name": d.route_long[route] or None, "agency": agency, "headsign": head or None,
+            "agency_brand": brand, "agency_logo": brand["logo"] if brand else None,
             "train_number": train_no,
             "color": bg, "text_color": fg, "from": frm, "to": to,
             "departure": _iso(day, dep), "arrival": _iso(day, arr),
@@ -609,7 +617,10 @@ def departures(data: TransitData, stop: int, when: datetime | None = None, horiz
         mode, mode_he = mode_of(int(data.route_type[route]))
         bg, fg = _color(data, route, mode)
         label = _line_label(data, route, mode, mode_he)
-        lines.setdefault(label, {"line": label, "type": mode, "color": bg, "text_color": fg, "route_id": data.route_ids[route]})
+        if label not in lines:
+            agency, brand = _agency(data, route)
+            lines[label] = {"line": label, "type": mode, "color": bg, "text_color": fg, "route_id": data.route_ids[route],
+                            "agency": agency, "agency_logo": brand["logo"] if brand else None}
         a = int(data.pat_ptr[p]) + i
         if int(data.pat_flags[a]) & 1:
             continue
@@ -627,9 +638,11 @@ def departures(data: TransitData, stop: int, when: datetime | None = None, horiz
     rows.sort()
     out = []
     for secs, label, mode, mode_he, bg, fg, route, trip in rows[:limit]:
+        agency, brand = _agency(data, route)
         out.append({"time": _iso(day, secs), "time_text": hhmm(day, secs), "minutes": int((secs - T) // 60),
-                    "line": label, "route_id": data.route_ids[route], "route_short_name": data.route_short[route] or None, "type": mode,
-                    "mode_he": mode_he, "agency": data.agency_names[int(data.route_agency[route])],
+                    "line": label, "route_id": data.route_ids[route], "route_short_name": data.route_short[route] or None,
+                    "type": mode, "mode_he": mode_he, "agency": agency,
+                    "agency_brand": brand, "agency_logo": brand["logo"] if brand else None,
                     "headsign": headsign(data, route, trip)[0] or None, "color": bg, "text_color": fg})
     return {"stop": data.stop_info(stop), "time": when.isoformat(), "departures": out,
             "lines": sorted(lines.values(), key=lambda x: (x["type"] != "rail", len(x["line"]), x["line"])),

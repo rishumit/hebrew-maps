@@ -189,6 +189,13 @@ class ApiTest(unittest.TestCase):
         s, site, _ = self.api.get(f"/api/poi/{body['results'][0]['id']}")
         self.assertEqual(site["sub_category"], "inpa_site")
         self.assertTrue(site["nature_site"]["inpa"])
+        self.assertEqual(site["operator_logo"], "/logos/inpa.svg")
+        self.assertEqual(site["operator_brand"]["key"], "inpa")
+        # the logo is served by our own server, cached like the other static assets
+        s, svg, h = self.api.get(site["operator_logo"])
+        self.assertEqual(s, 200)
+        self.assertIn(b"<svg", svg[:4096])
+        self.assertIn("max-age", h.get("cache-control", ""))
         self.assertEqual(site["nature_site"]["fee_he"], "כניסה בתשלום")
         self.assertEqual(site["geometry"]["type"], "MultiPolygon")
         self.assertIsNotNone(site["opening_hours"])

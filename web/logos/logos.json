@@ -1,0 +1,97 @@
+{
+  "inpa": {
+    "file": "inpa.svg",
+    "name_he": "רשות הטבע והגנים",
+    "source": "https://commons.wikimedia.org/wiki/File:Flag_of_Israel_Nature_and_Parks_Authority.svg",
+    "license": "CC BY-SA 3.0",
+    "author": "Meronim",
+    "note": "viewBox cropped to the central emblem of the flag; artwork unchanged"
+  },
+  "kkl": {
+    "file": "kkl.svg",
+    "name_he": "קרן קיימת לישראל",
+    "source": "https://commons.wikimedia.org/wiki/File:Flag_of_Jewish_National_Fund.svg",
+    "license": "CC BY-SA 3.0",
+    "author": "Meronim"
+  },
+  "egged": {
+    "file": "egged.svg",
+    "name_he": "אגד",
+    "source": "https://commons.wikimedia.org/wiki/File:Egged_logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "metropoline": {
+    "file": "metropoline.svg",
+    "name_he": "מטרופולין",
+    "source": "https://commons.wikimedia.org/wiki/File:Metropoline_buses_logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "kavim": {
+    "file": "kavim.svg",
+    "name_he": "קווים",
+    "source": "https://commons.wikimedia.org/wiki/File:KavimLogo.svg",
+    "license": "CC BY-SA 4.0",
+    "author": "סטודיו DoArt"
+  },
+  "superbus": {
+    "file": "superbus.svg",
+    "name_he": "סופרבוס",
+    "source": "https://commons.wikimedia.org/wiki/File:Superbus_logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "nateev-express": {
+    "file": "nateev-express.svg",
+    "name_he": "נתיב אקספרס",
+    "source": "https://commons.wikimedia.org/wiki/File:Nateev_Express_Logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "galim": {
+    "file": "galim.png",
+    "name_he": "גלים",
+    "source": "https://commons.wikimedia.org/wiki/File:Logo_top_1.png",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "beit-shemesh-express": {
+    "file": "beit-shemesh-express.svg",
+    "name_he": "בית שמש אקספרס",
+    "source": "https://commons.wikimedia.org/wiki/File:%D7%91%D7%99%D7%AA_%D7%A9%D7%9E%D7%A9_%D7%90%D7%A7%D7%A1%D7%A4%D7%A8%D7%A1.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "israel-railways": {
+    "file": "israel-railways.svg",
+    "name_he": "רכבת ישראל",
+    "source": "https://commons.wikimedia.org/wiki/File:Israel_Railways_Logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "carmelit": {
+    "file": "carmelit.svg",
+    "name_he": "כרמלית",
+    "source": "https://commons.wikimedia.org/wiki/File:Carmelit.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "metronit": {
+    "file": "metronit.svg",
+    "name_he": "מטרונית",
+    "source": "https://commons.wikimedia.org/wiki/File:Metronit_Logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "jerusalem-light-rail": {
+    "file": "jerusalem-light-rail.svg",
+    "name_he": "הרכבת הקלה בירושלים",
+    "source": "https://commons.wikimedia.org/wiki/File:J-NET.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "dankal": {
+    "file": "dankal.svg",
+    "name_he": "דנקל – הרכבת הקלה בגוש דן",
+    "source": "https://commons.wikimedia.org/wiki/File:Dankal_Logo.svg",
+    "license": "Public domain (PD-textlogo)"
+  },
+  "tevel": {
+    "file": "tevel.svg",
+    "name_he": "תבל מטרו",
+    "source": "https://commons.wikimedia.org/wiki/File:Tevel_Metro_logo.svg",
+    "license": "CC0 1.0",
+    "author": "מקף־עברי"
+  }
+}

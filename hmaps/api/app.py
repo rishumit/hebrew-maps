@@ -745,7 +745,7 @@ class ServiceMiddleware:
                 if (path in ("/", "/index.html", "/map.html", "/sw.js", "/manifest.webmanifest")
                         or path.startswith(("/js/", "/css/"))) and b"cache-control" not in names:
                     extra.append((b"cache-control", b"no-cache"))
-                elif path.startswith(("/vendor/", "/fonts/", "/icons/")) and b"cache-control" not in names:
+                elif path.startswith(("/vendor/", "/fonts/", "/icons/", "/logos/")) and b"cache-control" not in names:
                     extra.append((b"cache-control", b"public, max-age=604800"))
                 if settings.cors_origins and path.startswith("/api/"):
                     extra.append((b"access-control-allow-origin", ",".join(settings.cors_origins).encode()))

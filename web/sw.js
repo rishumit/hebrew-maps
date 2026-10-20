@@ -10,14 +10,16 @@ const SHELL = [
   '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js',
   '/vendor/maplibre-gl.js', '/vendor/maplibre-gl.css', '/vendor/mapbox-gl-rtl-text.js',
   '/js/transit.js', '/css/transit.css',
-  '/js/minyanim.js',
+  '/js/minyanim.js', '/js/logos.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
 ];
+// operator logos (web/logos/logos.json) – small, and needed offline on POI / transit cards
+const LOGOS = ['beit-shemesh-express.svg', 'carmelit.svg', 'dankal.svg', 'egged.svg', 'galim.png', 'inpa.svg', 'israel-railways.svg', 'jerusalem-light-rail.svg', 'kavim.svg', 'kkl.svg', 'metronit.svg', 'metropoline.svg', 'nateev-express.svg', 'superbus.svg', 'tevel.svg'].map((f) => `/logos/${f}`);
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL_CACHE);
-    await Promise.all(SHELL.map((u) => cache.add(u).catch(() => null)));
+    await Promise.all([...SHELL, ...LOGOS].map((u) => cache.add(u).catch(() => null)));
     await self.skipWaiting();
   })());
 });
