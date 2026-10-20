@@ -16,7 +16,13 @@
 
 ## שכבת לוויין (הוספה — אוקטובר 2026)
 תצלומי אוויר אורתופוטו של ישראל מ-CDN של מרכז מיפוי ישראל (`cdn.govmap.gov.il`), שירות ממשלתי ציבורי ללא מפתח API.
-- URL: `https://cdn.govmap.gov.il/M2023ORT3TS/{z}/{y}/{x}.jpg` (זום 7–20, כיסוי מלא לישראל)
-- ממומש ב-`style.js` כ-`satelliteSource()` ו-`addSatellite(style, opacity)`.
-- פרמטר `satellite` אופציונלי נוסף ל-`omtStyle` ו-`fallbackStyle` (ברירת מחדל: `false`).
-- CSP ב-`app.py` עודכן כך שיכיר ב-`cdn.govmap.gov.il` ב-`img-src` וב-`connect-src`.
+- מקור: `https://cdn.govmap.gov.il/M2023ORT3TS/{z}/{y}/{x}.jpg` (שימו לב: **שורה לפני עמודה**), זום 7–20, כיסוי מלא לישראל. אפשר להחליף ב-`HMAPS_SAT_URL`.
+- הדפדפן לא פונה ל-CDN (הוא חוסם CORS ובודק Referer), אלא לשרת שלנו: `/tiles/satellite/{z}/{x}/{y}.jpg` בסדר XYZ הרגיל. לכן ה-CSP נשאר `connect-src 'self'` ו-`img-src` ללא govmap.
+- ב-`style.js`: ‏`satelliteSource()` ו-`addSatellite(style, opacity)`, ופרמטר `satellite` ל-`omtStyle`/`fallbackStyle`. השכבה נכנסת **מעל `background` ומתחת לכל השאר** (תצוגה "היברידית": כבישים, גבולות ושמות מעליה), ומשטחי הכיסוי האטומים (landcover, ‏landuse, ‏park, ‏water, ‏aeroway-area, ‏building) מוגבלים לזום שמתחת ל-7, כדי שלא יסתירו את התצלום. ייחוס: "תצלומי אוויר © מרכז מיפוי ישראל".
+
+### מטמון קבוע ושימוש אופליין
+- `hmaps/api/satellite.py`: כל אריח שהגיע מה-CDN נשמר ב-`data/tiles/satellite.mbtiles` (MBTiles/SQLite, ‏WAL, כותב יחיד עם נעילה). סדר החיפוש: מטמון ← CDN (‏timeout של 5 שניות, ונשמר) ← ‏204.
+- אחרי כשל רשת (אין אינטרנט, חסימה, 403/5xx) השרת לא פונה ל-CDN במשך 30 שניות (`HMAPS_SAT_BACKOFF`) ומחזיר מיד 204, כדי שמחשב מנותק לא ימתין ל-timeout בכל אריח. 404 מה-CDN אינו נחשב כשל רשת. דף HTML (למשל דף חסימה של סינון) לעולם לא נשמר כאריח.
+- אימות SSL מבוטל בפנייה הזו בלבד (שרשרת התעודות של govmap וסינון NetFree, שחותם מחדש תעבורת HTTPS); זו קריאה בלבד של תמונות ציבוריות, בצד השרת.
+- הורדת אזור מראש: `python -m hmaps.etl satellite --bbox … --minzoom … --maxzoom …` (‏`download-satellite.cmd`), או מהמפה דרך `POST /api/satellite/download` (משימת רקע אחת בכל פעם, עד 30,000 אריחים, 3 בקשות במקביל, ‏`GET /api/satellite/status` להתקדמות). אריחים שכבר במטמון מדולגים, כך שהורדה שנקטעה ממשיכה מאותה נקודה; אחרי 8 כשלי רשת ברצף ההורדה נעצרת.
+- ה-Service Worker לא שומר את אריחי הלוויין (הם עוברים ישירות לשרת המקומי): המטמון בצד השרת כבר עובד אופליין ושורד ניקוי דפדפן, ושמירה כפולה הייתה דוחקת את האריחים הווקטוריים מהמטמון המוגבל (4000) של ה-SW.
