@@ -1,0 +1,4 @@
+# Rendering app icons from web/icons/icon.svg (tools/make_icons.py). Binary wheels for Windows/Linux/macOS,
+# no Cairo/GTK DLLs. Icons are rendered locally – never downloaded (NetFree blocks external images).
+resvg-py==0.5.0
+pillow>=10
