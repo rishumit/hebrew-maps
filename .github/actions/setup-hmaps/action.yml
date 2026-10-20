@@ -1,0 +1,26 @@
+name: Set up Hebrew Maps build environment
+description: Python 3.12 with a pip cache and the project requirements (used by weekly-data.yml)
+
+inputs:
+  requirements:
+    description: Space-separated requirement files to install
+    default: requirements-native.txt
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: requirements*.txt
+
+    - name: Install Python dependencies
+      shell: bash
+      env:
+        REQS: ${{ inputs.requirements }}
+      run: |
+        python -m pip install --upgrade pip
+        args=()
+        for r in $REQS; do args+=(-r "$r"); done
+        python -m pip install "${args[@]}"

@@ -9,6 +9,7 @@ import { svg } from './icons.js';
 import { MapView } from './map.js';
 import { Panel } from './panel.js';
 import { trailView } from './trails.js';
+import { initUpdates, openUpdates } from './updates.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
 import { errorView, loadingView, placeView, pointView, poiView, resultsView, streetView, visibleListView } from './views.js';
 
@@ -74,6 +75,7 @@ const app = {
     this._initEvents();
     this._initBanner();
     initGuide(this);
+    initUpdates(this);
     $('#data-stamp').textContent = this.meta.dataset.built
       ? `נתונים: ${this.meta.dataset.osm_date || ''} · נבנו ${new Date(this.meta.dataset.built).toLocaleDateString('he-IL')}` : '';
 
@@ -644,6 +646,7 @@ const app = {
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'recent') this._recentDialog();
       else if (act === 'shortcuts') shortcutsDialog();
+      else if (act === 'updates') openUpdates(this);
       else if (act === 'data') this._dataDialog();
       else if (act === 'accessibility') accessibilityDialog();
     });

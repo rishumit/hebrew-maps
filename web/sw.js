@@ -12,6 +12,7 @@ const SHELL = [
   '/js/transit.js', '/css/transit.css',
   '/js/minyanim.js', '/js/logos.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
+  '/js/updates.js', '/css/updates.css',
 ];
 // operator logos (web/logos/logos.json) – small, and needed offline on POI / transit cards
 const LOGOS = ['beit-shemesh-express.svg', 'carmelit.svg', 'dankal.svg', 'egged.svg', 'galim.png', 'inpa.svg', 'israel-railways.svg', 'jerusalem-light-rail.svg', 'kavim.svg', 'kkl.svg', 'metronit.svg', 'metropoline.svg', 'nateev-express.svg', 'superbus.svg', 'tevel.svg'].map((f) => `/logos/${f}`);

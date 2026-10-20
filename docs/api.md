@@ -231,5 +231,31 @@ POST /api/search
 - `POST /api/satellite/download` ‏`{"bbox": [minlon, minlat, maxlon, maxlat], "minzoom": 14, "maxzoom": 17}`: הורדה ברקע (‏202). עד 30,000 אריחים להורדה (‏413 מעבר לזה), הורדה אחת בכל פעם (‏409). ההתקדמות ב-`status.job`: ‏`state` (‏running/done/cancelled/error), ‏`total`, ‏`done`, ‏`percent`, ‏`fetched`, ‏`skipped`, ‏`failed`, ‏`bytes`.
 - `POST /api/satellite/download/cancel`: עצירת ההורדה (מה שירד נשמר; הורדה חוזרת ממשיכה מאותה נקודה).
 
+## עדכוני נתונים
+עדכון החבילות מהגרסה השבועית ב-GitHub Releases (מימוש: `hmaps/api/updates.py`, תפעול: [12-operations.md](12-operations.md#עדכון-נתונים)). הרכיבים: `maps`, ‏`basemap`, ‏`terrain`, ‏`transit`, ‏`media`, ‏`zmanim`.
+
+### `GET /api/updates[?refresh=1]`
+הגרסה המותקנת והגרסה הזמינה של כל רכיב. המניפסט נשמר בזיכרון ל-15 דקות, ו-`refresh=1` קורא אותו מחדש. גם כשאין חיבור התשובה היא 200, עם `online: false`, הודעה בעברית ב-`error` ורשימת הרכיבים המותקנים.
+```json
+{"online": true, "error": null, "release": "data-2026-10-22", "checked_at": "2026-10-23T06:10:02+00:00",
+ "app_version": "1.0.0", "updates_available": 2, "total_size": 412000000, "busy": false,
+ "components": [{"id": "transit", "name_he": "תחבורה ציבורית", "description_he": "…",
+   "installed": {"version": "20261015", "date": "2026-10-15", "source": "online", "sha256": "…"},
+   "available": {"version": "20261022", "date": "2026-10-22", "file": "hmaps-transit-20261022.zip", "size": 38000000,
+                 "sha256": "…", "status": "full", "min_app_version": "1.0.0", "release": "data-2026-10-22"},
+   "update_available": true, "compatible": true, "job": null}]}
+```
+קודי `error.code`: ‏`offline`, ‏`timeout`, ‏`rate_limited` (מגבלת הקצב של GitHub, עם השעה שבה אפשר לנסות שוב), ‏`not_found` (עוד אין גרסה מקוונת), ‏`blocked`, ‏`bad_manifest`.
+
+### `POST /api/updates/{component}` ‏(`component` = שם רכיב או `all`)
+מוסיף משימות הורדה והתקנה לתור שרץ ברקע, משימה אחת בכל פעם, ומחזיר 202 עם `jobs`. עם `all` נכללים רק הרכיבים שיש להם עדכון (200 עם `jobs: []` כשאין). ‏`?force=1` מתקין מחדש. הבקשה מותרת רק מהמחשב המקומי (משתנה הסביבה `HMAPS_UPDATES=local|any|off`), ונדרשת הכותרת `X-HMaps-Update: 1` כהגנה מפני בקשות מאתרים אחרים. בלעדיה מתקבל 400, ומחוץ למחשב המקומי מתקבל 403.
+
+### `GET /api/updates/status`
+```json
+{"busy": true, "jobs": {"transit": {"component": "transit", "state": "downloading", "downloaded": 12582912, "total": 38000000,
+  "percent": 33.1, "version": "20261022", "error": null, "code": null, "started": "…", "finished": null}}}
+```
+‏`state`: ‏`queued` → ‏`downloading` → ‏`verifying` (גודל + SHA-256) → ‏`installing` → ‏`done`, או `error` עם הודעה בעברית ב-`error` (למשל `checksum`, ‏`size_mismatch`, ‏`download_failed`, ‏`busy`, ‏`disk_full`, ‏`app_too_old`).
+
 ## מערכת
 `/api/health`, ‏`/api/meta`, ‏`/metrics` (Prometheus), ‏`/reports` (דוח איכות נתונים).
