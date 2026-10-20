@@ -41,6 +41,10 @@ class Settings:
         return self.data_dir / "tiles" / "israel.mbtiles"
 
     @property
+    def satellite_path(self) -> Path:
+        return self.data_dir / "tiles" / "satellite.mbtiles"
+
+    @property
     def media_dir(self) -> Path:
         return self.data_dir / "media"
 

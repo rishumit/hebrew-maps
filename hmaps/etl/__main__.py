@@ -8,6 +8,8 @@
     python -m hmaps.etl enrich              # photos / texts / facts for trip sites and trails (hmaps.etl.rich)
     python -m hmaps.etl gtfs                # public transport timetables -> data/transit/ (hmaps.transit)
     python -m hmaps.etl zmanim              # synagogue prayer times (Nedarim Plus) -> live maps.db (hmaps.etl.zmanim)
+    python -m hmaps.etl satellite --bbox 34.75,32.03,34.83,32.12 --maxzoom 17
+                                            # govmap aerial photos for offline use -> data/tiles/satellite.mbtiles
 
 The database is built under a temporary name and moved into place
 atomically, so a running API never sees a half-written file.
@@ -276,6 +278,8 @@ def main(argv: list[str] | None = None) -> None:
     z.add_argument("--apply", action="store_true", help="only load the existing snapshot into the database")
     z.add_argument("--limit", type=int, help="only the first N synagogues (testing)")
     z.add_argument("--workers", type=int, default=4, help="parallel requests (max 4)")
+    from ..api import satellite
+    satellite.add_parser(sub)
     args = p.parse_args(argv)
     if args.cmd == "download":
         download(force=args.force)
@@ -293,6 +297,8 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "zmanim":
         from . import zmanim
         zmanim.cmd(args)
+    elif args.cmd == "satellite":
+        satellite.cmd(args)
 
 
 if __name__ == "__main__":
