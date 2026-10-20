@@ -186,7 +186,14 @@ POST /api/search
 
 | `/tiles/contours/{z}/{x}/{y}.pbf` | קווי גובה, z10–14 (שכבה `contour`: ‏`ele`, ‏`idx`=1 בקו ראשי; שכבה `spot`: ‏`ele`). ‏204 כשאין |
 | `/tiles/terrain/{z}/{x}/{y}.png` | גובה בקידוד Terrarium ‏(raster-dem), ‏z5–12. מעל הים: אריח גובה 0. ‏404 כשהשכבה לא נבנתה |
+| `/tiles/satellite/{z}/{x}/{y}.jpg` | תצלומי אוויר (govmap), ‏z7–20. מהמטמון המקומי, ואם חסר ויש אינטרנט – מה-CDN ונשמר. ‏204 כשאין (כותרת `X-Tile-Source`: ‏`cache`/`cdn`/`offline`/`missing`/`outside`) |
 | `/fonts/{fontstack}/{range}.pbf` | גליפים לתוויות |
+
+## תצלומי אוויר לשימוש אופליין
+- `GET /api/satellite/status`: ‏`{"cache": {"tiles", "bytes", "disk_bytes", "by_zoom"}, "offline": bool, "job": {...} | null, ...}`
+- `GET /api/satellite/estimate?bbox=minlon,minlat,maxlon,maxlat&minzoom=&maxzoom=`: ‏`{"tiles", "cached", "missing", "bytes_estimate", "max_tiles", "too_many"}`
+- `POST /api/satellite/download` ‏`{"bbox": [minlon, minlat, maxlon, maxlat], "minzoom": 14, "maxzoom": 17}`: הורדה ברקע (‏202). עד 30,000 אריחים להורדה (‏413 מעבר לזה), הורדה אחת בכל פעם (‏409). ההתקדמות ב-`status.job`: ‏`state` (‏running/done/cancelled/error), ‏`total`, ‏`done`, ‏`percent`, ‏`fetched`, ‏`skipped`, ‏`failed`, ‏`bytes`.
+- `POST /api/satellite/download/cancel`: עצירת ההורדה (מה שירד נשמר; הורדה חוזרת ממשיכה מאותה נקודה).
 
 ## מערכת
 `/api/health`, ‏`/api/meta`, ‏`/metrics` (Prometheus), ‏`/reports` (דוח איכות נתונים).

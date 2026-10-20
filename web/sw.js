@@ -1,5 +1,5 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.3.6';
+const VERSION = 'hmaps-1.3.7';
 const SHELL_CACHE = `${VERSION}-shell`;
 const TILE_CACHE = 'hmaps-tiles-v1';
 const MAX_TILES = 4000;
@@ -83,6 +83,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
   const p = url.pathname;
+  // Aerial photos are cached on the server (data/tiles/satellite.mbtiles, works offline and
+  // survives browser cleanup); caching them here too would only push the vector tiles out
+  // of the 4000-entry tile cache. Straight to the local server.
+  if (p.startsWith('/tiles/satellite/')) return;
   if (p.startsWith('/tiles/') || p.startsWith('/fonts/')) event.respondWith(tileStrategy(event.request));
   else if (p === '/api/meta' || p === '/api/categories') event.respondWith(networkFirst(event.request));
   else if (p.startsWith('/api/') || p.startsWith('/reports') || p === '/metrics') return;

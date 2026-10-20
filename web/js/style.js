@@ -101,24 +101,23 @@ export function terrainLayers(t, terrain) {
 }
 
 // ------------------------------------------------------------------ satellite imagery
-// Aerial orthophotos from the Israeli Survey Department via govmap.gov.il CDN.
-// The CDN uses a non-standard {z}/{y}/{x} path order (row-major / TMS column convention)
-// so we request the tiles directly and let the browser fetch them.
+// Aerial orthophotos of the Israeli Survey Department (govmap.gov.il), 2023, zoom 7–20.
+// The browser always asks our own server (/tiles/satellite/{z}/{x}/{y}.jpg, standard XYZ):
+// the CDN blocks direct browser requests (CORS + Referer) and uses a {z}/{y}/{x} path, and
+// the server keeps every tile in data/tiles/satellite.mbtiles so viewed or downloaded areas
+// work offline (hmaps/api/satellite.py).
 //
-// `satellite` parameter accepted by omtStyle / fallbackStyle:
+// `satellite` option of omtStyle / fallbackStyle:
 //   false | null  — no satellite layer (default)
-//   true          — satellite on with default opacity (0.85)
+//   true          — satellite on, fully opaque
 //   number        — satellite on with that opacity (0–1)
 
-// govmap.gov.il CDN — 2023 orthophotos, zoom 7–20, covers all of Israel.
-// Tiles are proxied through our own server (/tiles/satellite/{z}/{x}/{y}.jpg)
-// because the CDN blocks direct browser requests (CORS + Referer check).
-const GOVMAP_ATTRIBUTION = '© <a href="https://www.govmap.gov.il" target="_blank" rel="noopener">מרכז מיפוי ישראל</a>';
+const GOVMAP_ATTRIBUTION = 'תצלומי אוויר © <a href="https://www.govmap.gov.il" target="_blank" rel="noopener">מרכז מיפוי ישראל</a>';
 
-/**
- * Returns a MapLibre raster source definition for the govmap orthophotos.
- * Pass to `omtStyle` / `fallbackStyle` via the `satellite` option.
- */
+/** Opaque area fills that would hide the photo; in "hybrid" mode they only draw below zoom 7. */
+const SATELLITE_HIDES = new Set(['landcover', 'landuse', 'park', 'water', 'aeroway-area', 'building']);
+
+/** MapLibre raster source for the govmap orthophotos (through our caching proxy). */
 export function satelliteSource() {
   return {
     type: 'raster',
@@ -132,22 +131,23 @@ export function satelliteSource() {
 }
 
 /**
- * Inject the satellite raster layer at the very bottom of an existing style
- * (before `background`), so vector layers render on top.
- * `opacity` (0–1, default 0.85) controls blending.
- * Idempotent: safe to call even if the source is already present.
+ * Hybrid view: the photo goes right ABOVE `background` and below everything else, so roads,
+ * borders, labels and the overlays stay on top.  The opaque land/water/building fills are
+ * limited to zooms below the photo's minzoom (7) – otherwise they would cover it.
+ * Idempotent: safe to call on a style that already has the layer.
  */
-export function addSatellite(style, opacity = 0.85) {
-  if (!style.sources.satellite) {
-    style.sources.satellite = satelliteSource();
-  }
-  if (!style.layers.find((l) => l.id === 'satellite')) {
-    style.layers.unshift({
-      id: 'satellite',
-      type: 'raster',
-      source: 'satellite',
-      paint: { 'raster-opacity': opacity, 'raster-saturation': 0.05 },
-    });
+export function addSatellite(style, opacity = 1) {
+  if (!style.sources.satellite) style.sources.satellite = satelliteSource();
+  if (style.layers.some((l) => l.id === 'satellite')) return style;
+  const bg = style.layers.findIndex((l) => l.type === 'background');
+  style.layers.splice(bg + 1, 0, {
+    id: 'satellite',
+    type: 'raster',
+    source: 'satellite',
+    paint: { 'raster-opacity': opacity, 'raster-fade-duration': 150 },
+  });
+  for (const l of style.layers) {
+    if (SATELLITE_HIDES.has(l.id)) l.maxzoom = 7;
   }
   return style;
 }
@@ -430,7 +430,7 @@ export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = fal
   };
   const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'aeroway-area', 'water-name') : style;
   if (satellite !== false && satellite != null) {
-    addSatellite(result, typeof satellite === 'number' ? satellite : 0.85);
+    addSatellite(result, typeof satellite === 'number' ? satellite : 1);
   }
   return result;
 }
@@ -478,7 +478,7 @@ export function fallbackStyle(themeName, { tiles, glyphs, terrain, satellite = f
   };
   const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'boundaries', 'street-names') : style;
   if (satellite !== false && satellite != null) {
-    addSatellite(result, typeof satellite === 'number' ? satellite : 0.85);
+    addSatellite(result, typeof satellite === 'number' ? satellite : 1);
   }
   return result;
 }

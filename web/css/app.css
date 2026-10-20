@@ -320,6 +320,13 @@ main { position: absolute; inset: 0; }
 .swatch-dark { background: linear-gradient(135deg, #1B1E23 45%, #0F2A43 45% 60%, #7F5E22 60% 66%, #1B1E23 66%); }
 .switch { display: flex; align-items: center; gap: var(--space-2); padding: 6px 0; cursor: pointer; }
 .switch input { width: 18px; height: 18px; accent-color: var(--primary); }
+.sat-offline { margin: 0 0 var(--space-2); }
+.sat-offline .popover-btn { margin-top: 0; height: auto; min-height: 32px; padding-block: 6px; line-height: 1.35; white-space: normal; }
+.sat-confirm { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.sat-confirm .btn { flex: 1; }
+.sat-progress { display: block; width: 100%; height: 8px; margin-top: var(--space-2); accent-color: var(--primary); }
+.sat-status { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.5; }
+.sat-status:empty { display: none; }
 .segmented { display: flex; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .segmented label { flex: 1; text-align: center; cursor: pointer; }
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
