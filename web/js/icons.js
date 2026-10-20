@@ -99,6 +99,7 @@ export const ICONS = {
   chevron: 'M6 9l6 6 6-6',
   wheelchair: 'M11 4.5h.01M10 8v6h6l2 5M10 11h5M7.5 11.5a5 5 0 1 0 7 6',
   check: 'M5 12l5 5 9-10',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   moon: 'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   list: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',

@@ -397,6 +397,7 @@ const app = {
     });
     const satEl = $('#toggle-satellite');
     if (satEl) satEl.checked = !!store.get('satellite', false);
+    this._bindSatelliteSave();
     const kosher = $('#toggle-kosher');
     kosher.checked = !!store.get('kosherOnly', false);
     kosher.addEventListener('change', () => {
@@ -405,6 +406,134 @@ const app = {
       this.map.setPoiFilter({ cats: this.activeChip ? [this.activeChip] : [], kosher: kosher.checked });
       announce(kosher.checked ? 'מוצגים רק מקומות כשרים' : 'מוצגים כל המקומות');
     });
+  },
+
+  // ------------------------------------------------------------------ satellite offline area
+  /** "שמירת האזור הנוכחי": estimate → confirm → background download on the server, with progress. */
+  _bindSatelliteSave() {
+    const btn = $('#btn-sat-save');
+    if (!btn) return;
+    const confirmBox = $('#sat-save-confirm');
+    const goBtn = $('#btn-sat-save-go');
+    const cancelBtn = $('#btn-sat-save-cancel');
+    const bar = $('#sat-save-progress');
+    const status = $('#sat-save-status');
+    const label = btn.lastChild;
+    const LABEL = label.textContent;
+    const fmt = (n) => Number(n).toLocaleString('he-IL');
+    const mb = (b) => (b >= 1e6 ? `${fmt(Math.round(b / 1e6))}MB` : `${fmt(Math.max(1, Math.round(b / 1e3)))}KB`);
+    let pending = null; // {bbox, minzoom, maxzoom}
+    let timer = null;
+    let lastBucket = -1;
+
+    const setRunning = (on) => {
+      label.textContent = on ? 'עצירת ההורדה' : LABEL;
+      btn.dataset.running = on ? '1' : '';
+      bar.hidden = !on;
+    };
+    const finish = (job) => {
+      clearInterval(timer);
+      timer = null;
+      setRunning(false);
+      const msg = {
+        done: `האזור נשמר: ${fmt(job.fetched)} אריחים חדשים (${mb(job.bytes)}), ${fmt(job.skipped)} כבר היו שמורים. התצלומים יוצגו גם בלי אינטרנט.`,
+        cancelled: `ההורדה נעצרה (${fmt(job.done)} מתוך ${fmt(job.total)}). אפשר להמשיך מאותה נקודה בלחיצה נוספת.`,
+        error: 'ההורדה נעצרה: אין חיבור לשרת תצלומי האוויר. מה שכבר ירד נשמר – נסו שוב כשיש אינטרנט.',
+      }[job.state] || '';
+      status.textContent = msg;
+    };
+    const show = (job) => {
+      bar.value = job.percent;
+      bar.setAttribute('aria-valuetext', `${job.percent}%`);
+      const bucket = Math.floor(job.percent / 10);
+      if (bucket !== lastBucket) { // the live region speaks every 10%, not every second
+        lastBucket = bucket;
+        status.textContent = `מוריד תצלומי אוויר: ${Math.floor(job.percent)}% (${fmt(job.done)} מתוך ${fmt(job.total)})`;
+      }
+    };
+    const poll = async () => {
+      try {
+        const st = await api.satelliteStatus();
+        const job = st.job;
+        if (!job) return finish({ state: '' });
+        if (job.state === 'running' || job.state === 'pending') show(job);
+        else finish(job);
+      } catch {
+        /* server busy – try again on the next tick */
+      }
+    };
+    const watch = () => {
+      setRunning(true);
+      lastBucket = -1;
+      clearInterval(timer);
+      timer = setInterval(poll, 1000);
+      poll();
+    };
+
+    btn.addEventListener('click', async () => {
+      if (btn.dataset.running) {
+        try { await api.satelliteCancel(); } catch { /* the next poll shows the state */ }
+        return;
+      }
+      const m = this.map.map;
+      const b = m.getBounds();
+      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => +v.toFixed(5));
+      const minzoom = Math.max(7, Math.floor(m.getZoom()));
+      status.textContent = 'מחשב את גודל ההורדה…';
+      confirmBox.hidden = true;
+      try {
+        // the deepest zoom (up to +3, max 18) that still fits the per-download limit
+        let est = null;
+        let maxzoom = Math.min(minzoom + 3, 18);
+        for (; maxzoom >= minzoom; maxzoom--) {
+          est = await api.satelliteEstimate(bbox, minzoom, maxzoom);
+          if (!est.too_many) break;
+        }
+        if (!est || est.too_many || maxzoom < minzoom) {
+          status.textContent = 'האזור גדול מדי לשמירה בבת אחת. הגדילו את המפה (התקרבו) ונסו שוב.';
+          return;
+        }
+        if (est.tiles === 0) {
+          status.textContent = 'האזור שבמפה מחוץ לכיסוי תצלומי האוויר (ישראל).';
+          return;
+        }
+        if (est.missing === 0) {
+          status.textContent = `כל ${fmt(est.tiles)} האריחים של האזור (זום ${minzoom}–${maxzoom}) כבר שמורים במחשב.`;
+          return;
+        }
+        pending = { bbox, minzoom, maxzoom };
+        status.textContent = `להוריד ${fmt(est.missing)} אריחים (כ-${mb(est.bytes_estimate)}), זום ${minzoom}–${maxzoom}?`
+          + (est.cached ? ` ${fmt(est.cached)} כבר שמורים.` : '');
+        confirmBox.hidden = false;
+        goBtn.focus();
+      } catch (e) {
+        status.textContent = e.message;
+      }
+    });
+    cancelBtn.addEventListener('click', () => {
+      pending = null;
+      confirmBox.hidden = true;
+      status.textContent = '';
+      btn.focus();
+    });
+    goBtn.addEventListener('click', async () => {
+      if (!pending) return;
+      confirmBox.hidden = true;
+      const { bbox, minzoom, maxzoom } = pending;
+      pending = null;
+      try {
+        await api.satelliteDownload(bbox, minzoom, maxzoom);
+        if (!$('#toggle-satellite').checked) $('#toggle-satellite').click();
+        watch();
+        btn.focus();
+      } catch (e) {
+        status.textContent = e.message;
+      }
+    });
+    // a download started earlier (or from another tab) keeps showing its progress
+    api.satelliteStatus().then((st) => {
+      if (st.job && (st.job.state === 'running' || st.job.state === 'pending')) watch();
+    }).catch(() => {});
   },
 
   // ------------------------------------------------------------------ geolocation

@@ -74,6 +74,15 @@
       <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
       <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
       <label class="switch"><input type="checkbox" id="toggle-satellite"><span>תצלום אווירי (אורתופוטו)</span></label>
+      <div class="sat-offline" id="sat-offline">
+        <button type="button" id="btn-sat-save" class="btn btn-secondary btn-sm popover-btn" aria-describedby="sat-save-status"><span data-icon="download"></span>שמירת האזור הנוכחי לשימוש אופליין</button>
+        <div id="sat-save-confirm" class="sat-confirm" hidden>
+          <button type="button" id="btn-sat-save-go" class="btn btn-primary btn-sm">הורדה</button>
+          <button type="button" id="btn-sat-save-cancel" class="btn btn-secondary btn-sm">ביטול</button>
+        </div>
+        <progress id="sat-save-progress" class="sat-progress" max="100" value="0" aria-label="התקדמות שמירת תצלומי האוויר" hidden></progress>
+        <p id="sat-save-status" class="sat-status" role="status" aria-live="polite"></p>
+      </div>
       <button type="button" id="btn-hikes-near" class="btn btn-secondary btn-sm popover-btn"><span data-icon="hiker"></span>מסלולי טיול באזור</button>
       <label class="switch"><input type="checkbox" id="toggle-kosher"><span>להציג רק מקומות כשרים</span></label>
       <h3 class="popover-sub">מראה הממשק</h3>

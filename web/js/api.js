@@ -85,4 +85,11 @@ export const api = {
   transitStatus: () => request('/api/transit/status'),
   minyanimNear: (lat, lon, { radius, prayer, after, day } = {}, signal) =>
     request('/api/minyanim/near', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6), radius, prayer, after, day }, signal }),
+  // aerial photos kept offline (hmaps/api/satellite.py)
+  satelliteStatus: () => request('/api/satellite/status'),
+  satelliteEstimate: (bbox, minzoom, maxzoom) =>
+    request('/api/satellite/estimate', { params: { bbox: bbox.join(','), minzoom, maxzoom } }),
+  satelliteDownload: (bbox, minzoom, maxzoom) =>
+    request('/api/satellite/download', { method: 'POST', body: { bbox, minzoom, maxzoom } }),
+  satelliteCancel: () => request('/api/satellite/download/cancel', { method: 'POST', body: {} }),
 };
