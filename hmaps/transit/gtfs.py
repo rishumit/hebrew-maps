@@ -8,10 +8,10 @@ numpy. Peak memory on the full feed is well under 2 GB.
 Store layout (all numpy arrays in one ``.npz``; strings are UTF-8 blobs joined by ``\\n``):
 
 * stops     – ``stop_lat/lon`` (float32), ``stop_code``, ``stop_parent``, names / cities / platforms / GTFS ids
-* routes    – ``route_agency``, ``route_type``, ``route_color`` (0xRRGGBB or -1), short / long names
+* routes    – ``route_agency``, ``route_type``, ``route_color`` (0xRRGGBB or -1), short / long names, GTFS ``route_ids``
 * patterns  – trips of one route that serve exactly the same stop sequence with the same pickup/drop-off
   rules. ``pat_ptr`` (CSR) → ``pat_stops`` / ``pat_flags`` (bit 1 = no pickup, bit 2 = no drop-off) /
-  ``pat_shape_pos`` (index of the stop in the shape polyline)
+  ``pat_shape_pos`` (index of the stop in the shape polyline); ``pat_dir`` = GTFS ``direction_id`` (-1 if none)
 * trips     – sorted by (pattern, first departure); ``pat_trips`` (CSR) → ``trip_start`` (seconds of the
   service day, may exceed 24h), ``trip_end``, ``trip_prof``, ``trip_service``, ``trip_headsign``
 * profiles  – de-duplicated relative timetables (``prof_ptr`` → ``prof_arr`` / ``prof_dep``, seconds
@@ -189,7 +189,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
     # --- routes
     route_idx: dict[str, int] = {}
     r_agency, r_type, r_color, r_tcolor = array("i"), array("i"), array("i"), array("i")
-    r_short, r_long = [], []
+    r_short, r_long, r_ids = [], [], []
     for idx, row in gz.rows("routes.txt"):
         try:
             rtype = int(_get(idx, row, "route_type") or 3)
@@ -198,6 +198,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
         if rtype in SKIP_ROUTE_TYPES:
             continue
         route_idx[_get(idx, row, "route_id")] = len(r_short)
+        r_ids.append(_get(idx, row, "route_id"))
         r_agency.append(agency_idx.get(_get(idx, row, "agency_id"), 0) if agencies else 0)
         r_type.append(rtype)
         col = _get(idx, row, "route_color")
@@ -283,6 +284,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
     # --- trips
     trip_idx: dict[str, int] = {}
     t_route, t_service, t_head, t_shape = array("i"), array("i"), array("i"), array("i")
+    t_dir = array("b")
     heads, shapes = _Intern(), _Intern()
     for idx, row in gz.rows("trips.txt"):
         r = route_idx.get(_get(idx, row, "route_id"))
@@ -294,6 +296,8 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
         t_service.append(s)
         t_head.append(heads(clean_name(_get(idx, row, "trip_headsign").replace("_", " - "))))
         t_shape.append(shapes(_get(idx, row, "shape_id")))
+        dval = _get(idx, row, "direction_id")
+        t_dir.append(int(dval) if dval in ("0", "1") else -1)
     n_trips_in = len(t_route)
     log.info("trips: %d", n_trips_in)
 
@@ -439,6 +443,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
     pat_flags = flag_a[src].astype(np.int8)
     pat_dist = dist_a[src]
     pat_shape = np.frombuffer(t_shape, dtype=np.int32)[trips_of[pat_rep_a]]
+    pat_dir = np.frombuffer(t_dir, dtype=np.int8)[trips_of[pat_rep_a]].copy()
     del src, six_a, flag_a, dist_a
 
     # trips sorted by (pattern, first departure)
@@ -476,6 +481,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
         "route_color": np.frombuffer(r_color, dtype=np.int32).copy(),
         "route_text_color": np.frombuffer(r_tcolor, dtype=np.int32).copy(),
         "route_short": pack(r_short), "route_long": pack(r_long), "agency_names": pack(agencies),
+        "route_ids": pack(r_ids), "pat_dir": pat_dir,
         "pat_route": np.frombuffer(pat_route, dtype=np.int32).copy(), "pat_ptr": pat_ptr, "pat_stops": pat_stops,
         "pat_flags": pat_flags, "pat_trips": pat_trips,
         "trip_start": trip_start, "trip_end": trip_end, "trip_prof": trip_prof.astype(np.int32),
@@ -485,7 +491,7 @@ def build(zip_path: Path, out_dir: Path, source: str = "") -> dict:
         "prof_ptr": prof_ptr, "prof_arr": prof_arr, "prof_dep": prof_dep,
         "svc_days": svc_days,
     })
-    del t_route, t_service, t_head, trip_idx, stop_idx
+    del t_route, t_service, t_head, t_dir, trip_idx, stop_idx
 
     # --- shapes
     shape_names = shapes.list()

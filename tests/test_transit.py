@@ -62,8 +62,8 @@ class TransitEngineTest(unittest.TestCase):
         d = self.data
         self.assertEqual(d.meta["start"], "2026-10-01")
         self.assertEqual(d.meta["end"], "2026-11-30")
-        self.assertEqual(d.meta["routes"], 4)  # the demand-responsive route (715) is skipped
-        self.assertEqual(d.meta["trips"], 9)
+        self.assertEqual(d.meta["routes"], 6)  # the demand-responsive route (715) is skipped
+        self.assertEqual(d.meta["trips"], 14)
         self.assertTrue((self.dir / "transit.current").exists())
         meta = json.loads((self.dir / "transit.json").read_text(encoding="utf-8"))
         self.assertEqual(meta["file"], (self.dir / "transit.current").read_text(encoding="utf-8").strip())
@@ -205,6 +205,100 @@ class TransitEngineTest(unittest.TestCase):
         self.assertEqual(res["stop"]["code"], 1000)
         self.assertIn("קו 3", [x["line"] for x in res["lines"]])
 
+    # ------------------------------------------------------------------ lines at a stop / line view
+    def test_natural_sort(self):
+        names = ["10", "2", "", "L1", "1א", "1"]
+        self.assertEqual(sorted(names, key=self.planner.natural_key), ["1", "1א", "2", "10", "L1", ""])
+
+    def test_stop_routes_merges_directions(self):
+        d = self.data
+        res = self.planner.stop_routes(d, d.id_index["B"])
+        self.assertEqual(res["stop"]["id"], "B")
+        self.assertEqual([g["type"] for g in res["groups"]], ["bus"])
+        lines = res["groups"][0]["lines"]
+        self.assertEqual(len(lines), 1)  # r1 and its return route r1b are one line
+        ln = lines[0]
+        self.assertEqual(ln["route_short_name"], "1")
+        self.assertEqual(ln["agency"], "אגד")
+        self.assertEqual(ln["route_ids"], ["r1", "r1b"])
+        self.assertEqual([x["headsign"] for x in ln["directions"]], ["גימל", "אלף"])
+        self.assertEqual([x["route_id"] for x in ln["directions"]], ["r1", "r1b"])
+        self.assertFalse(ln["terminates"])
+        # the short-turn variant ends at B: its headsign is not offered for boarding here
+        self.assertNotIn("בית", [x["headsign"] for x in ln["directions"]])
+
+    def test_stop_routes_groups_and_order(self):
+        d = self.data
+        res = self.planner.stop_routes(d, d.id_index["F"])
+        self.assertEqual([g["type"] for g in res["groups"]], ["rail", "bus"])  # rail first
+        self.assertEqual(res["groups"][0]["mode_he"], "רכבות")
+        self.assertEqual(res["groups"][0]["lines"][0]["directions"][0]["headsign"], "תחנת חית, חדרה")
+        # the Egged "1" up north is not the Tel Aviv line 1
+        self.assertEqual(res["groups"][1]["lines"][0]["route_ids"], ["r1n"])
+        self.assertEqual(res["count"], 2)
+        res = self.planner.stop_routes(d, d.id_index["E"])
+        lines = res["groups"][0]["lines"]
+        self.assertEqual([x["route_short_name"] for x in lines], ["2", "3"])  # line 3 only ends here → last
+        self.assertEqual(lines[0]["directions"][0]["headsign"], "גימל 2")
+        self.assertEqual(lines[0]["directions"][0]["direction"], 1)
+        self.assertTrue(lines[1]["terminates"])
+        self.assertEqual(lines[1]["directions"], [])
+
+    def test_line_view(self):
+        d = self.data
+        v = self.planner.line_view(d, d.route_index["r1"], None, d.id_index["B"])
+        self.assertEqual(v["route"]["line"], "קו 1")
+        self.assertEqual(v["route"]["id"], "r1")
+        self.assertEqual([s["id"] for s in v["stops"]], ["A", "B", "C"])  # the common pattern, not the short turn
+        self.assertEqual([s["offset"] for s in v["stops"]], [0, 300, 600])
+        self.assertEqual(v["from_index"], 1)
+        self.assertEqual(v["headsign"], "גימל")
+        self.assertFalse(v["stops"][-1]["pickup"])
+        self.assertGreaterEqual(len(v["geometry"]["coordinates"]), 4)  # shapes.txt
+        opts = {(o["route_id"], o["direction"]): o for o in v["directions"]}
+        self.assertEqual(set(opts), {("r1", 0), ("r1b", 0)})
+        self.assertTrue(opts[("r1", 0)]["current"])
+        self.assertEqual(opts[("r1b", 0)]["headsign"], "אלף")
+        self.assertTrue(opts[("r1b", 0)]["serves_stop"])
+        # the return route, coming from C
+        v = self.planner.line_view(d, d.route_index["r1b"], None, d.id_index["C"])
+        self.assertEqual([s["id"] for s in v["stops"]], ["C", "B", "A"])
+        self.assertEqual(v["from_index"], 0)
+        self.assertEqual(len(v["geometry"]["coordinates"]), 3)  # no shape: straight between stops
+        # two directions in one route (direction_id)
+        r2 = d.route_index["r2"]
+        v = self.planner.line_view(d, r2, None, d.id_index["E"])
+        self.assertEqual(v["direction"], 1)
+        self.assertEqual([s["id"] for s in v["stops"]], ["E", "D", "C2"])
+        v = self.planner.line_view(d, r2, 0)
+        self.assertEqual([s["id"] for s in v["stops"]], ["C2", "D", "E"])
+        self.assertIsNone(v["from_index"])
+        self.assertEqual(len(v["directions"]), 2)
+        with self.assertRaises(self.planner.TransitError):
+            self.planner.line_view(d, r2, 5)
+
+    def test_route_ids_on_boards_and_legs(self):
+        d = self.data
+        res = self.planner.departures(d, d.id_index["A"], self.planner.parse_time(f"{gtfs_fixture.WEDNESDAY}T07:00"))
+        self.assertEqual(res["departures"][0]["route_id"], "r1")
+        it = self.plan(A, C, f"{gtfs_fixture.WEDNESDAY}T07:55")["itineraries"][0]
+        self.assertEqual(self.rides(it)[0]["route_id"], "r1")
+
+    def test_old_store_without_route_ids(self):
+        import numpy as np
+
+        from hmaps.transit import data
+
+        root = Path(tempfile.mkdtemp(prefix="hmaps-transit-old-"))
+        with np.load(self.data.path) as z:
+            arrs = {k: z[k] for k in z.files if k not in ("route_ids", "pat_dir")}
+        np.savez(root / "transit.npz", **arrs)
+        old = data.TransitData(root / "transit.npz")
+        self.assertEqual(old.route_ids[0], "0")
+        v = self.planner.line_view(old, 0)
+        self.assertEqual([s["id"] for s in v["stops"]], ["A", "B", "C"])
+        self.assertEqual(self.planner.find_route(old, "0"), 0)
+
     def test_status_freshness(self):
         from datetime import date
         st = self.planner.status(self.data, today=date(2026, 10, 14))
@@ -278,6 +372,33 @@ class TransitApiTest(unittest.TestCase):
         s, body, _ = self.api.get("/api/transit/stops", lat="32.0", lon="34.82", radius="300")
         self.assertEqual(s, 200)
         self.assertEqual({x["id"] for x in body["stops"]}, {"C", "C2"})
+
+    def test_stop_routes_and_route(self):
+        s, body, h = self.api.get("/api/transit/stop/B/routes")
+        self.assertEqual(s, 200, body)
+        self.assertEqual(body["groups"][0]["lines"][0]["route_ids"], ["r1", "r1b"])
+        self.assertIn("max-age", h.get("cache-control", ""))
+        s, body, _ = self.api.get("/api/transit/stop/code-1001/routes")
+        self.assertEqual(body["stop"]["id"], "B")
+        s, body, _ = self.api.get("/api/transit/stop/nope/routes")
+        self.assertEqual(s, 404)
+        s, body, h = self.api.get("/api/transit/route/r1", from_stop="B")
+        self.assertEqual(s, 200, body)
+        self.assertEqual([x["name"] for x in body["stops"]], ["אלף/הרצל", "בית/בוגרשוב", "גימל/מרכז"])
+        self.assertEqual(body["from_index"], 1)
+        self.assertEqual(body["geometry"]["type"], "LineString")
+        s, body, _ = self.api.get("/api/transit/route/r2", direction="1")
+        self.assertEqual([x["id"] for x in body["stops"]], ["E", "D", "C2"])
+        for params, code in (({"direction": "x"}, 400), ({"direction": "7"}, 400), ({"from_stop": "nope"}, 404)):
+            s, body, _ = self.api.get("/api/transit/route/r1", **params)
+            self.assertEqual(s, code, params)
+        s, body, _ = self.api.get("/api/transit/route/nope")
+        self.assertEqual(s, 404)
+        self.assertEqual(body["error"]["code"], "not_found")
+        s, body, _ = self.api_empty.get("/api/transit/route/r1")
+        self.assertEqual(s, 503)
+        s, body, _ = self.api_empty.get("/api/transit/stop/A/routes")
+        self.assertEqual(s, 503)
 
     def test_status(self):
         s, body, _ = self.api.get("/api/transit/status")

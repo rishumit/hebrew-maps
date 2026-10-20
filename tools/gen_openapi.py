@@ -163,11 +163,43 @@ spec["paths"].update({
     "/api/transit/stop/{id}": {"get": {"summary": "היציאות הקרובות מתחנה", "parameters": [
         p("id", "stop_id של GTFS, או code-<מספר התחנה>"), q("time", "ISO 8601"), q("limit", "", "integer")],
         "responses": ok("תחנה, קווים ויציאות")}},
+    "/api/transit/stop/{id}/routes": {"get": {"summary": "כל הקווים שעוברים בתחנה, לפי סוג תחבורה וממוינים לפי מספר הקו",
+        "parameters": [p("id", "stop_id של GTFS, או code-<מספר התחנה>")],
+        "responses": {**ok("תחנה וקבוצות קווים", {"type": "object", "properties": {
+            "stop": {"type": "object"}, "count": {"type": "integer"},
+            "groups": {"type": "array", "items": {"type": "object", "properties": {
+                "type": {"type": "string"}, "mode_he": {"type": "string"},
+                "lines": {"type": "array", "items": {"$ref": "#/components/schemas/TransitLine"}}}}}}}),
+            "404": {"description": "התחנה לא נמצאה"}}}},
+    "/api/transit/route/{id}": {"get": {"summary": "קו: רשימת התחנות המלאה של כיוון אחד (התבנית הנפוצה), המסלול והכיוונים",
+        "parameters": [p("id", "route_id של GTFS (route_id מהיציאות / מקטעי הנסיעה / קווי התחנה)"),
+                       q("direction", "מספר הכיוון ברשימת directions (ברירת מחדל: הכיוון שעוצר ב-from_stop)", "integer"),
+                       q("from_stop", "stop_id של התחנה שממנה הגיעו (מסומנת ברשימה)")],
+        "responses": {**ok("קו", {"type": "object", "properties": {
+            "route": {"type": "object"}, "direction": {"type": "integer"}, "headsign": {"type": "string"},
+            "directions": {"type": "array", "items": {"type": "object", "properties": {
+                "route_id": {"type": "string"}, "direction": {"type": "integer"}, "headsign": {"type": "string"},
+                "from": {"type": "string"}, "to": {"type": "string"}, "num_stops": {"type": "integer"},
+                "serves_stop": {"type": "boolean"}, "current": {"type": "boolean"}}}},
+            "from_index": {"type": ["integer", "null"]},
+            "stops": {"type": "array", "items": {"type": "object", "description": "תחנה + offset (שניות מתחילת הנסיעה), pickup, drop_off"}},
+            "geometry": {"type": "object", "description": "GeoJSON LineString (shapes.txt, או קו בין התחנות)"}}}),
+            "404": {"description": "הקו או התחנה לא נמצאו"}}}},
     "/api/transit/stops": {"get": {"summary": "תחנות בסביבה", "parameters": [
         q("lat", "", "number", required=True), q("lon", "", "number", required=True), q("radius", "מטרים", "number")],
         "responses": ok("תחנות")}},
     "/api/transit/status": {"get": {"summary": "תאריכי לוח הזמנים ועדכניות הנתונים", "responses": ok("מצב")}},
 })
+
+spec["components"]["schemas"]["TransitLine"] = {"type": "object", "properties": {
+    "id": {"type": "string", "description": "route_id המייצג (הנפוץ בתחנה)"}, "line": {"type": "string"},
+    "route_short_name": {"type": ["string", "null"]}, "type": {"type": "string"}, "mode_he": {"type": "string"},
+    "agency": {"type": "string"}, "color": {"type": "string"}, "text_color": {"type": "string"},
+    "route_ids": {"type": "array", "items": {"type": "string"}, "description": "כל ה-route_id של הקו (כיוונים וחלופות)"},
+    "terminates": {"type": "boolean", "description": "הקו רק מסיים בתחנה (אין עלייה)"},
+    "directions": {"type": "array", "items": {"type": "object", "properties": {
+        "route_id": {"type": "string"}, "direction": {"type": "integer"}, "direction_id": {"type": ["integer", "null"]},
+        "headsign": {"type": "string"}, "trips": {"type": "integer"}}}}}}
 
 # synagogue prayer times (hmaps/api/minyanim.py, data: hmaps/etl/zmanim.py – Nedarim Plus)
 Minyan = {"type": "object", "properties": {

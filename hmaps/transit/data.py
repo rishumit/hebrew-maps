@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 import threading
 from datetime import date, timedelta
 from pathlib import Path
@@ -58,6 +59,10 @@ class TransitData:
         self.route_long = unpack(d.pop("route_long"))
         self.agency_names = unpack(d.pop("agency_names"))
         self.headsigns = unpack(d.pop("headsigns"))
+        # stores built before route ids / directions were kept: fall back to indexes / "unknown"
+        self.route_ids = unpack(d.pop("route_ids")) if "route_ids" in d else [str(i) for i in range(len(d["route_type"]))]
+        if "pat_dir" not in d:
+            d["pat_dir"] = np.full(len(d["pat_route"]), -1, dtype=np.int8)
         for k, v in d.items():
             setattr(self, k, v)
         self.start = date.fromisoformat(self.meta["start"])
@@ -85,6 +90,8 @@ class TransitData:
         self._uy = self.stop_lat[self.used_ids].astype(np.float64) * self._ky
         self.id_index = {s: i for i, s in enumerate(self.stop_ids)}
         self._active: dict[int, np.ndarray] = {}
+        self.route_index = {r: i for i, r in enumerate(self.route_ids)}
+        self._lines: tuple | None = None
         self._lock = threading.Lock()
         typ = self.route_type[self.pat_route]
         self.pat_mode = [mode_of(int(t))[0] for t in typ]
@@ -136,6 +143,80 @@ class TransitData:
         return {"id": self.stop_ids[s], "name": self.stop_names[s], "code": code if code >= 0 else None,
                 "city": self.city_names[self.stop_city[s]] or None, "platform": plat or None,
                 "lat": round(float(self.stop_lat[s]), 6), "lon": round(float(self.stop_lon[s]), 6)}
+
+    # ------------------------------------------------------------------ lines
+    def lines(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """(route → line id, route_pats_ptr, route_pats) – built once on first use.
+
+        A *line* is what a passenger calls "line 18 of Egged in Jerusalem": the MoT feed has a separate
+        ``route_id`` per direction and per variant, so routes of one agency with the same number and
+        mode whose areas touch are joined. Routes without a number (Israel Railways) are joined by
+        the unordered pair of end points in ``route_long_name`` ("A<->B" and "B<->A").
+        """
+        if self._lines is None:
+            with self._lock:
+                if self._lines is None:
+                    self._lines = self._build_lines()
+        return self._lines
+
+    def _build_lines(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        n_routes = len(self.route_type)
+        o = np.argsort(self.pat_route, kind="stable").astype(np.int32)
+        ptr = np.zeros(n_routes + 1, dtype=np.int64)
+        np.add.at(ptr, self.pat_route + 1, 1)
+        ptr = np.cumsum(ptr)
+        # per-route bounding box of the stops it serves
+        pos_route = np.repeat(self.pat_route, self.pat_len)
+        lat = self.stop_lat[self.pat_stops].astype(np.float64)
+        lon = self.stop_lon[self.pat_stops].astype(np.float64)
+        box = np.empty((n_routes, 4))
+        box[:, 0] = box[:, 1] = np.inf
+        box[:, 2] = box[:, 3] = -np.inf
+        np.minimum.at(box[:, 0], pos_route, lat)
+        np.minimum.at(box[:, 1], pos_route, lon)
+        np.maximum.at(box[:, 2], pos_route, lat)
+        np.maximum.at(box[:, 3], pos_route, lon)
+        pad = 0.012  # ≈ 1.2 km: a return route ends at a nearby terminal
+        groups: dict[tuple, list[int]] = {}
+        for r in range(n_routes):
+            mode = mode_of(int(self.route_type[r]))[0]
+            short = self.route_short[r]
+            if short:
+                key = (int(self.route_agency[r]), mode, short)
+            else:
+                ends = [re.sub(r"-[0-9#]+$", "", x).strip() for x in self.route_long[r].split("<->")]
+                key = (int(self.route_agency[r]), mode, "", tuple(sorted(ends)) if len(ends) == 2 else (str(r),))
+            groups.setdefault(key, []).append(r)
+        line = np.arange(n_routes, dtype=np.int32)
+        for rs in groups.values():
+            if len(rs) < 2:
+                continue
+            comps: list[list] = []  # [box, routes]
+            for r in rs:
+                b = box[r].copy()
+                if not np.isfinite(b).all():
+                    comps.append([b, [r]])
+                    continue
+                hit = [c for c in comps if np.isfinite(c[0]).all() and b[0] - pad <= c[0][2] and c[0][0] - pad <= b[2]
+                       and b[1] - pad <= c[0][3] and c[0][1] - pad <= b[3]]
+                merged = [b, [r]]
+                for c in hit:
+                    comps.remove(c)
+                    merged[0] = np.r_[np.minimum(merged[0][:2], c[0][:2]), np.maximum(merged[0][2:], c[0][2:])]
+                    merged[1] += c[1]
+                comps.append(merged)
+            for _, members in comps:
+                line[members] = min(members)
+        return line, ptr, o
+
+    def line_routes(self, route: int) -> list[int]:
+        line = self.lines()[0]
+        lid = line[route]
+        return [route] + [int(r) for r in np.flatnonzero(line == lid) if r != route]
+
+    def route_patterns(self, route: int) -> np.ndarray:
+        _, ptr, o = self.lines()
+        return o[ptr[route]:ptr[route + 1]]
 
     def trip_times(self, trip: int) -> tuple[np.ndarray, np.ndarray]:
         """(arrival, departure) seconds of the service day for every stop of *trip*."""
