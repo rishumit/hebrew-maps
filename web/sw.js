@@ -1,5 +1,5 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.3.6';
+const VERSION = 'hmaps-1.3.7';
 const SHELL_CACHE = `${VERSION}-shell`;
 const TILE_CACHE = 'hmaps-tiles-v1';
 const MAX_TILES = 4000;
@@ -12,6 +12,7 @@ const SHELL = [
   '/js/transit.js', '/css/transit.css',
   '/js/minyanim.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
+  '/js/updates.js', '/css/updates.css',
 ];
 
 self.addEventListener('install', (event) => {
