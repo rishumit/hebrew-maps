@@ -130,6 +130,7 @@ POST /api/search
           "geometry": {"type": "LineString", "coordinates": […]} } ] } ],
   "feed": { "feed_start": "2026-10-13", "feed_end": "2026-11-12", "freshness": "ok", "warning": null } }
 ```
+- **`route_id`:** בכל קטע נסיעה (וגם בכל יציאה בלוח התחנה) – מזהה הקו ב-GTFS, לפתיחת תצוגת הקו (`/api/transit/route/{id}`).
 - **סוגי קטעים (`type`):** ‏`walk`, ‏`bus`, ‏`rail`, ‏`light_rail`, ‏`subway`, ‏`funicular` (הכרמלית), ‏`cable_car`, ‏`share_taxi`, ‏`ferry`. ל-`walk` יש גם `kind`, אחד מ-`access`, ‏`transfer`, ‏`egress`.
 - **תגיות (`tags`):** ‏`earliest_arrival`, ‏`latest_departure` (במצב "הגעה עד"), ‏`fastest`, ‏`fewest_transfers`, ‏`least_walking`, ‏`walk_only`.
 - **`reason` ו-`notice`:** מסבירים מצב חריג.
@@ -148,6 +149,41 @@ POST /api/search
 
 ### `GET /api/transit/stop/{id}?time=ISO&limit=20`
 היציאות הקרובות מתחנה (בשלוש השעות הבאות). `id` הוא ה-`stop_id` שמופיע ב-`from`/`to` של קטע נסיעה, או `code-<מספר התחנה>` (המספר שעל השלט). התשובה כוללת `stop`, את `lines` (הקווים שעוצרים בתחנה, עם צבעים) ואת `departures`. בכל יציאה יש `time_text`, ‏`minutes`, ‏`line`, ‏`headsign`, ‏`agency` ו-`color`.
+
+### `GET /api/transit/stop/{id}/routes`
+כל הקווים שעוברים בתחנה, ולא רק היציאות הקרובות. הקווים מקובצים לפי סוג תחבורה (רכבת, רכבת קלה, מטרו, אוטובוסים…) וממוינים לפי מספר הקו בסדר טבעי (1, 1א, 2, 10…). בקובץ של משרד התחבורה לכל כיוון ולכל חלופה יש `route_id` משלו. לכן מסלולים של אותו מפעיל, עם אותו מספר ואותו סוג, שהאזורים שלהם נוגעים זה בזה, מאוחדים לקו אחד. רכבות (בלי מספר קו) מאוחדות לפי זוג התחנות הסופיות. התשובה נשמרת במטמון 10 דקות.
+```json
+{ "stop": {"id": "…", "name": "…", "code": 1001},
+  "count": 1,
+  "groups": [ { "type": "bus", "mode_he": "אוטובוסים", "lines": [
+      { "id": "r1", "line": "קו 1", "route_short_name": "1", "agency": "אגד", "type": "bus", "color": "#15803D", "text_color": "#FFFFFF",
+        "route_ids": ["r1", "r1b"], "terminates": false,
+        "directions": [ {"route_id": "r1", "direction": 0, "direction_id": 0, "headsign": "גימל", "trips": 4},
+                        {"route_id": "r1b", "direction": 0, "direction_id": 0, "headsign": "אלף", "trips": 2} ] } ] } ] }
+```
+- **`directions`:** הכיוונים שבהם אפשר לעלות לקו בתחנה, לפי מספר הנסיעות (`trips`, בכל תקופת לוח הזמנים). `route_id` + ‏`direction` הם הפרמטרים לתצוגת הקו.
+- **`terminates`:** הקו רק מסיים בתחנה (אין בה עלייה). קווים כאלה מופיעים בסוף הקבוצה.
+- **צבע:** ‏`route_color` מה-GTFS, ואם אין – צבע לפי סוג התחבורה.
+
+### `GET /api/transit/route/{id}?direction=&from_stop=`
+תצוגת קו: רשימת התחנות המלאה והמסודרת של כיוון אחד, לפי התבנית הנפוצה ביותר שלו (חלופות קצרות לא נבחרות). `id` הוא `route_id`.
+- **`direction`:** אינדקס ברשימת הכיוונים של ה-`route_id` (ראו `directions`). הכיוונים מחושבים לפי `direction_id`, ואם הוא חסר – לפי התחנה הסופית. ברירת המחדל: הכיוון שעוצר ב-`from_stop` עם הכי הרבה נסיעות.
+- **`from_stop`:** ‏`stop_id` (או `code-<מספר>`) של התחנה שממנה הגיעו. אם התבנית הנפוצה לא עוצרת בה, נבחרת התבנית הנפוצה שכן עוצרת בה. מיקומה ברשימה מוחזר ב-`from_index`.
+```json
+{ "route": {"id": "r1", "line": "קו 1", "route_short_name": "1", "agency": "אגד", "type": "bus", "color": "#15803D", "text_color": "#FFFFFF"},
+  "direction": 0, "headsign": "גימל", "from_index": 1, "trips": 4,
+  "directions": [ {"route_id": "r1", "direction": 0, "headsign": "גימל", "from": "אלף/הרצל", "to": "גימל/מרכז",
+                   "num_stops": 3, "trips": 5, "serves_stop": true, "current": true},
+                  {"route_id": "r1b", "direction": 0, "headsign": "אלף", "from": "גימל/מרכז", "to": "אלף/הרצל",
+                   "num_stops": 3, "trips": 2, "serves_stop": true, "current": false} ],
+  "stops": [ {"id": "A", "name": "אלף/הרצל", "code": 1000, "lat": 32.0, "lon": 34.8, "offset": 0, "pickup": true, "drop_off": false}, … ],
+  "geometry": {"type": "LineString", "coordinates": […]},
+  "estimated_text": "זמנים משוערים לפי לוח הזמנים" }
+```
+- **`directions`:** כל הכיוונים של הקו, כולל ה-`route_id`-ים האחרים שלו (עד 12). קודם אלה שעוצרים ב-`from_stop`.
+- **`offset`:** שניות מתחילת הנסיעה, לפי לוח הזמנים הנפוץ של התבנית.
+- **`geometry`:** מסלול הקו מ-`shapes.txt`, ואם אין – קו בין התחנות.
+- שגיאות: ‏404 `not_found` (קו או תחנה), ‏400 `invalid_parameter` (`direction` לא תקין).
 
 ### `GET /api/transit/stops?lat=&lon=&radius=500`
 תחנות בסביבה, ממוינות לפי מרחק.

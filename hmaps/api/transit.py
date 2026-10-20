@@ -2,6 +2,8 @@
 
     GET /api/transit?from=lat,lon&to=lat,lon&time=ISO&mode=depart|arrive   itineraries
     GET /api/transit/stop/{id}?time=ISO&limit=20                         next departures at a stop
+    GET /api/transit/stop/{id}/routes                                    every line serving a stop
+    GET /api/transit/route/{id}?direction=&from_stop=                    a line's ordered stops and path
     GET /api/transit/stops?lat=&lon=&radius=500                          stops nearby
     GET /api/transit/status                                              feed dates and freshness
 
@@ -92,24 +94,70 @@ async def plan_ep(req: Request) -> Response:
     return _cache(JSONResponse(res), req)
 
 
+def _stop(data, sid: str) -> int:
+    """Stop index for a GTFS ``stop_id`` or ``code-<number on the sign>``; 404 when unknown."""
+    s = data.id_index.get(sid)
+    if s is None and sid.startswith("code-") and sid[5:].isdigit():  # by the code printed on the sign
+        hits = (data.stop_code == int(sid[5:])).nonzero()[0]
+        s = int(hits[0]) if len(hits) else None
+    if s is None:
+        raise planner.TransitError(404, "not_found", "התחנה לא נמצאה")
+    return int(s)
+
+
+def _static(resp: Response) -> Response:
+    # depends only on the published timetable (rebuilt at most daily)
+    resp.headers["Cache-Control"] = "public, max-age=600"
+    return resp
+
+
 async def stop_ep(req: Request) -> Response:
     try:
         data = _load()
         if data is None:
             return _err(503, "transit_not_ready", NOT_READY)
-        sid = req.path_params["id"]
-        s = data.id_index.get(sid)
-        if s is None and sid.startswith("code-") and sid[5:].isdigit():  # by the code printed on the sign
-            hits = (data.stop_code == int(sid[5:])).nonzero()[0]
-            s = int(hits[0]) if len(hits) else None
-        if s is None:
-            return _err(404, "not_found", "התחנה לא נמצאה")
+        s = _stop(data, req.path_params["id"])
         when = planner.parse_time(req.query_params.get("time"))
         limit = int(_num(req, "limit", 20, 1, 60))
         res = await run_in_threadpool(planner.departures, data, int(s), when, 3 * 3600, limit)
     except planner.TransitError as e:
         return _err(e.status, e.code, e.message)
     return _cache(JSONResponse(res), req)
+
+
+async def stop_routes_ep(req: Request) -> Response:
+    try:
+        data = _load()
+        if data is None:
+            return _err(503, "transit_not_ready", NOT_READY)
+        s = _stop(data, req.path_params["id"])
+        res = await run_in_threadpool(planner.stop_routes, data, s)
+    except planner.TransitError as e:
+        return _err(e.status, e.code, e.message)
+    return _static(JSONResponse(res))
+
+
+async def route_ep(req: Request) -> Response:
+    try:
+        data = _load()
+        if data is None:
+            return _err(503, "transit_not_ready", NOT_READY)
+        r = planner.find_route(data, req.path_params["id"])
+        if r is None:
+            return _err(404, "not_found", "הקו לא נמצא")
+        direction = req.query_params.get("direction")
+        if direction not in (None, ""):
+            if not direction.isdigit():
+                raise planner.TransitError(400, "invalid_parameter", "direction חייב להיות מספר")
+            direction = int(direction)
+        else:
+            direction = None
+        frm = req.query_params.get("from_stop")
+        s = _stop(data, frm) if frm else None
+        res = await run_in_threadpool(planner.line_view, data, r, direction, s)
+    except planner.TransitError as e:
+        return _err(e.status, e.code, e.message)
+    return _static(JSONResponse(res))
 
 
 async def stops_ep(req: Request) -> Response:
@@ -143,4 +191,6 @@ def routes() -> list[Route]:
         Route("/api/transit/status", status_ep),
         Route("/api/transit/stops", stops_ep),
         Route("/api/transit/stop/{id}", stop_ep),
+        Route("/api/transit/stop/{id}/routes", stop_routes_ep),
+        Route("/api/transit/route/{id}", route_ep),
     ]

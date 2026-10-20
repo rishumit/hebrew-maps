@@ -16,7 +16,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
     GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
     GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)
-    GET  /api/transit?from=&to=&time=&mode=depart|arrive   public transport (+ /stop/{id}, /stops, /status)
+    GET  /api/transit?from=&to=&time=&mode=depart|arrive   public transport (+ /stop/{id}[/routes], /route/{id}, /stops, /status)
     GET  /tiles/base.json  /tiles/base/{z}/{x}/{y}.pbf      OpenMapTiles basemap
     GET  /tiles/fallback/{z}/{x}/{y}.pbf                    basemap from our data
     GET  /tiles/poi/{z}/{x}/{y}.pbf?cats=                   POI overlay

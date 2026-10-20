@@ -356,7 +356,8 @@ def _ride_leg(ctx: _Ctx, pat: int, inst: int, i: int, j: int, dep: int, arr: int
         ta, td = _ride_times(ctx, inst, i + k)
         inter.append({"name": d.stop_names[int(s)], "time_text": hhmm(day, td if k == 0 else ta),
                       "lat": round(float(d.stop_lat[s]), 6), "lon": round(float(d.stop_lon[s]), 6)})
-    return {"type": mode, "mode_he": mode_he, "line": line, "route_short_name": d.route_short[route] or None,
+    return {"type": mode, "mode_he": mode_he, "line": line, "route_id": d.route_ids[route],
+            "route_short_name": d.route_short[route] or None,
             "route_long_name": d.route_long[route] or None, "agency": agency, "headsign": head or None,
             "train_number": train_no,
             "color": bg, "text_color": fg, "from": frm, "to": to,
@@ -608,7 +609,7 @@ def departures(data: TransitData, stop: int, when: datetime | None = None, horiz
         mode, mode_he = mode_of(int(data.route_type[route]))
         bg, fg = _color(data, route, mode)
         label = _line_label(data, route, mode, mode_he)
-        lines.setdefault(label, {"line": label, "type": mode, "color": bg, "text_color": fg})
+        lines.setdefault(label, {"line": label, "type": mode, "color": bg, "text_color": fg, "route_id": data.route_ids[route]})
         a = int(data.pat_ptr[p]) + i
         if int(data.pat_flags[a]) & 1:
             continue
@@ -627,7 +628,7 @@ def departures(data: TransitData, stop: int, when: datetime | None = None, horiz
     out = []
     for secs, label, mode, mode_he, bg, fg, route, trip in rows[:limit]:
         out.append({"time": _iso(day, secs), "time_text": hhmm(day, secs), "minutes": int((secs - T) // 60),
-                    "line": label, "route_short_name": data.route_short[route] or None, "type": mode,
+                    "line": label, "route_id": data.route_ids[route], "route_short_name": data.route_short[route] or None, "type": mode,
                     "mode_he": mode_he, "agency": data.agency_names[int(data.route_agency[route])],
                     "headsign": headsign(data, route, trip)[0] or None, "color": bg, "text_color": fg})
     return {"stop": data.stop_info(stop), "time": when.isoformat(), "departures": out,
@@ -643,3 +644,183 @@ def nearby_stops(data: TransitData, lat: float, lon: float, radius: float = 500,
         info["distance"] = int(round(dist))
         out.append(info)
     return out
+
+
+# ----------------------------------------------------------------------------- lines at a stop / line view
+
+MODE_ORDER = ["rail", "light_rail", "subway", "bus", "share_taxi", "funicular", "cable_car", "ferry"]
+MODE_GROUP_HE = {"rail": "רכבות", "light_rail": "רכבת קלה", "subway": "מטרו", "bus": "אוטובוסים",
+                 "share_taxi": "מוניות שירות", "funicular": "כרמלית ופוניקולר", "cable_car": "רכבל", "ferry": "מעבורות"}
+NO_PICKUP, NO_DROPOFF = 1, 2
+
+
+def natural_key(text: str) -> tuple:
+    """"1" < "1א" < "2" < "10" < "L1" < "" – numbers first, by value; unnamed last."""
+    m = re.match(r"^(\d+)(.*)$", text or "")
+    if m:
+        return (0, int(m.group(1)), m.group(2))
+    return (1 if text else 2, 0, text or "")
+
+
+def _route_info(d: TransitData, route: int) -> dict:
+    mode, mode_he = mode_of(int(d.route_type[route]))
+    bg, fg = _color(d, route, mode)
+    return {"id": d.route_ids[route], "line": _line_label(d, route, mode, mode_he),
+            "route_short_name": d.route_short[route] or None, "route_long_name": d.route_long[route] or None,
+            "type": mode, "mode_he": mode_he, "agency": d.agency_names[int(d.route_agency[route])],
+            "color": bg, "text_color": fg}
+
+
+def _pat_headsign(d: TransitData, pat: int) -> str:
+    """Direction text of a pattern: its first trip's headsign, else the last stop's name."""
+    route = int(d.pat_route[pat])
+    h = headsign(d, route, int(d.pat_trips[pat]))[0]
+    if h:
+        return h
+    return d.stop_names[int(d.pat_stops[int(d.pat_ptr[pat + 1]) - 1])]
+
+
+def find_route(d: TransitData, rid: str) -> int | None:
+    r = d.route_index.get(rid)
+    if r is None and rid.isdigit() and d.route_ids == [str(i) for i in range(len(d.route_ids))]:
+        r = int(rid)
+    return r
+
+
+def stop_routes(d: TransitData, stop: int) -> dict:
+    """Every line serving *stop* (not only the next departures), grouped by mode and naturally sorted.
+
+    Routes of one line (both directions, variants) are merged into one entry; each direction it is
+    boarded in here is listed with its headsign. Lines that only end here are flagged ``terminates``.
+    """
+    line_of = d.lines()[0]
+    lines: dict[int, dict] = {}
+    dir_of: dict[int, int] = {}  # pattern → index into _directions(route)
+    a, b = int(d.sp_ptr[stop]), int(d.sp_ptr[stop + 1])
+    for p, i in zip(d.sp_pat[a:b].tolist(), d.sp_i[a:b].tolist()):
+        route = int(d.pat_route[p])
+        lid = int(line_of[route])
+        n = int(d.pat_trips[p + 1] - d.pat_trips[p])
+        e = lines.get(lid)
+        if e is None:
+            e = lines[lid] = {"routes": {}, "heads": {}, "board": 0}
+        e["routes"][route] = e["routes"].get(route, 0) + n
+        if int(d.pat_flags[int(d.pat_ptr[p]) + i]) & NO_PICKUP:
+            continue
+        e["board"] += n
+        h = _pat_headsign(d, p)
+        cur = e["heads"].setdefault(h, {"trips": 0, "best": -1, "pat": p})
+        cur["trips"] += n
+        if n > cur["best"]:
+            cur["best"], cur["pat"] = n, p
+    for e in lines.values():
+        for h in e["heads"].values():
+            p = h["pat"]
+            if p not in dir_of:
+                for k, dr in enumerate(_directions(d, int(d.pat_route[p]))):
+                    for q in dr["pats"]:
+                        dir_of[q] = k
+    groups: dict[str, list] = {}
+    for e in lines.values():
+        board = e["board"] > 0
+        # the route boarded most often here represents the line
+        heads = sorted(e["heads"].items(), key=lambda kv: -kv[1]["trips"])
+        main = int(d.pat_route[heads[0][1]["pat"]]) if heads else max(e["routes"], key=e["routes"].get)
+        info = _route_info(d, main)
+        info["directions"] = []
+        for h, x in heads:
+            p = x["pat"]
+            dr = int(d.pat_dir[p])
+            info["directions"].append({"route_id": d.route_ids[int(d.pat_route[p])], "direction": dir_of.get(p, 0),
+                                       "direction_id": dr if dr >= 0 else None, "headsign": h, "trips": x["trips"]})
+        info["route_ids"] = sorted({d.route_ids[r] for r in e["routes"]})
+        info["terminates"] = not board
+        groups.setdefault(info["type"], []).append(info)
+    out = []
+    for mode in sorted(groups, key=lambda m: MODE_ORDER.index(m) if m in MODE_ORDER else 99):
+        ls = sorted(groups[mode], key=lambda x: (x["terminates"], natural_key(x["route_short_name"] or ""),
+                                                 x["agency"], x["directions"][0]["headsign"] if x["directions"] else ""))
+        out.append({"type": mode, "mode_he": MODE_GROUP_HE.get(mode, ls[0]["mode_he"]), "lines": ls})
+    return {"stop": d.stop_info(stop), "groups": out, "count": sum(len(g["lines"]) for g in out)}
+
+
+def _directions(d: TransitData, route: int) -> list[dict]:
+    """Directions of one route: patterns grouped by ``direction_id`` (or by the last stop when missing)."""
+    dirs: dict[tuple, list[int]] = {}
+    for p in d.route_patterns(route).tolist():
+        dr = int(d.pat_dir[p])
+        key = (0, dr) if dr >= 0 else (1, int(d.pat_stops[int(d.pat_ptr[p + 1]) - 1]))
+        dirs.setdefault(key, []).append(p)
+    out = []
+    for key in sorted(dirs):
+        pats = sorted(dirs[key], key=lambda p: -int(d.pat_trips[p + 1] - d.pat_trips[p]))
+        out.append({"pats": pats, "trips": sum(int(d.pat_trips[p + 1] - d.pat_trips[p]) for p in pats),
+                    "dir": key[1] if key[0] == 0 else -1})
+    return out
+
+
+def _serves(d: TransitData, pat: int, stop: int, board: bool = True) -> int:
+    a, b = int(d.pat_ptr[pat]), int(d.pat_ptr[pat + 1])
+    hits = np.flatnonzero(d.pat_stops[a:b] == stop)
+    for h in hits.tolist():
+        if not board or not int(d.pat_flags[a + h]) & NO_PICKUP:
+            return h
+    return -1
+
+
+def line_view(d: TransitData, route: int, direction: int | None = None, from_stop: int | None = None) -> dict:
+    """The full, ordered stop list of one direction of a line (its most common stop pattern)."""
+    dirs = _directions(d, route)
+    if not dirs:
+        raise TransitError(404, "not_found", "לקו אין נסיעות בלוח הזמנים")
+    if direction is not None and not 0 <= direction < len(dirs):
+        raise TransitError(400, "invalid_parameter", f"direction חייב להיות בין 0 ל-{len(dirs) - 1}")
+    if direction is None:
+        direction = 0
+        best = -1
+        for k, dr in enumerate(dirs):
+            score = dr["trips"] + (10 ** 9 if from_stop is not None and any(_serves(d, p, from_stop) >= 0 for p in dr["pats"]) else 0)
+            if score > best:
+                best, direction = score, k
+    pats = dirs[direction]["pats"]
+    pat = pats[0]
+    if from_stop is not None and _serves(d, pat, from_stop) < 0:
+        pat = next((p for p in pats if _serves(d, p, from_stop) >= 0),
+                   next((p for p in pats if _serves(d, p, from_stop, board=False) >= 0), pat))
+    a, b = int(d.pat_ptr[pat]), int(d.pat_ptr[pat + 1])
+    # a representative trip: the most common timetable profile of the pattern
+    t0, t1 = int(d.pat_trips[pat]), int(d.pat_trips[pat + 1])
+    profs = d.trip_prof[t0:t1]
+    vals, cnt = np.unique(profs, return_counts=True)
+    prof = int(vals[int(np.argmax(cnt))])
+    pa = int(d.prof_ptr[prof])
+    stops = []
+    for k in range(b - a):
+        s = int(d.pat_stops[a + k])
+        f = int(d.pat_flags[a + k])
+        info = d.stop_info(s)
+        info.update({"offset": int(d.prof_dep[pa + k] if k == 0 else d.prof_arr[pa + k]),
+                     "pickup": not f & NO_PICKUP, "drop_off": not f & NO_DROPOFF})
+        stops.append(info)
+    from_index = _serves(d, pat, from_stop) if from_stop is not None else -1
+    if from_stop is not None and from_index < 0:
+        from_index = _serves(d, pat, from_stop, board=False)
+    # every direction of the line (the MoT feed has one route per direction): for the selector
+    options = []
+    for r in d.line_routes(route):
+        for k, dr in enumerate(_directions(d, r) if r != route else dirs):
+            p = dr["pats"][0]
+            pa_, pb_ = int(d.pat_ptr[p]), int(d.pat_ptr[p + 1])
+            options.append({"route_id": d.route_ids[r], "direction": k, "headsign": _pat_headsign(d, p),
+                            "from": d.stop_names[int(d.pat_stops[pa_])], "to": d.stop_names[int(d.pat_stops[pb_ - 1])],
+                            "trips": dr["trips"], "num_stops": pb_ - pa_,
+                            "serves_stop": from_stop is not None and any(_serves(d, q, from_stop) >= 0 for q in dr["pats"]),
+                            "current": r == route and k == direction})
+    options.sort(key=lambda o: (not o["current"], not o["serves_stop"], -o["trips"]))
+    options = options[:12]
+    options.sort(key=lambda o: (not o["serves_stop"], -o["trips"]))
+    return {"route": _route_info(d, route), "direction": direction, "headsign": _pat_headsign(d, pat),
+            "directions": options, "from_index": from_index if from_index >= 0 else None,
+            "stops": stops, "trips": int(t1 - t0),
+            "geometry": {"type": "LineString", "coordinates": _geometry_ride(d, pat, 0, b - a - 1)},
+            "estimated_text": ESTIMATED_TEXT}

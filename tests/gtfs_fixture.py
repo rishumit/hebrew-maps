@@ -5,6 +5,11 @@
     A ─────────── night bus 3 ──────────── E   (Tuesdays only, 24:10 → 24:40, i.e. after midnight)
     F ──rail── G ──rail── H   (Sun–Thu 08:10; headsign is a train number, like the MoT feed)
 
+Line views: bus 1 also has a short-turn variant A → B (12:00) and, like the MoT feed, its return
+direction is a separate route (r1b: C → B → A, 10:00/10:30). Bus 2 keeps both directions in one route
+(direction_id 1: E → D → C2, 10:00). Another Egged "1" runs far away (F → G, Fridays) and is a
+different line.
+
 Stops are ~1 km apart so each one is only reachable on foot from its own
 neighbourhood. Weekday services are removed on Monday 2026-10-19 ("holiday").
 """
@@ -46,6 +51,8 @@ def write(path: Path) -> Path:
                            "r2,3,2,גימל 2-תל אביב יפו<->הא-רמת גן-1#,x,3,",
                            "r3,3,3,אלף-תל אביב יפו<->הא-רמת גן-1#,x,3,",
                            "r9,2,,תחנת פא-הרצליה<->תחנת חית-חדרה,x,2,",
+                           "r1b,3,1,גימל-תל אביב יפו<->אלף-תל אביב יפו-2#,x,3,",
+                           "r1n,3,1,פא-הרצליה<->גימל רכבת-נתניה-1#,x,3,",
                            "rx,3,99,קו בהזמנה,x,715,"]
     files["stops.txt"] = ["stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,location_type,parent_station"]
     for i, (sid, (name, lat, lon, desc)) in enumerate(STOPS.items()):
@@ -58,8 +65,8 @@ def write(path: Path) -> Path:
     trips = ["route_id,service_id,trip_id,trip_headsign,direction_id,shape_id"]
     st = ["trip_id,arrival_time,departure_time,stop_id,stop_sequence,pickup_type,drop_off_type,shape_dist_traveled"]
 
-    def add(route, svc, tid, head, shape, stops, start_min, hop=5):
-        trips.append(f"{route},{svc},{tid},{head},0,{shape}")
+    def add(route, svc, tid, head, shape, stops, start_min, hop=5, direction=0):
+        trips.append(f"{route},{svc},{tid},{head},{direction},{shape}")
         for k, s in enumerate(stops):
             t = _hms(start_min + k * hop)
             st.append(f"{tid},{t},{t},{s},{k + 1},0,0,{k * 950}")
@@ -69,6 +76,11 @@ def write(path: Path) -> Path:
     add("r1", "FRI", "1_fri", "גימל", "S1", ["A", "B", "C"], 8 * 60)
     for h in (8 * 60 + 20, 8 * 60 + 50, 9 * 60 + 20):
         add("r2", "WD", f"2_{h}", "הא", "", ["C2", "D", "E"], h)
+    add("r1", "WD", "1_short", "בית", "", ["A", "B"], 12 * 60)
+    for h in (10 * 60, 10 * 60 + 30):
+        add("r1b", "WD", f"1b_{h}", "אלף", "", ["C", "B", "A"], h)
+    add("r1n", "FRI", "1n_fri", "נתניה", "", ["F", "G"], 14 * 60)
+    add("r2", "WD", "2_back", "גימל 2", "", ["E", "D", "C2"], 10 * 60, direction=1)
     add("r3", "TUE", "3_night", "הא", "", ["A", "E"], 24 * 60 + 10, hop=30)
     add("r9", "WD", "rail_1", "123", "", ["F", "G", "H"], 8 * 60 + 10, hop=10)
     add("rx", "WD", "x_1", "", "", ["A", "B"], 8 * 60)
