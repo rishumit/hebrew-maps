@@ -1,10 +1,10 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.3.5';
+const VERSION = 'hmaps-1.3.6';
 const SHELL_CACHE = `${VERSION}-shell`;
 const TILE_CACHE = 'hmaps-tiles-v1';
 const MAX_TILES = 4000;
 const SHELL = [
-  '/', '/index.html', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
+  '/', '/index.html', '/map.html', '/css/landing.css', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
   '/js/app.js', '/js/api.js', '/js/combobox.js', '/js/directions.js', '/js/icons.js', '/js/map.js',
   '/js/panel.js', '/js/style.js', '/js/util.js', '/js/views.js', '/js/trails.js',
   '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js',

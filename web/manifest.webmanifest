@@ -4,7 +4,7 @@
   "description": "מפה אינטראקטיבית של ישראל בעברית – חיפוש, נקודות עניין וניווט",
   "lang": "he",
   "dir": "rtl",
-  "start_url": "/",
+  "start_url": "/map.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",

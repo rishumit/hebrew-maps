@@ -112,7 +112,7 @@ class ApiTest(unittest.TestCase):
 
     def test_app_code_is_revalidated(self):
         """JS/CSS must not be cached heuristically, or code updates never reach the browser."""
-        for path in ("/js/map.js", "/css/app.css", "/index.html", "/sw.js"):
+        for path in ("/js/map.js", "/css/app.css", "/index.html", "/map.html", "/sw.js"):
             s, _, h = self.api.get(path)
             self.assertEqual(s, 200, path)
             self.assertEqual(h.get("cache-control"), "no-cache", path)
@@ -207,6 +207,14 @@ class ApiTest(unittest.TestCase):
         s, body, h = self.api.get("/")
         self.assertEqual(s, 200)
         self.assertIn("default-src 'self'", h.get("content-security-policy", ""))
+        self.assertIn(b"css/landing.css", body)
+        self.assertIn("מפת ישראל".encode(), body)
+        self.assertEqual(h.get("cache-control"), "no-cache")
+
+        s, body, h = self.api.get("/map.html")
+        self.assertEqual(s, 200)
+        self.assertIn(b'id="map"', body)
+        self.assertEqual(h.get("cache-control"), "no-cache")
 
     def test_reports(self):
         s, body, _ = self.api.get("/reports/quality-report.html")

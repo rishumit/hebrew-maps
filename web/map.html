@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>מפות בעברית</title>
+  <meta name="description" content="מפה אינטראקטיבית של ישראל בעברית: חיפוש מקומות, כתובות ונקודות עניין, וניווט ברכב, ברגל ובאופניים.">
+  <meta name="theme-color" content="#164e46" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111827" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/transit.css">
+  <link rel="stylesheet" href="/css/guide.css">
+</head>
+<body>
+  <a class="skip-link" href="#q">דילוג לחיפוש</a>
+  <a class="skip-link" href="#panel">דילוג לחלונית המידע</a>
+
+  <header class="topbar">
+    <h1 class="sr-only">מפות בעברית – מפה אינטראקטיבית של ישראל</h1>
+    <form id="search-form" class="searchbox" role="search" autocomplete="off" novalidate>
+      <button type="button" id="btn-menu" class="icon-btn" aria-label="תפריט ראשי" aria-haspopup="dialog" aria-controls="menu" aria-expanded="false"><span data-icon="menu"></span></button>
+      <label for="q" class="sr-only">חיפוש מקום, כתובת או סוג מקום</label>
+      <input id="q" name="q" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false"
+             aria-controls="q-list" aria-describedby="q-hint" placeholder="חיפוש במפות בעברית" enterkeyhint="search"
+             spellcheck="false" autocapitalize="off" maxlength="200">
+      <span id="q-hint" class="sr-only">הקלידו שם של עיר, רחוב, כתובת או מקום, או סוג מקום כמו "מסעדות בחיפה". השתמשו בחצים כדי לבחור הצעה.</span>
+      <button type="button" id="q-clear" class="icon-btn" aria-label="ניקוי החיפוש" hidden><span data-icon="x"></span></button>
+      <button type="submit" class="icon-btn" aria-label="חיפוש"><span data-icon="search"></span></button>
+      <span class="divider" aria-hidden="true"></span>
+      <button type="button" id="btn-directions" class="icon-btn accent" aria-label="תכנון מסלול"><span data-icon="directions"></span></button>
+      <ul id="q-list" role="listbox" class="suggestions" aria-label="הצעות חיפוש" hidden></ul>
+    </form>
+    <nav class="chips" aria-label="חיפוש מהיר לפי קטגוריה">
+      <div id="chips" class="chips-scroll"></div>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner" role="status" hidden></div>
+
+  <main id="main">
+    <div id="map" class="map"></div>
+
+    <aside id="panel" class="panel" aria-labelledby="panel-title" tabindex="-1" hidden>
+      <div class="sheet-handle">
+        <button type="button" id="sheet-toggle" class="sheet-grip" aria-label="הרחבת החלונית" aria-expanded="false"></button>
+      </div>
+      <div id="panel-body" class="panel-body"></div>
+    </aside>
+
+    <div class="map-controls" role="group" aria-label="פקדי מפה">
+      <button type="button" id="btn-layers" class="ctrl-btn" aria-label="סוג מפה ושכבות" aria-haspopup="dialog" aria-controls="layers-pop" aria-expanded="false"><span data-icon="layers"></span></button>
+      <button type="button" id="btn-3d" class="ctrl-btn ctrl-3d" aria-pressed="false" aria-label="תצוגה בתלת-ממד" title="תלת-ממד (T)"><span aria-hidden="true">3D</span></button>
+      <button type="button" id="btn-north" class="ctrl-btn" aria-label="איפוס כיוון המפה לצפון" hidden><span class="compass" aria-hidden="true"></span></button>
+      <button type="button" id="btn-locate" class="ctrl-btn" aria-label="הצגת המיקום שלי" aria-pressed="false"><span data-icon="locate"></span></button>
+      <div class="zoom-group">
+        <button type="button" id="btn-zoom-in" class="ctrl-btn" aria-label="הגדלת המפה"><span data-icon="plus"></span></button>
+        <button type="button" id="btn-zoom-out" class="ctrl-btn" aria-label="הקטנת המפה"><span data-icon="minus"></span></button>
+      </div>
+    </div>
+
+    <div id="layers-pop" class="popover" role="dialog" aria-labelledby="layers-title" hidden>
+      <h2 id="layers-title" class="popover-title">סוג מפה</h2>
+      <div class="map-types" role="radiogroup" aria-labelledby="layers-title">
+        <label class="map-type"><input type="radio" name="maptype" value="light"><span class="swatch swatch-light" aria-hidden="true"></span><span>רגילה</span></label>
+        <label class="map-type"><input type="radio" name="maptype" value="nature"><span class="swatch swatch-nature" aria-hidden="true"></span><span>טבע וטיולים</span></label>
+        <label class="map-type"><input type="radio" name="maptype" value="topo"><span class="swatch swatch-topo" aria-hidden="true"></span><span>טופוגרפית</span></label>
+        <label class="map-type"><input type="radio" name="maptype" value="dark"><span class="swatch swatch-dark" aria-hidden="true"></span><span>לילה</span></label>
+      </div>
+      <h3 class="popover-sub">שכבות</h3>
+      <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
+      <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
+      <button type="button" id="btn-hikes-near" class="btn btn-secondary btn-sm popover-btn"><span data-icon="hiker"></span>מסלולי טיול באזור</button>
+      <label class="switch"><input type="checkbox" id="toggle-kosher"><span>להציג רק מקומות כשרים</span></label>
+      <h3 class="popover-sub">מראה הממשק</h3>
+      <div class="segmented" role="radiogroup" aria-label="מראה הממשק">
+        <label><input type="radio" name="uitheme" value="auto"><span>אוטומטי</span></label>
+        <label><input type="radio" name="uitheme" value="light"><span>בהיר</span></label>
+        <label><input type="radio" name="uitheme" value="dark"><span>כהה</span></label>
+      </div>
+    </div>
+
+    <div id="ctx-menu" class="ctx-menu" role="menu" aria-label="פעולות בנקודה במפה" hidden>
+      <button type="button" role="menuitem" data-act="here"><span data-icon="pin"></span>מה יש כאן?</button>
+      <button type="button" role="menuitem" data-act="from"><span data-icon="m_depart"></span>מסלול מכאן</button>
+      <button type="button" role="menuitem" data-act="to"><span data-icon="m_arrive"></span>מסלול לכאן</button>
+      <button type="button" role="menuitem" data-act="nearby"><span data-icon="search"></span>מה יש בסביבה</button>
+      <button type="button" role="menuitem" data-act="copy"><span data-icon="copy"></span>העתקת קואורדינטות</button>
+    </div>
+  </main>
+
+  <div id="menu" class="drawer" role="dialog" aria-modal="true" aria-labelledby="menu-title" hidden>
+    <div class="drawer-head">
+      <h2 id="menu-title"><span class="logo" aria-hidden="true"></span>מפות בעברית</h2>
+      <button type="button" class="icon-btn" data-close aria-label="סגירת התפריט"><span data-icon="x"></span></button>
+    </div>
+    <nav aria-label="תפריט ראשי">
+      <ul class="menu-list">
+        <li><button type="button" data-menu="nearby-list"><span data-icon="list"></span>רשימת המקומות שבמפה</button></li>
+        <li><button type="button" data-menu="directions"><span data-icon="directions"></span>תכנון מסלול</button></li>
+        <li><button type="button" data-menu="hikes"><span data-icon="hiker"></span>מסלולי טיול באזור</button></li>
+        <li><button type="button" data-menu="recent"><span data-icon="history"></span>חיפושים אחרונים</button></li>
+        <li><button type="button" data-menu="shortcuts"><span data-icon="keyboard"></span>קיצורי מקלדת</button></li>
+        <li><button type="button" data-menu="data"><span data-icon="info"></span>מקורות הנתונים</button></li>
+        <li><a href="/reports/quality-report.html" target="_blank" rel="noopener"><span data-icon="check"></span>דוח איכות נתונים<span class="sr-only"> (נפתח בלשונית חדשה)</span></a></li>
+        <li><button type="button" data-menu="accessibility"><span data-icon="wheelchair"></span>הצהרת נגישות</button></li>
+      </ul>
+    </nav>
+    <p class="drawer-foot" id="data-stamp"></p>
+  </div>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <div id="dialog" class="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" hidden>
+    <div class="modal-card">
+      <div class="modal-head"><h2 id="dialog-title"></h2><button type="button" class="icon-btn" data-close aria-label="סגירה"><span data-icon="x"></span></button></div>
+      <div id="dialog-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <div id="sr-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="sr-alert" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
+
+  <noscript><p class="noscript">כדי להשתמש במפה יש להפעיל JavaScript בדפדפן.</p></noscript>
+  <script src="/vendor/maplibre-gl.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

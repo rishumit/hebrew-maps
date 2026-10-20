@@ -741,7 +741,7 @@ class ServiceMiddleware:
                 if not path.startswith(("/tiles/", "/fonts/", "/api/")):
                     extra.append((b"content-security-policy", CSP.encode()))
                     extra.append((b"x-frame-options", b"SAMEORIGIN"))
-                if path in ("/", "/index.html", "/sw.js", "/manifest.webmanifest") and b"cache-control" not in names:
+                if path in ("/", "/index.html", "/map.html", "/sw.js", "/manifest.webmanifest") and b"cache-control" not in names:
                     extra.append((b"cache-control", b"no-cache"))
                 elif path.startswith(("/vendor/", "/fonts/", "/icons/")) and b"cache-control" not in names:
                     extra.append((b"cache-control", b"public, max-age=604800"))
