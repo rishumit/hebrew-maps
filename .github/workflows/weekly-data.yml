@@ -1,0 +1,493 @@
+name: Weekly data release
+
+# Builds the Israel data packages once a week and publishes them as a dated GitHub
+# release that the app's online updater ("עדכונים" page, `python -m hmaps update`,
+# update-online-windows.cmd) installs from.
+#
+#   plan ─┬─ osm ─┬─ maps ── media ─┐
+#         │       └─ basemap ───────┤
+#         ├─ terrain (monthly) ─────┤
+#         ├─ transit ───────────────┼─ publish
+#         └─ zmanim ────────────────┘
+#
+# Release layout (see hmaps/core/components.py and docs/12-operations.md):
+#   data-YYYY-MM-DD   hmaps-<component>-<YYYYMMDD>.zip for every component built in this run + manifest.json
+#   data-latest       rolling pointer release holding only the newest manifest.json
+# manifest.json always lists all components; one that was not rebuilt (terrain most weeks, or a
+# job that failed) keeps pointing at the asset of an earlier dated release ("status": "unchanged").
+#
+# Carried over from the former data.yml / data-modular.yml / build-*.yml workflows:
+#   * the OSM PBF is downloaded once per run with wget retries (5 tries, 120 s timeout), checked
+#     against Geofabrik's .md5 and cached per ISO week; Planetiler gets it via --osm_path
+#     (HMAPS_PBF_PATH) and never downloads it itself, plus --http_timeout=120 for its other sources;
+#   * the Planetiler heap is configurable (input planetiler_memory / repo variable HMAPS_PLANETILER_MEMORY);
+#   * maps.db is resolved through the versioned file + maps.current pointer before packaging,
+#     and tiles through their timestamped names (data/tiles/<name>-<time>.mbtiles) – the old
+#     workflows zipped data/basemap.mbtiles / data/terrain.mbtiles, which never existed;
+#   * every package is verified before upload (layout, SQLite integrity, row counts).
+
+on:
+  schedule:
+    - cron: "0 20 * * 4"   # Thursday 20:00 UTC = Thursday night in Israel (22:00 / 23:00)
+  workflow_dispatch:
+    inputs:
+      maps:
+        description: "מפה ונקודות עניין (maps.db + גרף ניווט, OSM + ויקיפדיה)"
+        type: boolean
+        default: true
+      basemap:
+        description: "מפת בסיס (Planetiler, ~30 דק')"
+        type: boolean
+        default: true
+      terrain:
+        description: "נתוני גובה/טופוגרפיה (Copernicus DEM – כמעט לא משתנה)"
+        type: boolean
+        default: false
+      transit:
+        description: "תחבורה ציבורית (GTFS)"
+        type: boolean
+        default: true
+      media:
+        description: "תמונות ותוכן (ויקישיתוף)"
+        type: boolean
+        default: true
+      zmanim:
+        description: "זמני תפילות (נדרים פלוס)"
+        type: boolean
+        default: true
+      planetiler_memory:
+        description: "JVM heap for Planetiler"
+        default: ""
+        required: false
+
+concurrency:
+  group: weekly-data
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HMAPS_DATA: data
+  PYTHONUTF8: "1"
+  PBF_URL: ${{ vars.HMAPS_PBF_URL || 'https://download.geofabrik.de/asia/israel-and-palestine-latest.osm.pbf' }}
+  PBF_PATH: data/sources/israel-and-palestine.osm.pbf
+
+jobs:
+  # ===========================================================================
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      date: ${{ steps.plan.outputs.date }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      week: ${{ steps.plan.outputs.week }}
+      month: ${{ steps.plan.outputs.month }}
+      any: ${{ steps.plan.outputs.any }}
+      maps: ${{ steps.plan.outputs.maps }}
+      basemap: ${{ steps.plan.outputs.basemap }}
+      terrain: ${{ steps.plan.outputs.terrain }}
+      transit: ${{ steps.plan.outputs.transit }}
+      media: ${{ steps.plan.outputs.media }}
+      zmanim: ${{ steps.plan.outputs.zmanim }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the previous manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p prev
+          gh release download data-latest -R "$GITHUB_REPOSITORY" -p manifest.json -D prev --clobber \
+            || echo "no previous manifest (first run)"
+
+      - name: Decide which components to build
+        id: plan
+        env:
+          INPUTS_JSON: ${{ toJSON(github.event.inputs) }}
+        run: python tools/release.py plan --previous prev/manifest.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: previous-manifest
+          path: prev/manifest.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # ===========================================================================
+  osm:
+    name: OSM extract
+    needs: plan
+    if: needs.plan.outputs.maps == 'true' || needs.plan.outputs.basemap == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Restore OSM PBF cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PBF_PATH }}
+          key: osm-pbf-${{ needs.plan.outputs.week }}
+
+      - name: Download OSM PBF (with retry + MD5 check)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p data/sources
+          wget --tries=5 --retry-connrefused --waitretry=30 --timeout=120 --progress=dot:giga \
+            -O "$PBF_PATH" "$PBF_URL"
+          if wget --tries=3 --timeout=60 -q -O pbf.md5 "$PBF_URL.md5"; then
+            echo "$(cut -d' ' -f1 pbf.md5)  $PBF_PATH" | md5sum -c -
+          else
+            echo "::warning::no .md5 published for $PBF_URL – checksum not verified"
+          fi
+          ls -lh "$PBF_PATH"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: osm-pbf
+          path: ${{ env.PBF_PATH }}
+          compression-level: 0
+          retention-days: 1
+
+  # ===========================================================================
+  maps:
+    name: Maps + search (maps.db)
+    needs: [plan, osm]
+    if: needs.plan.outputs.maps == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osm-pbf
+          path: data/sources
+
+      # Wikidata / Wikipedia / Wikivoyage / Commons answers are cached for 60 days
+      - name: Restore enrichment HTTP cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: rich-http-${{ github.run_id }}
+          restore-keys: rich-http-
+
+      - name: Build maps database (OSM core + routing graph)
+        run: python -m hmaps.etl build --engine pyosmium --no-enrich
+
+      - name: Enrich (Wikidata, Wikipedia, Wikivoyage, Commons, trails)
+        run: python -m hmaps.etl enrich --db data/maps.db --steps wikidata,wikipedia,wikivoyage,commons,trails
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component maps --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-maps-*.zip --min-pois 10000
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-maps
+          path: dist/hmaps-maps-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  basemap:
+    name: Basemap (Planetiler)
+    needs: [plan, osm]
+    if: needs.plan.outputs.basemap == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: osm-pbf
+          path: data/sources
+
+      - name: Restore Planetiler cache (jar + coastline / Natural Earth sources)
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools-bin/planetiler.jar
+            data/sources
+            !data/sources/*.osm.pbf
+          key: planetiler-${{ needs.plan.outputs.month }}
+          restore-keys: planetiler-
+
+      - name: Build basemap
+        env:
+          HMAPS_PBF_PATH: ${{ github.workspace }}/data/sources/israel-and-palestine.osm.pbf
+          PLANETILER_EXTRA_ARGS: "--http_timeout=120"
+          PLANETILER_MEMORY: ${{ github.event.inputs.planetiler_memory || vars.HMAPS_PLANETILER_MEMORY || '3g' }}
+        run: python tools/basemap.py --memory "$PLANETILER_MEMORY"
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component basemap --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-basemap-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-basemap
+          path: dist/hmaps-basemap-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  terrain:
+    name: Terrain (contours + DEM)
+    needs: plan
+    if: needs.plan.outputs.terrain == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt requirements-terrain.txt
+
+      # the Copernicus GLO-30 tiles never change: download the ~530 MB once
+      - name: Restore DEM cache
+        uses: actions/cache@v4
+        with:
+          path: data/dem
+          key: copernicus-dem-glo30-v1
+
+      - name: Build contours + terrain tiles
+        run: python -m tools.terrain build
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component terrain --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-terrain-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-terrain
+          path: dist/hmaps-terrain-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  transit:
+    name: Public transport (GTFS)
+    needs: plan
+    if: needs.plan.outputs.transit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt
+
+      - name: Build GTFS timetables
+        run: python -m hmaps.etl gtfs --force
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component transit --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-transit-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-transit
+          path: dist/hmaps-transit-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  zmanim:
+    name: Prayer times (Nedarim Plus)
+    needs: plan
+    if: needs.plan.outputs.zmanim == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: previous-manifest
+          path: prev
+
+      # synagogues without prayers in the next 24 h keep the names of the previous snapshot
+      - name: Start from the previous snapshot
+        continue-on-error: true
+        run: python -m hmaps update --component zmanim --force --manifest prev/manifest.json --data data
+
+      - name: Fetch prayer times
+        run: python -m hmaps.etl zmanim --fetch --db data/maps.db
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component zmanim --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-zmanim-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-zmanim
+          path: dist/hmaps-zmanim-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  media:
+    name: Images (Wikimedia Commons)
+    needs: [plan, maps]
+    # also runs when maps was not requested / failed: it then uses the previous release's maps.db
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: hmaps-maps
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: previous-manifest
+          path: prev
+
+      - name: Get maps.db (this run, else the previous release)
+        run: python tools/release.py prepare-db --artifacts artifacts --previous prev/manifest.json
+
+      # images are only downloaded once: keep data/media between runs
+      - name: Restore image cache
+        uses: actions/cache@v4
+        with:
+          path: data/media
+          key: media-${{ github.run_id }}
+          restore-keys: media-
+
+      - name: Download POI images
+        # Wikimedia rate limits vary; a partial download is still worth publishing
+        continue-on-error: true
+        run: python tools/media.py --workers 3 --interval 0.8
+
+      - name: Package + verify
+        run: |
+          python tools/release.py pack --component media --version "${{ needs.plan.outputs.version }}"
+          python tools/release.py verify dist/hmaps-media-*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hmaps-media
+          path: dist/hmaps-media-*.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+
+  # ===========================================================================
+  publish:
+    name: Publish release
+    needs: [plan, maps, basemap, terrain, transit, zmanim, media]
+    # publish whatever was built, even if some component failed (it keeps its previous version)
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      DATE: ${{ needs.plan.outputs.date }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hmaps-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: previous-manifest
+          path: prev
+
+      - name: Verify data packages
+        run: python tools/release.py verify dist/*.zip --allow-empty --min-pois 10000
+
+      - name: Write manifest.json + release notes
+        id: manifest
+        run: |
+          python tools/release.py manifest --dist dist --tag "$TAG" --version "$VERSION" --date "$DATE" \
+            --previous prev/manifest.json --notes notes.md
+
+      - name: Create dated release ${{ needs.plan.outputs.tag }}
+        if: steps.manifest.outputs.new != 'none'
+        run: |
+          shopt -s nullglob
+          files=(dist/*.zip dist/manifest.json)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" "${files[@]}" --target "$GITHUB_SHA" \
+              --title "נתונים $DATE" --notes-file notes.md --latest=false
+          fi
+
+      - name: Point data-latest at the new manifest
+        if: steps.manifest.outputs.new != 'none'
+        run: |
+          if gh release view data-latest >/dev/null 2>&1; then
+            # drop the per-component ZIPs of the old layout; the pointer only holds manifest.json
+            for a in $(gh release view data-latest --json assets -q '.assets[].name'); do
+              [ "$a" = manifest.json ] || gh release delete-asset data-latest "$a" --yes
+            done
+            gh release upload data-latest dist/manifest.json --clobber
+            gh release edit data-latest --title "נתונים עדכניים – $DATE" --prerelease --latest=false \
+              --notes "מצביע לגרסת הנתונים העדכנית ביותר: $TAG. התוכנה קוראת מכאן את manifest.json."
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/data-latest" -f sha="$GITHUB_SHA" -F force=true \
+              || echo "::warning::could not move the data-latest tag"
+          else
+            gh release create data-latest dist/manifest.json --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "נתונים עדכניים – $DATE" \
+              --notes "מצביע לגרסת הנתונים העדכנית ביותר: $TAG. התוכנה קוראת מכאן את manifest.json."
+          fi
+
+      - name: Remove old dated releases
+        if: steps.manifest.outputs.new != 'none'
+        run: |
+          gh release list --limit 200 --json tagName > releases.json
+          for t in $(python tools/release.py prune --manifest dist/manifest.json --releases releases.json --keep 6); do
+            echo "deleting $t"
+            gh release delete "$t" --yes --cleanup-tag
+          done
