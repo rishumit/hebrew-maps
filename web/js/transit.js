@@ -3,6 +3,7 @@
 
 import { api } from './api.js';
 import { svg } from './icons.js';
+import { agencyBadge } from './logos.js';
 import { head, wireHead } from './views.js';
 import { announce, esc } from './util.js';
 
@@ -202,7 +203,7 @@ export class TransitPlanner {
       out += `<li class="tr-leg ${walk ? 'walk' : 'ride'}" style="--leg-color:${esc(walk ? '#6B7280' : l.color)}">
         <div class="tr-leg-time"><bdi>${esc(l.departure_text)}</bdi></div>
         <div class="tr-leg-body">
-          <div class="tr-leg-top">${badge(l)}${!walk && l.agency ? `<span class="tr-agency">${esc(l.agency)}</span>` : ''}</div>
+          <div class="tr-leg-top">${badge(l)}${!walk && l.agency ? `<span class="tr-agency">${agencyBadge(l, { size: 'sm', alt: '' })}${esc(l.agency)}</span>` : ''}</div>
           <p class="tr-leg-text">${esc(l.instruction)}</p>
           ${!walk ? `<div class="tr-leg-stops">
             <button type="button" class="tr-stop-btn" data-stop="${esc(l.from.id)}" aria-label="לוח זמנים בתחנה ${esc(l.from.name)}">${svg('bus', { size: 14 })}${esc(l.from.name)}${l.from.code ? ` <span class="tr-code">(${esc(l.from.code)})</span>` : ''}</button>
@@ -286,7 +287,7 @@ export class TransitPlanner {
           ${data.departures.length ? `<ul class="tr-deps">${data.departures.map((x) => `<li>
               <span class="tr-dep-time"><bdi>${esc(x.time_text)}</bdi><small>${x.minutes <= 0 ? 'עכשיו' : x.minutes < 60 ? `בעוד ${x.minutes} דק׳` : ''}</small></span>
               ${badge({ type: x.type, route_short_name: x.route_short_name, mode_he: x.mode_he, color: x.color, text_color: x.text_color }, { small: true })}
-              <span class="tr-dep-head">${x.headsign ? 'לכיוון ' + esc(x.headsign) : ''}<small>${esc(x.agency)}</small></span>
+              <span class="tr-dep-head">${x.headsign ? 'לכיוון ' + esc(x.headsign) : ''}<small>${agencyBadge(x, { size: 'sm', alt: '' })}${esc(x.agency)}</small></span>
             </li>`).join('')}</ul>` : '<p class="p-empty">אין יציאות בשלוש השעות הקרובות.</p>'}`;
         wireHead(body, app);
       },

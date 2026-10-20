@@ -542,3 +542,17 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 .mn-credit a { color: var(--text-muted); }
 .mn-approx { cursor: help; }
 .mn-near-list .result button { align-items: center; }
+
+/* ---------------------------------------------------------------- operator logos (js/logos.js) */
+/* Logos sit on a light chip in both themes, so dark-on-transparent logo files stay legible. */
+.card-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.card-badges .op-chip { margin-top: var(--space-2); }
+.op-chip { display: inline-flex; align-items: center; justify-content: center; flex: none; height: 28px; max-width: 112px; padding: 3px 8px;
+  border-radius: var(--radius-full); background: #FFFFFF; border: 1px solid var(--border); vertical-align: middle; }
+.op-chip.sm { height: 22px; max-width: 84px; padding: 2px 6px; }
+.op-logo { display: block; height: 100%; width: auto; max-width: 100%; object-fit: contain; }
+.op-chip.op-text { background: var(--op-color, #475569); border-color: transparent; color: #FFFFFF; font-size: var(--text-xs); font-weight: 700;
+  line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-with-name { display: inline-flex; align-items: center; gap: 6px; }
+.tr-agency, .tr-dep-head small { display: inline-flex; align-items: center; gap: 6px; }
+.tr-dep-head small .op-chip { height: 18px; padding: 1px 5px; }

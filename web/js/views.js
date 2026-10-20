@@ -2,6 +2,7 @@
 
 import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './gallery.js';
 import { svg } from './icons.js';
+import { operatorBadge } from './logos.js';
 import { minyanimHtml, wireMinyanim } from './minyanim.js';
 import { announce, copyText, esc, fmtDistance, fmtNumber, html, raw, render } from './util.js';
 
@@ -189,7 +190,8 @@ export function poiView(app, poi) {
           ${galleryHtml(photos, poi.name)}
           <div class="card-head">
             ${poi.name_en && poi.name_en !== poi.name ? `<div class="name-en" lang="en">${esc(poi.name_en)}</div>` : ''}
-            <span class="cat-badge"><span class="dot" style="background:${esc(poi.color)}" aria-hidden="true">${svg(poi.icon, { size: 14 })}</span>${esc(poi.sub_category_he)}</span>
+            <div class="card-badges"><span class="cat-badge"><span class="dot" style="background:${esc(poi.color)}" aria-hidden="true">${svg(poi.icon, { size: 14 })}</span>${esc(poi.sub_category_he)}</span>
+              ${operatorBadge(poi.operator_brand, { alt: poi.operator_brand ? `מופעל על ידי ${poi.operator_brand.name}` : '' })}</div>
             ${poi.opening_hours?.status ? `<div class="card-status ${poi.opening_hours.open_now ? 'open' : 'closed'}">${esc(poi.opening_hours.status)}</div>` : ''}
           </div>
           ${actionsBar(poi, app, (c.phone ? `<a class="action" href="${esc(c.phone_href)}" aria-label="התקשרות אל ${esc(poi.name)}: ${esc(c.phone)}"><span class="a-circle">${svg('phone')}</span>התקשרות</a>` : '')
