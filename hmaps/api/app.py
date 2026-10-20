@@ -23,6 +23,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /tiles/contours/{z}/{x}/{y}.pbf                    contour lines (Copernicus DEM)
     GET  /tiles/terrain/{z}/{x}/{y}.png                     terrain-RGB (Terrarium) for hillshade
     GET  /api/elevation?points=lat,lon|… | ?path=polyline   elevations / profile
+    GET  /api/updates, /api/updates/status, POST /api/updates/{component}   online data updates (updates.py)
     GET  /fonts/{fontstack}/{range}.pbf                     map label glyphs
     GET  /metrics                                           Prometheus metrics
 """
@@ -60,6 +61,7 @@ from . import elevation as elev_mod
 from . import routing, tiles
 from . import rich as rich_api
 from . import transit as transit_api
+from . import updates as updates_api
 from . import minyanim as minyanim_api
 from .search import SearchEngine, nearby, reverse
 from .settings import settings
@@ -874,6 +876,7 @@ def build_app() -> Starlette:
         *outdoor.ROUTES,  # /api/trails/{id}, /tiles/trails, /tiles/parks
         *transit_api.routes(),  # public transport (hmaps/api/transit.py)
         *minyanim_api.ROUTES,  # /api/minyanim/near (prayer times, hmaps/api/minyanim.py)
+        *updates_api.ROUTES,  # /api/updates… (online data updates, hmaps/api/updates.py)
         Route("/api/elevation", elevation_ep, methods=["GET", "POST"]),
         Route("/api/{rest:path}", api_not_found),
         Route("/tiles/base.json", tile_base_json),

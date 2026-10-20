@@ -9,6 +9,9 @@ When running as a PyInstaller bundle (sys.frozen is set), this module:
 
 When running normally (development), it just starts the server via uvicorn,
 leaving all env vars untouched so settings.py uses its existing defaults.
+
+``python -m hmaps update [--check] [--component X]`` runs the online data
+updater instead (hmaps/api/updates.py).
 """
 
 from __future__ import annotations
@@ -153,4 +156,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["update"]:  # python -m hmaps update [--check] [--component X]
+        from hmaps.api.updates import cli
+
+        sys.exit(cli(sys.argv[2:]))
     main()

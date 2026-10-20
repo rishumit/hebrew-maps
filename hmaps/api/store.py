@@ -79,6 +79,10 @@ class Dataset:
                 log.info("dataset loaded: %s (built %s)", path, self.meta.get("built"))
                 self._path, self._version = path, version
 
+    def reload(self) -> None:
+        """Pick up a newly published database now (online updater) instead of within ``check_every``."""
+        self._refresh(force=True)
+
     def conn(self) -> sqlite3.Connection:
         self._refresh()
         if self._path is None:
@@ -134,6 +138,12 @@ class Basemap:
     @property
     def available(self) -> bool:
         return self._check()
+
+    def reload(self) -> None:
+        """Rescan for a newly published tile set now (online updater)."""
+        self._last_scan = 0.0
+        self._mtime = None
+        self._check()
 
     def tile(self, z: int, x: int, y: int) -> bytes | None:
         if (self._mtime is None or time.monotonic() - self._last_scan > 10) and not self._check():
