@@ -160,6 +160,43 @@ def _ico(images: dict[int, bytes]) -> bytes:
     return out.getvalue()
 
 
+def _frames(data: bytes):
+    """Decoded RGBA frames of a PNG/ICO (every size of an ICO)."""
+    from PIL import Image
+
+    im = Image.open(io.BytesIO(data))
+    if im.format == "ICO":
+        return [im.ico.getimage(s).convert("RGBA") for s in sorted(im.ico.sizes())]
+    return [im.convert("RGBA")]
+
+
+def same_image(old: bytes | None, new: bytes, tolerance: int = 8) -> bool:
+    """True when two icon files look the same.
+
+    Byte-for-byte comparison is too strict: different Pillow/zlib/resvg builds (Windows vs
+    Linux CI) encode the same picture slightly differently, which used to leave the committed
+    icons "modified" after every local build. Pixels may differ by a few levels of anti-aliasing.
+    """
+    if old is None:
+        return False
+    if old == new:
+        return True
+    from PIL import ImageChops
+
+    try:
+        a, b = _frames(old), _frames(new)
+    except Exception:  # noqa: BLE001 – unreadable old file -> rewrite it
+        return False
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        if x.size != y.size:
+            return False
+        if max(hi for _, hi in ImageChops.difference(x, y).getextrema()) > tolerance:
+            return False
+    return True
+
+
 def plan(master_svg: str) -> list[tuple[Path, str, int | tuple[int, ...]]]:
     """(path, svg-variant, size or ico-sizes)."""
     plain, mask = "plain", "maskable"
@@ -195,7 +232,7 @@ def build(check: bool = False) -> int:
         data = _ico({s: png(variant, s) for s in size}) if isinstance(size, tuple) else png(variant, size)
         rel = path.relative_to(ROOT)
         old = path.read_bytes() if path.is_file() else None
-        if old == data:
+        if same_image(old, data):
             print(f"  ok        {rel}")
             continue
         if check:
