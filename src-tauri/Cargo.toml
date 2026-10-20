@@ -1,0 +1,39 @@
+[package]
+name = "hebrew-maps-desktop"
+version = "1.0.0"
+description = "מפות בעברית – desktop window for the offline Hebrew maps server"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "hebrew-maps-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# "custom-protocol" = production build (embedded splash page, no dev server), so a plain
+# `cargo build --release` gives the shipping exe – the tauri CLI is not required.
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+open = "5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
