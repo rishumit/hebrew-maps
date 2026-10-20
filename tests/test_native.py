@@ -85,5 +85,25 @@ class NativePipelineTest(unittest.TestCase):
             api.stop()
 
 
+class LauncherArgsTest(unittest.TestCase):
+    """hmaps/__main__.py options – the desktop app (src-tauri) starts the server with --no-browser --port N."""
+
+    def test_defaults_keep_browser_behaviour(self):
+        from hmaps.__main__ import parse_args
+
+        a = parse_args([], environ={})
+        self.assertEqual((a.host, a.port, a.no_browser), ("127.0.0.1", 8080, False))
+
+    def test_env_and_cli(self):
+        from hmaps.__main__ import parse_args
+
+        a = parse_args([], environ={"HMAPS_PORT": "9001", "HMAPS_NO_BROWSER": "1"})
+        self.assertEqual((a.port, a.no_browser), (9001, True))
+        a = parse_args(["--no-browser", "--port", "51234", "--host", "127.0.0.1", "-psn_0_1"],
+                       environ={"HMAPS_PORT": "9001"})
+        self.assertEqual((a.host, a.port, a.no_browser), ("127.0.0.1", 51234, True))
+        self.assertFalse(parse_args([], environ={"HMAPS_NO_BROWSER": "0"}).no_browser)
+
+
 if __name__ == "__main__":
     unittest.main()

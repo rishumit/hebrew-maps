@@ -1,5 +1,6 @@
 # Test tooling
 -r requirements.txt
+-r requirements-icons.txt
 playwright>=1.45
 pillow>=10
 scipy>=1.11

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>מפות בעברית</title>
+  <!-- Loading / error screen of the desktop app. Self-contained: no external resources, no IPC. -->
+  <style>
+    :root { color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --muted: #475569; --accent: #2563eb; --err: #b91c1c; --card: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0b1220; --fg: #e2e8f0; --muted: #94a3b8; --accent: #60a5fa; --err: #fca5a5; --card: #111827; }
+    }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: grid; place-items: center; background: var(--bg); color: var(--fg);
+      font: 16px/1.6 "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
+    }
+    main { text-align: center; padding: 24px; max-width: 560px; }
+    svg.logo { width: 96px; height: 96px; display: block; margin: 0 auto 16px; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    .spinner {
+      width: 36px; height: 36px; margin: 20px auto 0; border-radius: 50%;
+      border: 4px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+    .error { display: none; background: var(--card); border-radius: 12px; padding: 16px; margin-top: 16px; text-align: start; }
+    .error strong { color: var(--err); }
+    code { direction: ltr; unicode-bidi: embed; display: inline-block; word-break: break-all; font-size: 0.85rem; }
+    body.failed .spinner, body.failed #loading { display: none; }
+    body.failed .error { display: block; }
+  </style>
+</head>
+<body>
+  <main>
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E40AF"/></linearGradient></defs>
+      <rect width="512" height="512" rx="112" fill="url(#g)"/>
+      <path d="M96 352 L190 300 L290 344 L416 280 L416 400 L290 448 L190 404 L96 448 Z" fill="#BFDBFE" opacity=".55"/>
+      <path d="M256 92c-62 0-112 48-112 108 0 82 112 196 112 196s112-114 112-196c0-60-50-108-112-108z" fill="#FFFFFF"/>
+      <circle cx="256" cy="200" r="44" fill="#2563EB"/>
+    </svg>
+    <h1>מפות בעברית</h1>
+    <p id="loading" role="status" aria-live="polite">טוען את המפה…</p>
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="error" role="alert">
+      <p><strong>לא ניתן היה להפעיל את המפה.</strong></p>
+      <p id="error-text"></p>
+      <p>פרטים נוספים בקובץ היומן: <code id="log-path"></code></p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var err = q.get("error");
+      if (!err) return;
+      document.getElementById("error-text").textContent = err;
+      document.getElementById("log-path").textContent = q.get("log") || "";
+      document.body.classList.add("failed");
+    })();
+  </script>
+</body>
+</html>

@@ -5,7 +5,14 @@ When running as a PyInstaller bundle (sys.frozen is set), this module:
     BEFORE any hmaps.* import that reads them at module level.
   - Redirects stdout/stderr to a log file (windowed mode has no console).
   - Starts uvicorn programmatically.
-  - Opens the browser after the server is ready.
+  - Opens the browser after the server is ready (unless ``--no-browser`` /
+    ``HMAPS_NO_BROWSER=1`` – the desktop app (src-tauri/) starts the server that way
+    and shows the map in its own window).
+
+Command line (all optional, env vars in brackets):
+  --host H        listen address        [HMAPS_HOST, default 127.0.0.1]
+  --port N        listen port           [HMAPS_PORT, default 8080]
+  --no-browser    do not open a browser [HMAPS_NO_BROWSER=1]
 
 When running normally (development), it just starts the server via uvicorn,
 leaving all env vars untouched so settings.py uses its existing defaults.
@@ -84,12 +91,25 @@ if getattr(sys, "frozen", False):
             sys.stderr = _FileStream(logging.WARNING)  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
-# Step 3: read port (after env vars are set, but before importing uvicorn or
-# any hmaps module).
+# Step 3: read options (after env vars are set, but before importing uvicorn or
+# any hmaps module).  CLI arguments win over env vars.
 # ---------------------------------------------------------------------------
 
-_port = int(os.environ.get("HMAPS_PORT", "8080"))
-_host = os.environ.get("HMAPS_HOST", "127.0.0.1")
+_TRUE = {"1", "true", "yes", "on"}
+
+
+def parse_args(argv: list[str] | None = None, environ: dict[str, str] | None = None):
+    """Options for the launcher. Unknown arguments are ignored (PyInstaller/Windows may add some)."""
+    import argparse
+
+    env = os.environ if environ is None else environ
+    ap = argparse.ArgumentParser(prog="hebrew-maps", add_help=True)
+    ap.add_argument("--host", default=env.get("HMAPS_HOST") or "127.0.0.1")
+    ap.add_argument("--port", type=int, default=int(env.get("HMAPS_PORT") or "8080"))
+    ap.add_argument("--no-browser", action="store_true",
+                    default=(env.get("HMAPS_NO_BROWSER") or "").strip().lower() in _TRUE)
+    args, _unknown = ap.parse_known_args(argv)
+    return args
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +156,17 @@ def _open_browser_when_ready(host: str, port: int) -> None:
 # ASGI server — at which point the env vars above are already in place.
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
     import uvicorn
 
-    _open_browser_when_ready(_host, _port)
+    if not args.no_browser:
+        _open_browser_when_ready(args.host, args.port)
 
     config = uvicorn.Config(
         "hmaps.api.app:app",
-        host=_host,
-        port=_port,
+        host=args.host,
+        port=args.port,
         log_level="warning",
         use_colors=False,
     )
