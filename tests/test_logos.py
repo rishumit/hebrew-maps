@@ -157,3 +157,16 @@ class TransitFieldTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MapLogoBrandTest(unittest.TestCase):
+    """POI tiles carry `brand` for INPA / KKL sites so the map draws the official logo."""
+
+    def test_map_brand(self):
+        from hmaps.api.tiles import _map_brand
+        self.assertEqual(_map_brand('{"inpa": "name"}'), "inpa")
+        self.assertEqual(_map_brand('{"operator": "רשות הטבע והגנים"}'), "inpa")
+        self.assertEqual(_map_brand('{"operator": "קרן קיימת לישראל"}'), "kkl")
+        self.assertIsNone(_map_brand('{"operator": "אגד"}'))  # bus companies keep the category icon
+        self.assertIsNone(_map_brand(None))
+        self.assertIsNone(_map_brand("not json, but mentions operator"))

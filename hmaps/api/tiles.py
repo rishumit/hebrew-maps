@@ -12,7 +12,7 @@ import json
 import sqlite3
 from collections import defaultdict
 
-from ..core import categories, geo
+from ..core import categories, geo, logos
 from . import mvt
 
 #: zoom at which a POI of a given importance first appears
@@ -157,7 +157,7 @@ def poi_tile(con: sqlite3.Connection, z: int, x: int, y: int, cats: list[str] | 
     """POI overlay tile.  ``zooms`` (from :func:`compute_poi_zooms`) gives a globally
     consistent declutter; without it each tile is thinned on its own."""
     minx, miny, maxx, maxy = _tile_query_bbox(z, x, y)
-    sql = ("SELECT p.id, p.name, p.category, p.sub, p.lat, p.lon, p.importance, p.kosher FROM pois_rtree t "
+    sql = ("SELECT p.id, p.name, p.category, p.sub, p.lat, p.lon, p.importance, p.kosher, p.extra FROM pois_rtree t "
            "JOIN pois p ON p.id = t.id WHERE t.min_lon <= ? AND t.max_lon >= ? AND t.min_lat <= ? AND t.max_lat >= ?")
     args: list = [maxx, minx, maxy, miny]
     if cats:
@@ -224,13 +224,35 @@ def poi_tile(con: sqlite3.Connection, z: int, x: int, y: int, cats: list[str] | 
     return mvt.encode_tile([layer])
 
 
+# operators whose official logo replaces the category icon on the map (web/logos/<key>.svg)
+MAP_LOGO_BRANDS = ("inpa", "kkl")
+
+
+def _map_brand(extra_json: str | None) -> str | None:
+    """'inpa' / 'kkl' for sites run by the Nature and Parks Authority / KKL, else None.
+    Cheap pre-check first – the JSON is only parsed for the few rows that can match."""
+    if not extra_json or ("inpa" not in extra_json and "operator" not in extra_json):
+        return None
+    try:
+        extra = json.loads(extra_json)
+    except ValueError:
+        return None
+    b = logos.poi_brand(extra) if isinstance(extra, dict) else None
+    key = b and b.get("key")
+    return key if key in MAP_LOGO_BRANDS else None
+
+
 def _add_poi(layer: mvt.Layer, px: int, py: int, r) -> None:
     sub = categories.SUB_BY_ID[r[3]]
     name = r[1] or ""
-    layer.add_point(px, py, {
+    props = {
         "id": int(r[0]), "name": name, "cat": r[2], "sub": r[3], "icon": sub.icon,
         "rank": float(round(r[6], 3)), "kosher": bool(r[7]) if r[7] else None,
-    }, fid=int(r[0]))
+    }
+    brand = _map_brand(r[8]) if len(r) > 8 else None
+    if brand:
+        props["brand"] = brand
+    layer.add_point(px, py, props, fid=int(r[0]))
 
 
 # ------------------------------------------------------------------ fallback basemap

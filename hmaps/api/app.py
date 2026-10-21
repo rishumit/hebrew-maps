@@ -235,7 +235,7 @@ async def meta(req: Request) -> Response:
                     "tilejson": f"{base}/tiles/base.json" if st.basemap.available else None,
                     "fallback_tiles": f"{base}/tiles/fallback/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}",
                     "glyphs": f"{base}/fonts/{{fontstack}}/{{range}}.pbf"},
-        "poi_tiles": f"{base}/tiles/poi/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}-d3",
+        "poi_tiles": f"{base}/tiles/poi/{{z}}/{{x}}/{{y}}.pbf?v={st.ds.version}-d4",
         "routing": rs,
         "attribution": ATTRIBUTION + (" · " + elev_mod.ATTRIBUTION if st.terrain.available else ""),
         "bounds": [34.15, 29.40, 35.95, 33.45],

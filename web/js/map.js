@@ -1,11 +1,15 @@
 // Map view: MapLibre setup, basemap themes, overlay layers and map interactions.
 /* global maplibregl */
 
-import { markerImage, shieldImage } from './icons.js';
+import { logoMarkerImage, markerImage, shieldImage } from './icons.js';
 import { fallbackStyle, omtStyle, outdoorLayers, addSatellite, THEMES } from './style.js';
 import { bus, prefersReducedMotion } from './util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
+// ring colour of the logo markers (brand colours from hmaps/core/logos.py)
+const LOGO_RING = { inpa: '#2F6B3A', kkl: '#1E6B3C' };
+// 'cover' = the logo is a square badge that fills the disc; 'contain' = logo on white
+const LOGO_FIT = { inpa: 'cover', kkl: 'contain' };
 const OUTDOOR_LAYER_IDS = ['parks-fill', 'parks-outline', 'trails-casing', 'trails-line', 'trails-bike', 'trails-label'];
 const TRAIL_CLICK_LAYERS = ['trails-line', 'trails-bike'];
 const ISRAEL_CENTER = [35.0, 31.6];
@@ -290,7 +294,9 @@ export class MapView {
       paint: { 'text-color': '#FFFFFF' } });
     this._addLayerSafe({ id: 'pois', type: 'symbol', source: 'pois', 'source-layer': 'pois', filter: ['!', ['has', 'count']],
       layout: {
-        'icon-image': ['concat', 'poi:', ['get', 'icon'], ':', ['get', 'cat']],
+        // sites run by the Nature and Parks Authority / KKL show the operator's official logo
+        'icon-image': ['case', ['has', 'brand'], ['concat', 'logo:', ['get', 'brand']],
+          ['concat', 'poi:', ['get', 'icon'], ':', ['get', 'cat']]],
         // the server already thinned the POIs (Google-style); here we only keep a little
         // breathing room so neighbouring icons and labels never touch
         'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.62, 12, 0.72, 15, 0.86, 17, 1],
@@ -392,6 +398,7 @@ export class MapView {
 
   _missingImage(id) {
     if (this.map.hasImage(id)) return;
+    if (id.startsWith('logo:') || id.startsWith('sellogo:')) { this._loadLogoImage(id); return; }
     let img;
     if (id.startsWith('poi:')) {
       const [, icon, cat] = id.split(':');
@@ -412,6 +419,24 @@ export class MapView {
       return;
     }
     this.map.addImage(id, img, { pixelRatio: 2 });
+  }
+
+  /** Official operator logo (web/logos/<key>.svg) on a white disc – loaded async, then added. */
+  _loadLogoImage(id) {
+    this._logoLoading ||= new Set();
+    if (this._logoLoading.has(id)) return;
+    this._logoLoading.add(id);
+    const [kind, key] = id.split(':');
+    if (!/^[a-z0-9-]+$/.test(key)) return;
+    const img = new Image();
+    img.onload = () => {
+      const fit = LOGO_FIT[key] || 'contain';
+      const data = logoMarkerImage(img, LOGO_RING[key] || '#2F6B3A',
+        kind === 'sellogo' ? { size: 44, shape: 'pin', fit } : { size: 28, fit });
+      if (!this.map.hasImage(id)) this.map.addImage(id, data, { pixelRatio: 2 });
+    };
+    img.onerror = () => this._logoLoading.delete(id);
+    img.src = `/logos/${key}.svg`;
   }
 
   // ----------------------------------------------------------------- data setters
@@ -440,8 +465,9 @@ export class MapView {
     const icon = style?.icon && /^[\w-]+$/.test(style.icon) ? style.icon : 'dot';
     const color = style?.color && /^#[0-9A-Fa-f]{3,8}$/.test(style.color) ? style.color : '#D93025';
     this.selectedPoi = loc && style?.poiId != null ? Number(style.poiId) : null;
+    const logo = style?.brand && LOGO_RING[style.brand] ? style.brand : null;
     this._set('selection', loc ? { type: 'FeatureCollection', features: [{ type: 'Feature',
-      properties: { img: `sel:${icon}:${color}`, color },
+      properties: { img: logo ? `sellogo:${logo}` : `sel:${icon}:${color}`, color: logo ? LOGO_RING[logo] : color },
       geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] } }] } : EMPTY);
     this._applySelectionFilter();
   }

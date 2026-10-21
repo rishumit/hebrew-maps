@@ -181,7 +181,7 @@ const app = {
       if (kind === 'poi') {
         this.panel.show({ ...loadingView('poi:' + id, item.name ? `טוען: ${item.name}` : 'טוען'), replace });
         const poi = await api.poi(id, signal);
-        this.map.setSelection(poi.location, { icon: poi.icon, color: poi.color, poiId });
+        this.map.setSelection(poi.location, { icon: poi.icon, color: poi.color, poiId, brand: poi.operator_brand?.key });
         if (poi.geometry) this.map.setHighlight(poi.geometry); // stream, ridge, nature reserve
         if (poi.bbox && fly) this.map.fitBounds(poi.bbox, 17);
         else if (fly) this.map.flyTo(poi.location, Math.max(16, Math.min(17, this.map.map.getZoom())));

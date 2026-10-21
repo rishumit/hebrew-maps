@@ -190,6 +190,63 @@ export function markerImage(iconName, color, { size = 28, dpr = 2, ring = '#ffff
 
 
 /**
+ * Marker with an operator's official logo (an <img> already loaded): white disc with a thin
+ * brand-coloured ring, or – shape 'pin' – a brand-coloured pin holding the white disc.
+ * The logo keeps its aspect ratio inside the disc. Returns ImageData for map.addImage.
+ */
+export function logoMarkerImage(img, ring, { size = 28, dpr = 2, shape = 'circle', fit = 'contain' } = {}) {
+  const px = Math.round(size * dpr);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const r = size / 2;
+  const cy = shape === 'pin' ? r - 2 : r;
+  ctx.shadowColor = 'rgba(0,0,0,.28)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetY = 1;
+  ctx.beginPath();
+  if (shape === 'pin') {
+    ctx.moveTo(r, size - 1);
+    ctx.bezierCurveTo(r - 2, size - 6, 2, r + 3, 2, r - 2);
+    ctx.arc(r, r - 2, r - 2, Math.PI, 0);
+    ctx.bezierCurveTo(size - 2, r + 3, r + 2, size - 6, r, size - 1);
+    ctx.fillStyle = ring;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.beginPath();
+    ctx.arc(r, cy, r - 5, 0, Math.PI * 2);
+  } else {
+    ctx.arc(r, r, r - 1.5, 0, Math.PI * 2);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  const rad = shape === 'pin' ? r - 5 : r - 1.5;
+  const iw = img.naturalWidth || img.width || 1;
+  const ih = img.naturalHeight || img.height || 1;
+  if (fit === 'cover') {
+    // a square badge logo (e.g. the INPA emblem on green) fills the whole disc
+    ctx.save();
+    ctx.clip();
+    const k = (rad * 2) / Math.min(iw, ih);
+    ctx.drawImage(img, r - (iw * k) / 2, cy - (ih * k) / 2, iw * k, ih * k);
+    ctx.restore();
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = '#ffffff';
+  } else {
+    const k = (rad * 2 * 0.74) / Math.max(iw, ih);
+    ctx.drawImage(img, r - (iw * k) / 2, cy - (ih * k) / 2, iw * k, ih * k);
+    ctx.lineWidth = shape === 'pin' ? 1 : 1.6;
+    ctx.strokeStyle = ring;
+  }
+  ctx.beginPath();
+  ctx.arc(r, cy, rad, 0, Math.PI * 2);
+  ctx.stroke();
+  return ctx.getImageData(0, 0, px, px);
+}
+
+/**
  * Israeli route-number shield, the way Google Maps draws it: a small rounded
  * rectangle in the sign's colour, a thin inner white frame, the number in bold.
  * Colours follow the Israeli signage code (freeway blue, 1-2 digit red,
