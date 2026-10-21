@@ -3,8 +3,10 @@
 
 A local HTTP server stands in for GitHub Releases (with Range support and request logging)."""
 
+import contextlib
 import hashlib
 import http.server
+import io
 import json
 import os
 import shutil
@@ -19,6 +21,7 @@ import zipfile
 from datetime import datetime
 from email.message import Message
 from pathlib import Path
+from unittest import mock
 
 from hmaps.api import updates
 from hmaps.core import components as catalog
@@ -118,6 +121,30 @@ class ReleaseToolTest(unittest.TestCase):
         self.assertTrue(release.plan("schedule", {}, None, thu)["terrain"], "bootstrap: no terrain released yet")
         p = release.plan("workflow_dispatch", {"maps": "false", "transit": "true", "terrain": True}, prev, thu)
         self.assertEqual({c for c, b in p.items() if b}, {"transit", "terrain"})
+
+    def test_plan_dispatch_builds_never_published_components(self):
+        thu = datetime(2026, 10, 22)
+        defaults = {"maps": True, "basemap": True, "terrain": False, "transit": True, "media": True, "zmanim": True}
+        p = release.plan("workflow_dispatch", defaults, None, thu)
+        self.assertTrue(all(p.values()), "first manual run with the default inputs builds everything")
+        prev = {"components": {c: {"file": "x.zip", "status": "full"} for c in catalog.IDS}}
+        prev["components"]["terrain"] = {"file": None, "status": "unavailable"}
+        p = release.plan("workflow_dispatch", {"transit": True}, prev, thu)
+        self.assertEqual({c for c, b in p.items() if b}, {"transit", "terrain"})
+
+    def test_basemap_duration_args_get_a_unit(self):
+        from tools import basemap
+        self.assertEqual(basemap.fix_durations(["--http_timeout=120", "--http_retries=3", "--http_timeout=2m"]),
+                         ["--http_timeout=120s", "--http_retries=3", "--http_timeout=2m"])
+
+    def test_cmd_plan_reports_previous_manifest(self):
+        out = Path(tempfile.mkdtemp(prefix="hmaps-plan-")) / "out.txt"
+        with mock.patch.dict(os.environ, {"GITHUB_OUTPUT": str(out), "INPUTS_JSON": ""}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            release.main(["plan", "--event", "schedule", "--previous", str(out.parent / "missing.json")])
+        lines = dict(l.split("=", 1) for l in out.read_text(encoding="utf-8").splitlines())
+        self.assertEqual(lines["previous"], "false")
+        self.assertEqual(lines["terrain"], "true")
 
     def test_manifest_carries_unchanged_components_forward(self):
         dist = Path(tempfile.mkdtemp(prefix="hmaps-dist-"))

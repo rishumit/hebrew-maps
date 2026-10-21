@@ -85,10 +85,10 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 
 | משימה | מה היא עושה | מטמון |
 |-------|-------------|-------|
-| plan | ‏`tools/release.py plan`: אילו רכיבים לבנות. בתזמון: הכול, ונתוני הגובה רק בשבוע הראשון של החודש (או כשעוד לא פורסמו) | – |
-| osm | הורדת ה-PBF מ-Geofabrik ‏(wget, ‏5 ניסיונות, בדיקת MD5), פעם אחת לכל ריצה | PBF לפי שבוע |
+| plan | ‏`tools/release.py plan`: אילו רכיבים לבנות. בתזמון: הכול, ונתוני הגובה רק בשבוע הראשון של החודש (או כשעוד לא פורסמו). בהרצה ידנית: הרכיבים המסומנים, ובנוסף כל רכיב שעוד לא פורסם אף פעם (כך שהריצה הראשונה בונה הכול). בריצה הראשונה (`previous=false`) כל ההורדות של `previous-manifest` מדולגות | – |
+| osm | הורדת ה-PBF מ-Geofabrik ‏(wget, ‏5 ניסיונות, בדיקת MD5 כשמתפרסם קובץ ‎.md5), פעם אחת לכל ריצה | PBF לפי שבוע |
 | maps | ‏`hmaps.etl build --engine pyosmium --no-enrich` + ‏`enrich` (ויקינתונים, ויקיפדיה, ויקימסע, ויקישיתוף, שבילים) | תשובות HTTP של ההעשרה |
-| basemap | ‏`tools/basemap.py` (Java 21, ‏`--osm_path`, ‏`--http_timeout=120`, זיכרון: קלט `planetiler_memory` או משתנה `HMAPS_PLANETILER_MEMORY`, ברירת מחדל 3g) | Planetiler + מקורות קו חוף |
+| basemap | ‏`tools/basemap.py` (Java 21, ‏`--osm_path`, ‏`--http_timeout=120s`, זיכרון: קלט `planetiler_memory` או משתנה `HMAPS_PLANETILER_MEMORY`, ברירת מחדל 3g) | Planetiler + מקורות קו חוף |
 | terrain | ‏`python -m tools.terrain build` | אריחי ה-DEM (קבוע) |
 | transit | ‏`hmaps.etl gtfs --force` | – |
 | zmanim | מתחיל מהתמונה הקודמת (שמות בתי כנסת), ‏`hmaps.etl zmanim --fetch` | – |
