@@ -41,7 +41,13 @@ def _hms(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}:00"
 
 
-def write(path: Path) -> Path:
+def write(path: Path, far_return: bool = False) -> Path:
+    """The feed as a zip at *path*.
+
+    *far_return* adds the return direction of the far Egged "1" (r1nb: G → F) – a third "1" route,
+    after r1n, that has to be merged with r1n but not with the Tel Aviv "1" (on the real feed this
+    is what made building the lines fail).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     files: dict[str, list[str]] = {}
     files["agency.txt"] = ["agency_id,agency_name,agency_url,agency_timezone",
@@ -54,6 +60,8 @@ def write(path: Path) -> Path:
                            "r1b,3,1,גימל-תל אביב יפו<->אלף-תל אביב יפו-2#,x,3,",
                            "r1n,3,1,פא-הרצליה<->גימל רכבת-נתניה-1#,x,3,",
                            "rx,3,99,קו בהזמנה,x,715,"]
+    if far_return:
+        files["routes.txt"].append("r1nb,3,1,גימל רכבת-נתניה<->פא-הרצליה-2#,x,3,")
     files["stops.txt"] = ["stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,location_type,parent_station"]
     for i, (sid, (name, lat, lon, desc)) in enumerate(STOPS.items()):
         files["stops.txt"].append(f"{sid},{1000 + i},{name},{desc},{lat},{lon},0,")
@@ -84,6 +92,8 @@ def write(path: Path) -> Path:
     add("r3", "TUE", "3_night", "הא", "", ["A", "E"], 24 * 60 + 10, hop=30)
     add("r9", "WD", "rail_1", "123", "", ["F", "G", "H"], 8 * 60 + 10, hop=10)
     add("rx", "WD", "x_1", "", "", ["A", "B"], 8 * 60)
+    if far_return:
+        add("r1nb", "FRI", "1nb_fri", "פא", "", ["G", "F"], 15 * 60)
     files["trips.txt"] = trips
     files["stop_times.txt"] = st
     files["shapes.txt"] = ["shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence"]

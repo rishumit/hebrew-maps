@@ -4,6 +4,7 @@ import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './g
 import { svg } from './icons.js';
 import { operatorBadge } from './logos.js';
 import { minyanimHtml, wireMinyanim } from './minyanim.js';
+import { poiTransitHtml, wirePoiTransit } from './transit.js';
 import { announce, copyText, esc, fmtDistance, fmtNumber, html, raw, render } from './util.js';
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
@@ -196,6 +197,7 @@ export function poiView(app, poi) {
           </div>
           ${actionsBar(poi, app, (c.phone ? `<a class="action" href="${esc(c.phone_href)}" aria-label="התקשרות אל ${esc(poi.name)}: ${esc(c.phone)}"><span class="a-circle">${svg('phone')}</span>התקשרות</a>` : '')
             + (poi.nearby_sites !== undefined ? `<button type="button" class="action" data-act="view3d"><span class="a-circle a-3d" aria-hidden="true">3D</span>תלת-ממד</button>` : ''))}
+          ${poiTransitHtml(poi)}
           ${md.tags?.length ? `<div class="tags" aria-label="מאפיינים" style="padding-top:12px">${md.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
           ${textsHtml(poi.texts, poi.description_he ? { text: poi.description_he, url: md.wikipedia_url } : null)}
           ${poi.nearby_sites !== undefined ? michlolHtml(poi.name_he || poi.name) : ''}
@@ -231,6 +233,7 @@ export function poiView(app, poi) {
       wireTexts(body);
       wireNearby(body, app, poi.nearby_trails, poi.nearby_sites);
       wireMinyanim(body, app, poi);
+      wirePoiTransit(body, app, poi);
       const tg = body.querySelector('.hours-toggle');
       tg?.addEventListener('click', () => {
         const open = tg.getAttribute('aria-expanded') === 'true';

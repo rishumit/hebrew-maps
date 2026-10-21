@@ -123,6 +123,8 @@ def poi_detail(con: sqlite3.Connection, poi_id: int) -> dict | None:
             "tags": tags,
             "operator": extra.get("operator"), "brand": extra.get("brand"),
             "elevation": extra.get("ele"), "denomination": extra.get("nusach") or None,
+            # sign number of a bus stop (OSM ref = MoT stop code): links the card to the GTFS stop
+            "ref": extra.get("ref") if cat.id == "transport" else None,
             "last_updated": r["updated"],
             "wikipedia_url": _wiki_url(r["wikipedia"]),
             "osm_url": _osm_url(r["osm"]),

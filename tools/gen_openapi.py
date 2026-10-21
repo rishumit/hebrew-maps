@@ -186,8 +186,10 @@ spec["paths"].update({
             "geometry": {"type": "object", "description": "GeoJSON LineString (shapes.txt, או קו בין התחנות)"}}}),
             "404": {"description": "הקו או התחנה לא נמצאו"}}}},
     "/api/transit/stops": {"get": {"summary": "תחנות בסביבה", "parameters": [
-        q("lat", "", "number", required=True), q("lon", "", "number", required=True), q("radius", "מטרים", "number")],
-        "responses": ok("תחנות")}},
+        q("lat", "", "number", required=True), q("lon", "", "number", required=True), q("radius", "מטרים", "number"),
+        q("mode", "רק תחנות של אמצעי תחבורה זה (bus, rail, light_rail…)"),
+        q("code", "מספר התחנה שעל השלט (ref של תחנה ב-OSM) – תחנה תואמת מוחזרת ראשונה עם match=code", "integer")],
+        "responses": ok("תחנות (כל אחת עם modes – אמצעי התחבורה העוצרים בה)")}},
     "/api/transit/status": {"get": {"summary": "תאריכי לוח הזמנים ועדכניות הנתונים", "responses": ok("מצב")}},
 })
 

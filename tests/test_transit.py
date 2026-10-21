@@ -319,6 +319,131 @@ class TransitEngineTest(unittest.TestCase):
             p("yesterday")
 
 
+def _old_store(root: Path, far_return: bool = True) -> Path:
+    """A store as built before route ids / direction ids were kept (the 2026-10 desktop installs)."""
+    import numpy as np
+
+    from hmaps.transit import data, gtfs
+
+    gtfs.build(gtfs_fixture.write(root / "src" / "gtfs.zip", far_return=far_return), root / "new", source="test")
+    with np.load(data.resolve(root / "new")) as z:
+        arrs = {k: z[k] for k in z.files if k not in ("route_ids", "pat_dir")}
+    (root / "transit").mkdir(parents=True, exist_ok=True)
+    np.savez(root / "transit" / "transit.npz", **arrs)
+    return root / "transit"
+
+
+class OldStoreTest(unittest.TestCase):
+    """Regression: on the real feed (old-format store) every "all lines" / line view request answered 500.
+
+    Building the lines merged route areas with ``list.remove``, which compares numpy boxes with ``==``;
+    it raised as soon as a line number had three routes in two places (the far "1" and its return).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from hmaps.transit import data, planner
+
+        cls.root = Path(tempfile.mkdtemp(prefix="hmaps-transit-oldfmt-"))
+        cls.data = data.TransitData(_old_store(cls.root) / "transit.npz")
+        cls.planner = planner
+        # route index order of the built store (rx, a demand-responsive route, is not kept)
+        cls.rid = {d: str(i) for i, d in enumerate(["r1", "r2", "r3", "r9", "r1b", "r1n", "r1nb"])}
+
+    def test_store_is_old_format(self):
+        self.assertTrue((self.data.pat_dir == -1).all())
+        self.assertEqual(self.data.route_ids[:3], ["0", "1", "2"])
+
+    def test_lines_merge_by_area(self):
+        line, _, _ = self.data.lines()  # raised ValueError before the fix
+        r = {k: int(v) for k, v in self.rid.items()}
+        self.assertEqual(line[r["r1"]], line[r["r1b"]])
+        self.assertEqual(line[r["r1n"]], line[r["r1nb"]])
+        self.assertNotEqual(line[r["r1"]], line[r["r1n"]])
+
+    def test_stop_routes_and_line_view(self):
+        d = self.data
+        res = self.planner.stop_routes(d, d.id_index["G"])
+        bus = next(g for g in res["groups"] if g["type"] == "bus")
+        one = bus["lines"][0]
+        self.assertEqual(one["route_ids"], sorted([self.rid["r1n"], self.rid["r1nb"]]))
+        self.assertEqual({x["headsign"] for x in one["directions"]}, {"פא"})  # boarded at G only towards F
+        self.assertIsNone(one["directions"][0]["direction_id"])
+        rail = next(g for g in res["groups"] if g["type"] == "rail")["lines"][0]
+        self.assertEqual(rail["title"], "תחנת פא – תחנת חית")  # unnamed lines get their end points
+        v = self.planner.line_view(d, int(self.rid["r1nb"]), None, d.id_index["G"])
+        self.assertEqual([s["id"] for s in v["stops"]], ["G", "F"])
+        self.assertEqual(v["from_index"], 0)
+        self.assertEqual({o["route_id"] for o in v["directions"]}, {self.rid["r1nb"], self.rid["r1n"]})
+
+    def test_new_format_store_with_the_same_feed(self):
+        from hmaps.transit import data
+
+        d = data.TransitData(data.resolve(self.root / "new"))
+        res = self.planner.stop_routes(d, d.id_index["F"])
+        bus = next(g for g in res["groups"] if g["type"] == "bus")
+        self.assertEqual(bus["lines"][0]["route_ids"], ["r1n", "r1nb"])
+
+    def test_nearby_stops_by_mode_and_code(self):
+        d = self.data
+        # around F: the rail stop F (code 1006) and nothing else within 300 m
+        res = self.planner.nearby_stops(d, 32.0502, 34.8001, 300, 5, mode="rail")
+        self.assertEqual([(s["id"], s["modes"]) for s in res], [("F", ["rail", "bus"])])
+        self.assertEqual(self.planner.nearby_stops(d, 32.0502, 34.8001, 300, 5, mode="light_rail"), [])
+        # C and C2 are 100 m apart: the sign number picks C2 although C is nearer
+        res = self.planner.nearby_stops(d, 32.0000, 34.8200, 300, 5, code=1003)
+        self.assertEqual([s["id"] for s in res], ["C2", "C"])
+        self.assertEqual(res[0]["match"], "code")
+        self.assertNotIn("match", res[1])
+
+
+class OldStoreApiTest(unittest.TestCase):
+    """The endpoints the stop card and line view call, on an old-format store, answer 200 – fast."""
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+
+        from tests.helpers import sample_db
+
+        cls.root = Path(tempfile.mkdtemp(prefix="hmaps-transit-oldapi-"))
+        _old_store(cls.root)
+        shutil.copy(sample_db(), cls.root / "maps.db")
+        cls.api = ApiServer(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.api.stop()
+
+    def test_stop_card_and_line_view(self):
+        s, body, _ = self.api.get("/api/transit/stop/G", time=f"{gtfs_fixture.WEDNESDAY}T07:00")
+        self.assertEqual(s, 200, body)
+        for sid in ("A", "B", "C", "F", "G", "H"):
+            t0 = time.perf_counter()
+            s, body, _ = self.api.get(f"/api/transit/stop/{sid}/routes")
+            self.assertEqual(s, 200, (sid, body))
+            self.assertLess(time.perf_counter() - t0, 3.0)
+            self.assertGreater(body["count"], 0)
+            for line in (x for g in body["groups"] for x in g["lines"]):
+                for dr in line["directions"]:
+                    s, view, _ = self.api.get(f"/api/transit/route/{dr['route_id']}", direction=str(dr["direction"]), from_stop=sid)
+                    self.assertEqual(s, 200, (sid, dr, view))
+                    self.assertEqual(view["stops"][view["from_index"]]["id"], sid)
+        s, body, _ = self.api.get("/api/transit/stops", lat="32.0", lon="34.82", radius="300", code="1003", mode="bus")
+        self.assertEqual(s, 200)
+        self.assertEqual(body["stops"][0]["id"], "C2")
+        s, body, _ = self.api.get("/api/transit/stops", lat="32.0", lon="34.82", radius="300", code="12א")
+        self.assertEqual(s, 200)  # an OSM ref that is not a number just does not match
+
+    def test_poi_card_has_the_stop_sign_number(self):
+        s, body, _ = self.api.get("/api/poi/poi-14")
+        self.assertEqual(s, 200, body)
+        self.assertEqual(body["sub_category"], "bus_stop")
+        self.assertEqual(body["metadata"]["ref"], "20915")
+        s, body, _ = self.api.get("/api/poi/poi-2")
+        self.assertIsNone(body["metadata"]["ref"])
+
+
 class TransitApiTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

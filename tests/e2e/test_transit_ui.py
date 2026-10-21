@@ -163,5 +163,79 @@ class TransitUiTest(unittest.TestCase):
         page.screenshot(path=str(SHOTS / "23-transit-shabbat-dark.png"))
 
 
+class TransitOldStoreUiTest(unittest.TestCase):
+    """A bus stop clicked on the map, with a store built by the old code (no route / direction ids).
+
+    Regression for "the stop card shows no public transport" and "the line's stops say no connection".
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import json
+        import sqlite3
+
+        from tests.test_transit import _old_store
+
+        SHOTS.mkdir(parents=True, exist_ok=True)
+        cls.data = Path(tempfile.mkdtemp(prefix="hmaps-ui-transit-old-"))
+        shutil.copy(sample_db(), cls.data / "maps.db")
+        # the sample bus stop moves onto stop G of the feed (sign number 1007 = OSM ref)
+        con = sqlite3.connect(cls.data / "maps.db")
+        con.execute("UPDATE pois SET lat = 32.1001, lon = 34.8001, extra = ? WHERE id = 14", (json.dumps({"ref": "1007"}),))
+        con.commit()
+        con.close()
+        _old_store(cls.data)
+        cls.api = ApiServer(cls.data)
+        cls.pw = sync_playwright().start()
+        cls.browser = cls.pw.chromium.launch()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.api.stop()
+
+    new_page = TransitUiTest.new_page
+
+    def test_bus_stop_poi_card_lines_and_line_view(self):
+        page = self.new_page()
+        page.evaluate("window.__map.__clickPoi({id: 14, name: 'x'}, [34.8001, 32.1001])")
+        sec = page.locator(".poi-transit")
+        expect(sec).to_contain_text("תחבורה ציבורית")
+        expect(sec.locator(".pt-stop-title")).to_contain_text("תחנת גימל רכבת")
+        expect(sec.locator(".pt-stop-title")).to_contain_text("תחנה 1007")
+        # quick chips of the numbered lines (line 1 of Egged), the full list in a disclosure
+        expect(sec.locator(".tr-lines .tr-line-btn")).to_have_count(1)
+        expect(sec.locator(".tr-deps li, .p-empty").first).to_be_visible()  # departures "now" depend on the clock
+        sec.locator(".pt-all summary").click()
+        expect(sec.locator(".tr-route")).to_have_count(2)  # rail F–H and bus 1
+        expect(sec.locator(".tr-route").first).to_contain_text("תחנת פא – תחנת חית")
+        page.screenshot(path=str(SHOTS / "26-transit-poi-stop.png"))
+        issues = page.evaluate(AUDIT_JS)
+        self.assertEqual(issues, [], issues)
+        # chip → line view with every stop, the clicked stop highlighted
+        sec.locator(".tr-lines .tr-line-btn").first.click()
+        expect(page.locator("#panel-title")).to_contain_text("קו 1")
+        expect(page.locator(".tr-ls")).to_have_count(2)
+        expect(page.locator(".tr-ls.from")).to_contain_text("תחנת גימל רכבת")
+        expect(page.locator(".alert")).to_have_count(0)
+        # a stop of the line → the full stop card with all its lines
+        page.locator(".tr-ls:not(.from) button").first.click()
+        expect(page.locator("#panel-title")).to_contain_text("תחנת פא")
+        expect(page.locator(".tr-routes-sec .tr-route")).to_have_count(2)
+        real = [e for e in self.errors if "404" not in e and "Failed to load resource" not in e]
+        self.assertEqual(real, [])
+
+    def test_server_error_is_not_reported_as_no_connection(self):
+        page = self.new_page()
+        page.route("**/api/transit/route/**", lambda r: r.fulfill(status=500, body="Internal Server Error", content_type="text/plain"))
+        page.evaluate("window.__map.__clickPoi({id: 14, name: 'x'}, [34.8001, 32.1001])")
+        page.locator(".poi-transit .tr-lines .tr-line-btn").first.click()
+        alert = page.locator(".alert")
+        expect(alert).to_contain_text("שגיאה בשרת")
+        expect(alert).to_contain_text("500")
+        expect(alert).not_to_contain_text("אין חיבור")
+
+
 if __name__ == "__main__":
     unittest.main()

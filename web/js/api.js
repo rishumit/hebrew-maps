@@ -8,6 +8,27 @@ export class ApiError extends Error {
   }
 }
 
+// when the server answers with an error status, say so – "no connection" is only for a request that got no answer
+const STATUS_HE = {
+  400: 'הבקשה אינה תקינה',
+  404: 'המידע המבוקש לא נמצא',
+  408: 'השרת לא הגיב בזמן',
+  413: 'הבקשה גדולה מדי',
+  429: 'נשלחו יותר מדי בקשות – נסו שוב בעוד רגע',
+  500: 'אירעה שגיאה בשרת',
+  502: 'השרת אינו זמין כרגע',
+  503: 'השירות אינו זמין כרגע',
+  504: 'השרת לא הגיב בזמן',
+};
+
+export function statusMessage(status, serverMessage, code) {
+  const base = serverMessage || STATUS_HE[status] || (status >= 500 ? 'אירעה שגיאה בשרת' : 'הבקשה נכשלה');
+  // the server's own Hebrew explanation is enough for expected errors (404, 400, 503 "not installed");
+  // an unexpected server error gets its status code and what to do
+  if (status >= 500 && (!serverMessage || code === 'internal_error')) return `${base} (שגיאה ${status}). נסו שוב; אם זה חוזר – הפעילו את התוכנה מחדש.`;
+  return serverMessage ? base : `${base} (שגיאה ${status}).`;
+}
+
 async function request(path, { params, method = 'GET', body, signal, timeout = 15000 } = {}) {
   const url = new URL(path, location.origin);
   if (params) {
@@ -41,7 +62,7 @@ async function request(path, { params, method = 'GET', body, signal, timeout = 1
     /* empty body */
   }
   if (!resp.ok) {
-    throw new ApiError(data?.error?.message || 'אירעה שגיאה. נסו שוב.', resp.status, data?.error?.code);
+    throw new ApiError(statusMessage(resp.status, data?.error?.message, data?.error?.code), resp.status, data?.error?.code || `http_${resp.status}`);
   }
   return data;
 }
@@ -81,7 +102,9 @@ export const api = {
       signal,
       timeout: 25000,
     }),
-  transitStop: (id, time, signal) => request(`/api/transit/stop/${encodeURIComponent(id)}`, { params: { time }, signal }),
+  transitStop: (id, time, signal, limit) => request(`/api/transit/stop/${encodeURIComponent(id)}`, { params: { time, limit }, signal }),
+  transitStops: (lat, lon, { radius, mode, code, limit } = {}, signal) =>
+    request('/api/transit/stops', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6), radius, mode, code, limit }, signal }),
   transitStopRoutes: (id, signal) => request(`/api/transit/stop/${encodeURIComponent(id)}/routes`, { signal }),
   transitRoute: (id, { direction, fromStop } = {}, signal) =>
     request(`/api/transit/route/${encodeURIComponent(id)}`, { params: { direction, from_stop: fromStop }, signal }),

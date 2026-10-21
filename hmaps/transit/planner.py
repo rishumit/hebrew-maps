@@ -649,12 +649,35 @@ def departures(data: TransitData, stop: int, when: datetime | None = None, horiz
             "estimated_text": ESTIMATED_TEXT, "feed": status(data)}
 
 
-def nearby_stops(data: TransitData, lat: float, lon: float, radius: float = 500, limit: int = 20) -> list[dict]:
+def stop_modes(data: TransitData, stop: int) -> list[str]:
+    """Modes serving *stop* ("bus", "rail", "light_rail", …), most important first."""
+    modes = {data.pat_mode[int(p)] for p in data.sp_pat[data.sp_ptr[stop]:data.sp_ptr[stop + 1]]}
+    return sorted(modes, key=lambda m: MODE_ORDER.index(m) if m in MODE_ORDER else 99)
+
+
+def nearby_stops(data: TransitData, lat: float, lon: float, radius: float = 500, limit: int = 20,
+                 mode: str | None = None, code: int | None = None) -> list[dict]:
+    """Served stops around a point, nearest first, each with the modes serving it.
+
+    *mode* keeps only stops served by that mode; a stop whose sign number equals *code* (the ``ref``
+    of an OpenStreetMap bus stop) is moved to the front and flagged ``"match": "code"``.
+    """
     s, d = data.near(lat, lon, radius)
+    rows = []
+    for stop, dist in zip(s.tolist(), d.tolist()):
+        modes = stop_modes(data, stop)
+        if mode and mode not in modes:
+            continue
+        rows.append((stop, dist, modes))
+    if code is not None:
+        rows.sort(key=lambda r: int(data.stop_code[r[0]]) != code)  # stable: the rest stay by distance
     out = []
-    for stop, dist in zip(s[:limit], d[:limit]):
-        info = data.stop_info(int(stop))
+    for stop, dist, modes in rows[:limit]:
+        info = data.stop_info(stop)
         info["distance"] = int(round(dist))
+        info["modes"] = modes
+        if code is not None and int(data.stop_code[stop]) == code:
+            info["match"] = "code"
         out.append(info)
     return out
 
@@ -675,10 +698,28 @@ def natural_key(text: str) -> tuple:
     return (1 if text else 2, 0, text or "")
 
 
+def _end_name(part: str) -> str:
+    """"תל אביב מרכז-תל אביב יפו" → "תל אביב מרכז" (one end of a MoT route_long_name)."""
+    part = re.sub(r"-[0-9#]+$", "", part).strip()
+    if "-" in part:
+        name, city = (x.strip() for x in part.rsplit("-", 1))
+        return name or city
+    return part
+
+
+def route_title(d: TransitData, route: int) -> str | None:
+    """"הרצליה – אשקלון" for lines without a number (Israel Railways), whose label alone is just "רכבת"."""
+    if d.route_short[route]:
+        return None
+    ends = [_end_name(x) for x in d.route_long[route].split("<->")]
+    ends = [e for e in ends if e]
+    return " – ".join(ends) if len(ends) == 2 else None
+
+
 def _route_info(d: TransitData, route: int) -> dict:
     mode, mode_he = mode_of(int(d.route_type[route]))
     bg, fg = _color(d, route, mode)
-    return {"id": d.route_ids[route], "line": _line_label(d, route, mode, mode_he),
+    return {"id": d.route_ids[route], "line": _line_label(d, route, mode, mode_he), "title": route_title(d, route),
             "route_short_name": d.route_short[route] or None, "route_long_name": d.route_long[route] or None,
             "type": mode, "mode_he": mode_he, "agency": d.agency_names[int(d.route_agency[route])],
             "color": bg, "text_color": fg}

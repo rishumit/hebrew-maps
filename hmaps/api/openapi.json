@@ -2262,11 +2262,29 @@
       "schema": {
        "type": "number"
       }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "description": "רק תחנות של אמצעי תחבורה זה (bus, rail, light_rail…)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "code",
+      "in": "query",
+      "required": false,
+      "description": "מספר התחנה שעל השלט (ref של תחנה ב-OSM) – תחנה תואמת מוחזרת ראשונה עם match=code",
+      "schema": {
+       "type": "integer"
+      }
      }
     ],
     "responses": {
      "200": {
-      "description": "תחנות",
+      "description": "תחנות (כל אחת עם modes – אמצעי התחבורה העוצרים בה)",
       "content": {
        "application/json": {
         "schema": {
