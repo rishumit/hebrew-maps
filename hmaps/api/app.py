@@ -689,6 +689,10 @@ def _csp() -> str:
 
 
 CSP = _csp()
+# The desktop shell (web/desktop.html: title bar + one <iframe src="/map.html"> per tab) also talks to
+# the Tauri window over its IPC channel (ipc: on Linux/macOS, http://ipc.localhost on Windows/WebView2);
+# it only ever calls the window commands granted in src-tauri (minimize/maximize/close/drag).
+CSP_DESKTOP = CSP.replace("connect-src 'self';", "connect-src 'self' ipc: http://ipc.localhost;")
 
 
 class ServiceMiddleware:
@@ -742,9 +746,9 @@ class ServiceMiddleware:
                     (b"permissions-policy", b"geolocation=(self), camera=(), microphone=()"),
                 ]
                 if not path.startswith(("/tiles/", "/fonts/", "/api/")):
-                    extra.append((b"content-security-policy", CSP.encode()))
+                    extra.append((b"content-security-policy", (CSP_DESKTOP if path == "/desktop.html" else CSP).encode()))
                     extra.append((b"x-frame-options", b"SAMEORIGIN"))
-                if (path in ("/", "/index.html", "/map.html", "/sw.js", "/manifest.webmanifest")
+                if (path in ("/", "/index.html", "/map.html", "/desktop.html", "/sw.js", "/manifest.webmanifest")
                         or path.startswith(("/js/", "/css/"))) and b"cache-control" not in names:
                     extra.append((b"cache-control", b"no-cache"))
                 elif path.startswith(("/vendor/", "/fonts/", "/icons/", "/logos/")) and b"cache-control" not in names:

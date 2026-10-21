@@ -51,7 +51,7 @@ powershell -ExecutionPolicy Bypass installer\build.ps1
 - `hebrew-maps-desktop.exe` מפעיל את `hebrew-maps.exe --no-browser --port N` מאותה תיקייה, מציג מסך טעינה עד ש-`/api/health` עונה, וטוען את `http://127.0.0.1:N/map.html` בחלון משלו.
 - **פורט:** ‏48080, או הפורט האחרון שעבד. פורט תפוס מדולג, ואת השרת שמחזיק בו לא סוגרים. אפשר לקבוע פורט עם `HMAPS_DESKTOP_PORT`.
 - **סגירה:** סגירת החלון עוצרת את השרת. השרת רץ בתוך Windows Job Object, ולכן הוא נסגר גם אם האפליקציה קורסת.
-- **מצב פיתוח:** `set HMAPS_URL=http://127.0.0.1:8080/map.html` פותח את הכתובת בלי להפעיל שרת. `HMAPS_SERVER_EXE` מגדיר נתיב אחר ל-exe של השרת.
+- **מצב פיתוח:** `set HMAPS_URL=http://127.0.0.1:8080/desktop.html` פותח את הכתובת בלי להפעיל שרת. `HMAPS_SERVER_EXE` מגדיר נתיב אחר ל-exe של השרת.
 - **יומן:** `%LOCALAPPDATA%\il.hebrewmaps.desktop\logs\hebrew-maps-desktop.log`. יומן השרת נשאר `{app}\hebrew-maps.log`.
 - **WebView2:** מותקן מראש ב-Windows 11. אם הוא חסר, המתקין יוצר קיצורי דרך ל-`hebrew-maps.exe` (דפדפן).
 

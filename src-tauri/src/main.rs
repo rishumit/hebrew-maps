@@ -2,12 +2,15 @@
 //!
 //! Starts the bundled Python server (the PyInstaller `hebrew-maps.exe`, installed next to
 //! this exe) on a local port, shows a loading screen until `/api/health` answers, then
-//! loads `http://127.0.0.1:<port>/map.html` in a native window. Closing the window stops
-//! the server; on Windows the server lives in a Job Object with KILL_ON_JOB_CLOSE, so it
-//! also dies (with any children) if this process crashes or is killed.
+//! loads `http://127.0.0.1:<port>/desktop.html` – the tabbed shell with one map iframe per tab –
+//! in a window without a native frame: the pages draw their own RTL title bar (window buttons
+//! on the left), using only the window commands granted to them (see `WINDOW_CONTROLS`).
+//! Closing the window stops the server; on Windows the server lives in a Job Object with
+//! KILL_ON_JOB_CLOSE, so it also dies (with any children) if this process crashes or is killed.
 //!
 //! Environment:
 //!   HMAPS_URL          dev mode – just open this URL, do not start a server
+//!                      (`…/map.html#…` is opened in the tabbed shell, `…/desktop.html#…`)
 //!   HMAPS_SERVER_EXE   path of the server exe (default: `hebrew-maps.exe` next to this exe)
 //!   HMAPS_DESKTOP_PORT preferred port (default: last used, else 48080)
 //!
@@ -22,6 +25,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use tauri::ipc::CapabilityBuilder;
 use tauri::webview::NewWindowResponse;
 use tauri::{
     AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
@@ -30,7 +34,20 @@ use tauri_plugin_window_state::StateFlags;
 
 const MAIN: &str = "main";
 const TITLE: &str = "מפות בעברית";
-const START_PAGE: &str = "/map.html";
+const START_PAGE: &str = "/desktop.html";
+const MAP_PAGE: &str = "/map.html";
+/// Everything the pages may ask of the window: the custom title bar's buttons and drag area
+/// (`data-tauri-drag-region` uses start_dragging / internal_toggle_maximize). Nothing else –
+/// no events, no file system, no shell; the window title follows `document.title` from Rust.
+/// The local loading page gets these through `capabilities/window-controls-local.json`.
+const WINDOW_CONTROLS: &[&str] = &[
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized",
+];
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(120);
 /// Startup failures tolerated (each on the next port) before giving up.
 const MAX_EARLY_EXITS: u32 = 3;
@@ -46,7 +63,10 @@ fn main() {
         }))
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
+                // DECORATIONS: an older version saved `decorations: true`; the frame is always ours now.
+                .with_state_flags(
+                    StateFlags::all() & !StateFlags::VISIBLE & !StateFlags::DECORATIONS,
+                )
                 .build(),
         )
         .manage(ServerState(Mutex::new(None)))
@@ -69,10 +89,15 @@ fn main() {
                     Some(url) => {
                         log(&handle, &format!("dev mode: HMAPS_URL={url}"));
                         Url::parse(url.trim())
+                            .map(shell_url)
                             .map_err(|e| format!("HMAPS_URL אינה כתובת תקינה: {e}"))
                     }
                     None => start_server(&handle),
                 };
+                let result = result.and_then(|url| {
+                    grant_window_controls(&handle, &url)?;
+                    Ok(url)
+                });
                 let started = result.is_ok();
                 let target = match result {
                     Ok(url) => url,
@@ -110,12 +135,22 @@ fn create_main_window(app: &AppHandle, extra_host: Option<String>) -> tauri::Res
     let nav_app = app.clone();
     let popup_app = app.clone();
     let nav_host = extra_host.clone();
+    let shell_app = app.clone();
     WebviewWindowBuilder::new(app, MAIN, WebviewUrl::App("index.html".into()))
         .title(TITLE)
         .inner_size(1280.0, 820.0)
         .min_inner_size(640.0, 480.0)
         .center()
+        // Our own RTL title bar (web/desktop.html, ui/index.html). Windows keeps the resize borders,
+        // and `shadow` keeps the native shadow and the rounded corners of Windows 11.
+        .decorations(false)
+        .shadow(true)
         .visible(false) // shown after window-state has restored size/position
+        // The taskbar / Alt+Tab title follows the page (the shell sets "<tab title> – מפות בעברית").
+        .on_document_title_changed(|w, title| {
+            let title = title.trim();
+            let _ = w.set_title(if title.is_empty() { TITLE } else { title });
+        })
         .on_navigation(move |url| {
             if is_internal(url, nav_host.as_deref()) {
                 return true;
@@ -125,6 +160,10 @@ fn create_main_window(app: &AppHandle, extra_host: Option<String>) -> tauri::Res
         })
         .on_new_window(move |url, _features| {
             if is_internal(&url, extra_host.as_deref()) {
+                // A map in a new window (window.open, target=_blank) becomes a tab of the shell.
+                if open_in_tab(&shell_app, &url) {
+                    return NewWindowResponse::Deny;
+                }
                 NewWindowResponse::Allow
             } else {
                 open_external(&popup_app, &url);
@@ -132,6 +171,58 @@ fn create_main_window(app: &AppHandle, extra_host: Option<String>) -> tauri::Res
             }
         })
         .build()
+}
+
+/// `…/map.html#x` → `…/desktop.html#x` (the tabbed shell opens that map in a tab). The window has no
+/// native frame, so it must show a page with our title bar.
+fn shell_url(mut url: Url) -> Url {
+    if matches!(url.scheme(), "http" | "https") && url.path() == MAP_PAGE {
+        url.set_path(START_PAGE);
+    }
+    url
+}
+
+/// The remote capability for the pages of the server we show: exactly its origin
+/// (`http://127.0.0.1:<port>/*`), the main window only, `WINDOW_CONTROLS` only.
+fn window_controls_capability(url: &Url) -> Option<CapabilityBuilder> {
+    let origin = url.origin();
+    if !origin.is_tuple() {
+        return None; // tauri://, data: … – the local capability file covers the bundled page
+    }
+    let cap = CapabilityBuilder::new("window-controls-remote")
+        .remote(format!("{}/*", origin.ascii_serialization()))
+        .local(false)
+        .window(MAIN);
+    Some(WINDOW_CONTROLS.iter().fold(cap, |c, p| c.permission(*p)))
+}
+
+fn grant_window_controls(app: &AppHandle, url: &Url) -> Result<(), String> {
+    match window_controls_capability(url) {
+        Some(cap) => app
+            .add_capability(cap)
+            .map_err(|e| format!("הגדרת הרשאות החלון נכשלה: {e}")),
+        None => Ok(()),
+    }
+}
+
+/// If the main window shows the shell, open a local map URL as a new tab there.
+fn open_in_tab(app: &AppHandle, url: &Url) -> bool {
+    if url.path() != MAP_PAGE {
+        return false;
+    }
+    let Some(w) = app.get_webview_window(MAIN) else {
+        return false;
+    };
+    let Ok(current) = w.url() else { return false };
+    if current.path() != START_PAGE || current.origin() != url.origin() {
+        return false;
+    }
+    // JSON string literal of the URL: no way to break out of the call.
+    let arg = serde_json::to_string(url.as_str()).unwrap_or_else(|_| "\"\"".into());
+    w.eval(format!(
+        "window.hmapsDesktop && window.hmapsDesktop.openUrl({arg})"
+    ))
+    .is_ok()
 }
 
 /// Our own pages: the bundled loading screen and the local server.
@@ -315,6 +406,63 @@ mod tests {
             Some("192.168.1.5")
         ));
         assert!(!is_internal(&u("mailto:a@b.c"), None));
+    }
+
+    #[test]
+    fn map_url_opens_in_the_shell() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert_eq!(
+            shell_url(u("http://127.0.0.1:8080/map.html#map=12/32/35&q=x")).as_str(),
+            "http://127.0.0.1:8080/desktop.html#map=12/32/35&q=x"
+        );
+        assert_eq!(
+            shell_url(u("http://127.0.0.1:8080/desktop.html")).as_str(),
+            "http://127.0.0.1:8080/desktop.html"
+        );
+        assert_eq!(
+            shell_url(u("http://127.0.0.1:8080/other.html")).path(),
+            "/other.html"
+        );
+    }
+
+    #[test]
+    fn window_controls_only_for_the_server_origin() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert!(window_controls_capability(&u("tauri://localhost/index.html")).is_none());
+        assert!(window_controls_capability(&u("data:text/html,x")).is_none());
+        let cap = window_controls_capability(&u("http://127.0.0.1:48080/desktop.html#x"))
+            .expect("capability");
+        let json = serde_json::to_value(cap_inner(cap)).unwrap();
+        assert_eq!(json["remote"]["urls"][0], "http://127.0.0.1:48080/*");
+        assert_eq!(json["local"], false);
+        assert_eq!(json["windows"][0], MAIN);
+        let perms: Vec<String> = json["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p.as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(perms, WINDOW_CONTROLS);
+        assert!(perms.iter().all(|p| p.starts_with("core:window:allow-")));
+    }
+
+    /// The capability as the JSON a capability file would contain.
+    fn cap_inner(cap: CapabilityBuilder) -> tauri::utils::acl::capability::Capability {
+        use tauri::ipc::RuntimeCapability;
+        match cap.build() {
+            tauri::utils::acl::capability::CapabilityFile::Capability(c) => c,
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn local_capability_file_matches() {
+        let file: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/window-controls-local.json"))
+                .unwrap();
+        assert_eq!(file["windows"], serde_json::json!([MAIN]));
+        assert_eq!(file["permissions"], serde_json::json!(WINDOW_CONTROLS));
+        assert!(file.get("remote").is_none());
     }
 
     #[test]

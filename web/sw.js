@@ -1,5 +1,5 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.4.1';
+const VERSION = 'hmaps-1.5.1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const TILE_CACHE = 'hmaps-tiles-v1';
 const MAX_TILES = 4000;
@@ -13,6 +13,8 @@ const SHELL = [
   '/js/minyanim.js', '/js/logos.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
   '/js/updates.js', '/css/updates.css',
+  // desktop shell (tabs): the map iframes register this worker with scope /, so it serves the shell too
+  '/desktop.html', '/css/desktop.css', '/js/desktop.js',
 ];
 // operator logos (web/logos/logos.json) – small, and needed offline on POI / transit cards
 const LOGOS = ['beit-shemesh-express.svg', 'carmelit.svg', 'dankal.svg', 'egged.svg', 'galim.png', 'inpa.svg', 'israel-railways.svg', 'jerusalem-light-rail.svg', 'kavim.svg', 'kkl.svg', 'metronit.svg', 'metropoline.svg', 'nateev-express.svg', 'superbus.svg', 'tevel.svg'].map((f) => `/logos/${f}`);
