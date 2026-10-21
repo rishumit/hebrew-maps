@@ -329,8 +329,17 @@ export class MapView {
       paint: { 'text-color': dark ? '#FCA5A5' : '#B91C1C', 'text-halo-color': t.halo, 'text-halo-width': 1.5 } });
     this._addLayerSafe({ id: 'endpoints', type: 'symbol', source: 'endpoints',
       layout: { 'icon-image': ['concat', 'pin:', ['get', 'role']], 'icon-anchor': 'bottom', 'icon-allow-overlap': true } });
+    // selection: a soft halo on the spot + the place's own icon, enlarged, in a pin of its
+    // category colour (the plain map icon underneath is hidden while it is selected)
+    this._addLayerSafe({ id: 'selection-halo', type: 'circle', source: 'selection',
+      paint: { 'circle-color': ['get', 'color'], 'circle-opacity': 0.18, 'circle-radius': 13,
+        'circle-stroke-color': ['get', 'color'], 'circle-stroke-opacity': 0.45, 'circle-stroke-width': 1.5 } });
+    this._addLayerSafe({ id: 'selection-dot', type: 'circle', source: 'selection',
+      paint: { 'circle-color': ['get', 'color'], 'circle-radius': 3.5, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 1.5 } });
     this._addLayerSafe({ id: 'selection', type: 'symbol', source: 'selection',
-      layout: { 'icon-image': 'pin:selected', 'icon-anchor': 'bottom', 'icon-allow-overlap': true, 'icon-size': 1.2 } });
+      layout: { 'icon-image': ['get', 'img'], 'icon-anchor': 'bottom', 'icon-offset': [0, -3], 'icon-allow-overlap': true,
+        'icon-ignore-placement': true } });
+    this._applySelectionFilter();
     this._addLayerSafe({ id: 'location-accuracy', type: 'circle', source: 'location',
       paint: { 'circle-color': '#2563EB', 'circle-opacity': 0.12, 'circle-stroke-color': '#2563EB', 'circle-stroke-opacity': 0.3,
         'circle-stroke-width': 1,
@@ -392,8 +401,9 @@ export class MapView {
       img = shieldImage(ref.join(':'), kind);
     } else if (id === 'pin:result') {
       img = markerImage('pin', '#DC2626', { size: 30, shape: 'pin' });
-    } else if (id === 'pin:selected') {
-      img = markerImage('star', '#B91C1C', { size: 34, shape: 'pin' });
+    } else if (id.startsWith('sel:')) {
+      const [, icon, color] = id.split(':');
+      img = markerImage(icon, color, { size: 40, shape: 'pin' });
     } else if (id === 'pin:from') {
       img = markerImage('m_depart', '#059669', { size: 30, shape: 'pin' });
     } else if (id === 'pin:to') {
@@ -422,8 +432,26 @@ export class MapView {
     });
   }
 
-  setSelection(loc) {
-    this._set('selection', loc ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] } }] } : EMPTY);
+  /**
+   * Mark the selected place. `style` = { icon, color, poiId } of the place (POI/search item);
+   * without it a neutral red pin with a dot is drawn (address, "what's here", coordinates).
+   */
+  setSelection(loc, style = null) {
+    const icon = style?.icon && /^[\w-]+$/.test(style.icon) ? style.icon : 'dot';
+    const color = style?.color && /^#[0-9A-Fa-f]{3,8}$/.test(style.color) ? style.color : '#D93025';
+    this.selectedPoi = loc && style?.poiId != null ? Number(style.poiId) : null;
+    this._set('selection', loc ? { type: 'FeatureCollection', features: [{ type: 'Feature',
+      properties: { img: `sel:${icon}:${color}`, color },
+      geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] } }] } : EMPTY);
+    this._applySelectionFilter();
+  }
+
+  /** Hide the selected POI's own small icon – the selection pin shows the same icon, larger. */
+  _applySelectionFilter() {
+    const m = this.map;
+    if (!m?.getLayer?.('pois')) return;
+    const base = ['!', ['has', 'count']];
+    m.setFilter('pois', this.selectedPoi != null ? ['all', base, ['!=', ['to-number', ['get', 'id']], this.selectedPoi]] : base);
   }
 
   setHighlight(geometry) {
