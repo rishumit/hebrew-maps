@@ -41,7 +41,7 @@ class IconsTest(unittest.TestCase):
             self.assertTrue((ROOT / "src-tauri" / rel).is_file(), rel)
 
     def test_html_references_local_icons(self):
-        for page in ("map.html", "index.html"):
+        for page in ("map.html",):
             html = (ROOT / "web" / page).read_text(encoding="utf-8")
             self.assertIn('href="/icons/icon.svg"', html, page)
             self.assertIn('href="/icons/icon-192.png"', html, page)

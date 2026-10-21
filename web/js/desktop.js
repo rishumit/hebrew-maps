@@ -58,7 +58,7 @@ function announce(text) {
   setTimeout(() => (el.textContent = text), 50);
 }
 
-/** A same-origin map URL (/map.html or /) → its hash; anything else → null. */
+/** A same-origin map URL (/map.html or /, which serves the map too) → its hash; anything else → null. */
 function mapHash(href) {
   let u;
   try {
@@ -67,7 +67,6 @@ function mapHash(href) {
     return null;
   }
   if (u.origin !== location.origin || !['/map.html', '/'].includes(u.pathname)) return null;
-  if (u.pathname === '/' && !u.hash) return null; // the landing page, not a map
   return cleanHash(u.hash);
 }
 

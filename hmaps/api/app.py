@@ -812,6 +812,11 @@ async def api_not_found(req: Request) -> Response:
     return error_response(404, "not_found", "נתיב לא קיים")
 
 
+async def map_page(req: Request) -> Response:
+    """``/`` (and ``/index.html``) is the map itself – the product site lives on GitHub Pages (site/)."""
+    return FileResponse(settings.web_dir / "map.html", media_type="text/html; charset=utf-8")
+
+
 def build_app() -> Starlette:
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s", stream=sys.stdout)
     routes = [
@@ -849,6 +854,7 @@ def build_app() -> Starlette:
         *rich_api.ROUTES,  # /media/<key> (downloaded photos), /media/mly/<id> (Mapillary)
     ]
     if settings.web_dir.is_dir():
+        routes += [Route("/", map_page), Route("/index.html", map_page)]
         routes.append(Mount("/", app=StaticFiles(directory=str(settings.web_dir), html=True), name="web"))
     return Starlette(
         routes=routes,

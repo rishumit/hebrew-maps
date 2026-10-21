@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rishumit.github.io/hebrew-maps/sitemap.xml

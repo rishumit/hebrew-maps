@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>מפות בעברית – מפת ישראל למחשב, גם בלי אינטרנט</title>
+  <meta name="description" content="מפה מלאה של ישראל בעברית ל-Windows: חיפוש חכם, ניווט ברכב, ברגל ובאופניים, תחבורה ציבורית עם כל הקווים, שבילים, טופוגרפיה ותלת־ממד. הכול רץ על המחשב, בלי אינטרנט ובלי מעקב.">
+  <link rel="canonical" href="https://rishumit.github.io/hebrew-maps/">
+  <meta name="theme-color" content="#fbfaf6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a1512" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="index, follow">
+
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="he_IL">
+  <meta property="og:site_name" content="מפות בעברית">
+  <meta property="og:title" content="מפות בעברית – מפת ישראל למחשב, גם בלי אינטרנט">
+  <meta property="og:description" content="חיפוש בעברית, ניווט, תחבורה ציבורית, שבילים וטופוגרפיה – הכול על המחשב שלכם, בלי אינטרנט ובלי מעקב.">
+  <meta property="og:url" content="https://rishumit.github.io/hebrew-maps/">
+  <meta property="og:image" content="https://rishumit.github.io/hebrew-maps/assets/img/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="חלון האפליקציה מפות בעברית: העיר העתיקה בירושלים עם כרטיס מידע">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="מפות בעברית – מפת ישראל למחשב, גם בלי אינטרנט">
+  <meta name="twitter:description" content="חיפוש בעברית, ניווט, תחבורה ציבורית, שבילים וטופוגרפיה – הכול על המחשב שלכם.">
+  <meta name="twitter:image" content="https://rishumit.github.io/hebrew-maps/assets/img/og.jpg">
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="preload" href="assets/fonts/heebo-hebrew.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/site.css">
+  <script src="assets/js/site.js" defer></script>
+  <script>if (location.hash) document.documentElement.classList.add('cv-off');</script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "מפות בעברית",
+    "alternateName": "Hebrew Maps",
+    "description": "מפה מלאה של ישראל בעברית למחשב Windows שעובדת גם בלי אינטרנט: חיפוש חכם, ניווט, תחבורה ציבורית, שבילים, טופוגרפיה ותלת־ממד.",
+    "applicationCategory": "TravelApplication",
+    "operatingSystem": "Windows 10, Windows 11",
+    "inLanguage": "he",
+    "url": "https://rishumit.github.io/hebrew-maps/",
+    "downloadUrl": "https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe",
+    "image": "https://rishumit.github.io/hebrew-maps/assets/img/og.jpg",
+    "screenshot": "https://rishumit.github.io/hebrew-maps/assets/img/hero-light-1800.jpg",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "ILS" },
+    "codeRepository": "https://github.com/rishumit/hebrew-maps"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">דילוג לתוכן הראשי</a>
+
+  <header class="site-header" id="top">
+    <div class="wrap header-inner">
+      <a class="brand" href="./" aria-label="מפות בעברית – דף הבית">
+        <img src="favicon.svg" alt="" width="34" height="34">
+        <span>מפות בעברית</span>
+      </a>
+      <nav class="nav" aria-label="ניווט ראשי">
+        <ul class="nav-links" id="nav-links">
+          <li><a href="#features">יכולות</a></li>
+          <li><a href="#tour">סיור</a></li>
+          <li><a href="#how">איך זה עובד</a></li>
+          <li><a href="changelog.html">מה חדש</a></li>
+          <li><a href="#faq">שאלות</a></li>
+        </ul>
+        <a class="nav-gh" href="https://github.com/rishumit/hebrew-maps" aria-label="קוד המקור ב-GitHub">
+          <svg aria-hidden="true"><use href="assets/img/icons.svg#github"></use></svg>
+        </a>
+        <a class="btn btn-primary btn-sm" href="download.html" data-dl-link>
+          <svg aria-hidden="true"><use href="assets/img/icons.svg#download"></use></svg>
+          <span>הורדה<span class="long"> ל-Windows</span></span>
+        </a>
+        <button class="menu-btn" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="תפריט">
+          <svg aria-hidden="true"><use href="assets/img/icons.svg#menu"></use></svg>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ============================================================ hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="contours" aria-hidden="true">
+        <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M-40 640c160-60 260-170 420-150s230 140 400 120 250-190 420-210 210 60 280 40"/>
+          <path d="M-40 600c150-70 260-190 430-170s220 130 390 110 240-200 420-220 220 50 280 30"/>
+          <path d="M-40 560c150-80 270-210 440-190s210 120 380 100 230-210 420-230 220 40 280 20"/>
+          <path d="M-40 520c140-90 280-230 450-210s200 110 370 90 220-220 420-240 230 30 280 10"/>
+          <path d="M-40 480c140-100 290-250 460-230s190 100 360 80 210-230 420-250 230 20 280 0"/>
+          <path d="M140 400c70-90 170-150 270-140s150 70 250 60 160-120 250-130"/>
+          <path d="M210 360c60-70 130-110 210-100s120 50 190 40 120-80 180-90"/>
+          <path d="M300 320c40-40 90-60 140-55s80 30 120 25"/>
+          <path d="M880 220c80-40 160-50 230-30s110 70 190 60 100-40 180-60"/>
+          <path d="M920 180c60-30 120-35 180-20s90 50 150 45 80-30 150-45"/>
+          <path d="M-40 700c170-50 250-150 410-130s240 150 410 130 260-180 420-200 200 70 280 50"/>
+          <path d="M-40 760c180-40 240-130 400-110s250 160 420 140 270-170 420-190 190 80 280 60"/>
+          <path d="M-40 820c190-30 230-110 390-90s260 170 430 150 280-160 420-180 180 90 280 70"/>
+        </svg>
+      </div>
+
+      <div class="wrap">
+        <div class="hero-copy">
+          <a class="badge" href="changelog.html"><span class="dot">חדש</span><span>לשוניות, מדריכי מסלול וזמני תפילות</span></a>
+          <h1 id="hero-title">כל ישראל במפה אחת.<span class="soft">גם בלי אינטרנט.</span></h1>
+          <p class="lead">מפה מלאה בעברית למחשב Windows: חיפוש חכם, ניווט, תחבורה ציבורית עם כל הקווים, שבילים וטופוגרפיה. הכול רץ על המחשב שלכם, מנתונים פתוחים, ומתעדכן כל שבוע.</p>
+          <div class="dl">
+              <div class="hero-actions">
+                <a class="btn btn-primary btn-lg" href="https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe" data-dl-link>
+                  <svg aria-hidden="true"><use href="assets/img/icons.svg#windows"></use></svg>
+                  הורדה ל-Windows
+                </a>
+                <a class="btn btn-ghost btn-lg" href="#how">איך זה עובד</a>
+              </div>
+              <p class="dl-meta" data-dl-meta>
+                <span data-dl-version>הגרסה האחרונה</span>
+                <span data-dl-size><bdi>Windows 10/11</bdi> ‏(64 ביט)</span>
+                <span data-dl-date>ללא תשלום</span>
+                <span><a href="https://github.com/rishumit/hebrew-maps/releases">כל הגרסאות</a></span>
+              </p>
+          </div>
+        </div>
+
+        <div class="hero-shot">
+          <div class="window">
+            <picture>
+              <source type="image/avif" media="(prefers-color-scheme: dark)" srcset="assets/img/hero-dark-800.avif 800w, assets/img/hero-dark-1200.avif 1200w, assets/img/hero-dark-1800.avif 1800w" sizes="(min-width: 1280px) 1200px, calc(100vw - 2 * clamp(1rem, .5rem + 2.5vw, 2.5rem))">
+              <source type="image/webp" media="(prefers-color-scheme: dark)" srcset="assets/img/hero-dark-800.webp 800w, assets/img/hero-dark-1200.webp 1200w, assets/img/hero-dark-1800.webp 1800w" sizes="(min-width: 1280px) 1200px, calc(100vw - 2 * clamp(1rem, .5rem + 2.5vw, 2.5rem))">
+              <source type="image/avif" srcset="assets/img/hero-light-800.avif 800w, assets/img/hero-light-1200.avif 1200w, assets/img/hero-light-1800.avif 1800w" sizes="(min-width: 1280px) 1200px, calc(100vw - 2 * clamp(1rem, .5rem + 2.5vw, 2.5rem))">
+              <source type="image/webp" srcset="assets/img/hero-light-800.webp 800w, assets/img/hero-light-1200.webp 1200w, assets/img/hero-light-1800.webp 1800w" sizes="(min-width: 1280px) 1200px, calc(100vw - 2 * clamp(1rem, .5rem + 2.5vw, 2.5rem))">
+              <img src="assets/img/hero-light-1200.jpg" srcset="assets/img/hero-light-800.jpg 800w, assets/img/hero-light-1200.jpg 1200w, assets/img/hero-light-1800.jpg 1800w" sizes="(min-width: 1280px) 1200px, calc(100vw - 2 * clamp(1rem, .5rem + 2.5vw, 2.5rem))"
+                width="1440" height="900" fetchpriority="high" decoding="async"
+                alt="חלון האפליקציה עם ארבע לשוניות פתוחות: העיר העתיקה בירושלים במפה, וכרטיס מידע עם פעולות (מסלול, תלת־ממד, שיתוף) ורשימת השבילים המסומנים במקום.">
+            </picture>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ facts strip -->
+    <div class="facts">
+      <div class="wrap">
+        <ul>
+          <li><svg aria-hidden="true"><use href="assets/img/icons.svg#offline"></use></svg><b>בלי אינטרנט</b><span>הנתונים שמורים במחשב</span></li>
+          <li><svg aria-hidden="true"><use href="assets/img/icons.svg#aleph"></use></svg><b>עברית מלאה</b><span>מימין לשמאל, בכל מקום</span></li>
+          <li><svg aria-hidden="true"><use href="assets/img/icons.svg#eye-off"></use></svg><b>בלי מעקב</b><span>אין חשבון, אין פרסומות</span></li>
+          <li><svg aria-hidden="true"><use href="assets/img/icons.svg#refresh"></use></svg><b>עדכון שבועי</b><span>מפה, תחבורה וזמנים</span></li>
+          <li><svg aria-hidden="true"><use href="assets/img/icons.svg#data"></use></svg><b>נתונים פתוחים</b><span>OpenStreetMap ומשרד התחבורה</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ============================================================ features -->
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">יכולות</p>
+          <h2 id="features-title">כל מה שצריך ממפה, בלי לחכות לרשת.</h2>
+          <p>מהחיפוש הראשון ועד הוראות הפנייה האחרונות, הכול נענה מהמחשב עצמו. מהר, בעברית, וגם כשהחיבור נופל.</p>
+        </div>
+
+        <div class="bento">
+          <article class="card card-media span-7 reveal">
+            <div class="card-body">
+              <div class="ico blue"><svg aria-hidden="true"><use href="assets/img/icons.svg#bus"></use></svg></div>
+              <h3>תחבורה ציבורית, כל הקווים והתחנות</h3>
+              <p>אוטובוסים, רכבת ורכבת קלה מלוח הזמנים הרשמי של משרד התחבורה. לוח יציאות לכל תחנה, תכנון נסיעה עם החלפות, יציאה עכשיו או בשעה שתבחרו – בלי אינטרנט.</p>
+            </div>
+            <div class="shot pos-end">
+              <picture>
+                <source type="image/avif" srcset="assets/img/crop-transit-640.avif 640w, assets/img/crop-transit-960.avif 960w" sizes="(min-width: 1024px) 640px, 90vw">
+                <source type="image/webp" srcset="assets/img/crop-transit-640.webp 640w, assets/img/crop-transit-960.webp 960w" sizes="(min-width: 1024px) 640px, 90vw">
+                <img src="assets/img/crop-transit-960.jpg" width="960" height="540" loading="lazy" decoding="async"
+                  alt="כרטיס תחנה עם הקווים העוברים בה והיציאות הקרובות, ליד תחנת רכבת סבידור מרכז בתל אביב.">
+              </picture>
+            </div>
+          </article>
+
+          <article class="card card-media span-5 reveal">
+            <div class="card-body">
+              <div class="ico"><svg aria-hidden="true"><use href="assets/img/icons.svg#mountain"></use></svg></div>
+              <h3>טופוגרפיה ותלת־ממד</h3>
+              <p>קווי גובה, הצללת תבליט ונקודות גובה, ותצוגה תלת־ממדית של הרים ועמקים.</p>
+            </div>
+            <div class="shot pos-center">
+              <picture>
+                <source type="image/avif" srcset="assets/img/crop-topo-640.avif 640w, assets/img/crop-topo-960.avif 960w" sizes="(min-width: 1024px) 460px, 90vw">
+                <source type="image/webp" srcset="assets/img/crop-topo-640.webp 640w, assets/img/crop-topo-960.webp 960w" sizes="(min-width: 1024px) 460px, 90vw">
+                <img src="assets/img/crop-topo-960.jpg" width="960" height="540" loading="lazy" decoding="async"
+                  alt="מפה טופוגרפית של אזור הר מירון עם קווי גובה, הצללה ושבילים מסומנים בצבעיהם.">
+              </picture>
+            </div>
+          </article>
+
+          <article class="card span-4 reveal">
+            <div class="ico"><svg aria-hidden="true"><use href="assets/img/icons.svg#offline"></use></svg></div>
+            <h3>עובד בלי אינטרנט</h3>
+            <p>המפה, החיפוש, הניווט ולוחות הזמנים שמורים במחשב. באוטובוס, בשטח או ברשת מסוננת – הכול ממשיך לעבוד.</p>
+          </article>
+          <article class="card span-4 reveal">
+            <div class="ico blue"><svg aria-hidden="true"><use href="assets/img/icons.svg#search"></use></svg></div>
+            <h3>חיפוש שמבין עברית</h3>
+            <p>שמות, כתובות וקטגוריות, קיצורים ושגיאות כתיב – ואפילו הקלדה במקלדת אנגלית בטעות.</p>
+            <div class="chips"><span class="sr-only">דוגמאות לחיפוש:</span>
+              <span class="chip">דיזנגוף 50 ת"א</span><span class="chip">מסעדה כשרה ליד</span><span class="chip">מגדל דויד</span>
+            </div>
+          </article>
+          <article class="card span-4 reveal">
+            <div class="ico blue"><svg aria-hidden="true"><use href="assets/img/icons.svg#route"></use></svg></div>
+            <h3>ניווט ברכב, ברגל ובאופניים</h3>
+            <p>מסלולים חלופיים, זמן ומרחק, והוראות פנייה בעברית. בהליכה ובאופניים גם פרופיל גובה.</p>
+          </article>
+
+          <article class="card card-media span-5 reveal">
+            <div class="card-body">
+              <div class="ico sun"><svg aria-hidden="true"><use href="assets/img/icons.svg#hiker"></use></svg></div>
+              <h3>מסלולי טיול ומדריכי מסלול</h3>
+              <p>אלפי שבילים מסומנים בצבעיהם. לכל מסלול: שלבים, זמן הליכה לפי שיפוע, פרופיל גובה, מים ובטיחות – ואפשר להדפיס.</p>
+            </div>
+            <div class="shot pos-end">
+              <picture>
+                <source type="image/avif" srcset="assets/img/crop-guide-640.avif 640w, assets/img/crop-guide-960.avif 960w" sizes="(min-width: 1024px) 460px, 90vw">
+                <source type="image/webp" srcset="assets/img/crop-guide-640.webp 640w, assets/img/crop-guide-960.webp 960w" sizes="(min-width: 1024px) 460px, 90vw">
+                <img src="assets/img/crop-guide-960.jpg" width="960" height="540" loading="lazy" decoding="async"
+                  alt="מדריך המסלול של נחל עמוד: אורך, זמן הליכה, דרגת קושי, פרופיל גובה ושלבי המסלול.">
+              </picture>
+            </div>
+          </article>
+
+          <article class="card card-media span-7 reveal">
+            <div class="card-body">
+              <div class="ico sun"><svg aria-hidden="true"><use href="assets/img/icons.svg#clock"></use></svg></div>
+              <h3>זמני תפילות בבתי הכנסת</h3>
+              <p>לבתי הכנסת יש לוח מניינים שבועי – שחרית, מנחה וערבית – מפרויקט זמני התפילות הארצי של נדרים פלוס. והמניין הבא בסביבה במרחק לחיצה.</p>
+            </div>
+            <div class="shot pos-end">
+              <picture>
+                <source type="image/avif" srcset="assets/img/crop-syn-640.avif 640w, assets/img/crop-syn-960.avif 960w" sizes="(min-width: 1024px) 640px, 90vw">
+                <source type="image/webp" srcset="assets/img/crop-syn-640.webp 640w, assets/img/crop-syn-960.webp 960w" sizes="(min-width: 1024px) 640px, 90vw">
+                <img src="assets/img/crop-syn-960.jpg" width="960" height="540" loading="lazy" decoding="async"
+                  alt="כרטיס של בית כנסת בירושלים עם לוח זמני התפילות שלו.">
+              </picture>
+            </div>
+          </article>
+
+          <article class="card span-3 reveal">
+            <div class="ico"><svg aria-hidden="true"><use href="assets/img/icons.svg#aerial"></use></svg></div>
+            <h3>תצלומי אוויר</h3>
+            <p>אורתופוטו של מרכז מיפוי ישראל. אפשר להוריד את כל הארץ למחשב, ברמת הפירוט שתבחרו.</p>
+          </article>
+          <article class="card span-3 reveal">
+            <div class="ico blue"><svg aria-hidden="true"><use href="assets/img/icons.svg#tabs"></use></svg></div>
+            <h3>לשוניות מרובות</h3>
+            <p>כמה מפות במקביל בחלון אחד, כמו בדפדפן. נפתחות שוב בהפעלה הבאה.</p>
+          </article>
+          <article class="card span-3 reveal">
+            <div class="ico"><svg aria-hidden="true"><use href="assets/img/icons.svg#access"></use></svg></div>
+            <h3>נגישות</h3>
+            <p>לפי WCAG 2.1 AA: מקלדת מלאה, קוראי מסך, ניגודיות ורשימה טקסטואלית של המקומות.</p>
+          </article>
+          <article class="card span-3 reveal">
+            <div class="ico sun"><svg aria-hidden="true"><use href="assets/img/icons.svg#refresh"></use></svg></div>
+            <h3>עדכון שבועי</h3>
+            <p>מפה, תחבורה וזמני תפילות מתעדכנים מתוך האפליקציה, בלחיצה או אוטומטית.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ tour -->
+    <section class="section section-alt" id="tour" aria-labelledby="tour-title">
+      <div class="wrap">
+        <div class="section-head center">
+          <p class="eyebrow">סיור באפליקציה</p>
+          <h2 id="tour-title">צילומי מסך אמיתיים. בלי הדמיות.</h2>
+          <p>כל התמונות צולמו מהאפליקציה עצמה, על נתוני ישראל המלאים.</p>
+        </div>
+
+        <div class="tour" data-tour>
+          <div class="tour-tabs" role="tablist" aria-label="מסכים באפליקציה" hidden>
+            <button type="button" role="tab" id="tt-transit" aria-controls="tp-transit" aria-selected="true"><svg aria-hidden="true"><use href="assets/img/icons.svg#train"></use></svg>תחבורה ציבורית</button>
+            <button type="button" role="tab" id="tt-route" aria-controls="tp-route" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#route"></use></svg>ניווט</button>
+            <button type="button" role="tab" id="tt-guide" aria-controls="tp-guide" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#hiker"></use></svg>מדריך מסלול</button>
+            <button type="button" role="tab" id="tt-topo" aria-controls="tp-topo" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#mountain"></use></svg>טופוגרפיה</button>
+            <button type="button" role="tab" id="tt-3d" aria-controls="tp-3d" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#cube"></use></svg>תלת־ממד</button>
+            <button type="button" role="tab" id="tt-syn" aria-controls="tp-syn" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#clock"></use></svg>זמני תפילות</button>
+            <button type="button" role="tab" id="tt-dark" aria-controls="tp-dark" aria-selected="false" tabindex="-1"><svg aria-hidden="true"><use href="assets/img/icons.svg#moon"></use></svg>מצב כהה</button>
+          </div>
+
+          <div class="tour-panel" id="tp-transit" role="tabpanel" aria-labelledby="tt-transit">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-transitplan-800.avif 800w, assets/img/tour-transitplan-1200.avif 1200w, assets/img/tour-transitplan-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-transitplan-800.webp 800w, assets/img/tour-transitplan-1200.webp 1200w, assets/img/tour-transitplan-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-transitplan-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="תכנון נסיעה בתחבורה ציבורית ממגדלי עזריאלי למגדל השעון ביפו: הקו האדום של הרכבת הקלה במפה, וחלופות עם זמני יציאה והגעה, החלפות והליכה.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מעזריאלי ליפו, ברכבת הקלה</h3>
+                <p>תכנון נסיעה עם זמני יציאה והגעה, החלפות והליכה, וחלופות: הגעה מוקדמת, פחות החלפות או פחות הליכה. מלוח הזמנים של משרד התחבורה, שמור במחשב – בלי אינטרנט.</p>
+                <div class="chips"><span class="chip">אוטובוס</span><span class="chip">רכבת</span><span class="chip">רכבת קלה</span><span class="chip">עד 4 החלפות</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-route" role="tabpanel" aria-labelledby="tt-route">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-car-800.avif 800w, assets/img/tour-car-1200.avif 1200w, assets/img/tour-car-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-car-800.webp 800w, assets/img/tour-car-1200.webp 1200w, assets/img/tour-car-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-car-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="מסלול נסיעה ברכב ממגדלי עזריאלי בתל אביב לתחנה המרכזית בירושלים: 61 ק״מ ב-48 דקות, עם הוראות פנייה בעברית.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מתל אביב לירושלים, פנייה אחר פנייה</h3>
+                <p>ברכב, ברגל או באופניים: מסלול, זמן ומרחק, פרופיל גובה עם עלייה וירידה מצטברות, והוראות כמו "בכיכר צאו ביציאה השנייה". מנוע הניווט רץ על המחשב.</p>
+                <div class="chips"><span class="chip">רכב</span><span class="chip">הליכה</span><span class="chip">אופניים</span><span class="chip">מסלולים חלופיים</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-guide" role="tabpanel" aria-labelledby="tt-guide">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-guide-800.avif 800w, assets/img/tour-guide-1200.avif 1200w, assets/img/tour-guide-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-guide-800.webp 800w, assets/img/tour-guide-1200.webp 1200w, assets/img/tour-guide-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-guide-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="מדריך המסלול של נחל עמוד: המסלול מסומן במפה בשלבים ממוספרים, ובחלונית אורך, זמן, קושי, סימון השבילים ופרופיל גובה.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מדריך מסלול לכל שביל</h3>
+                <p>נחל עמוד, 9.7 ק"מ: שלבים ממוספרים, זמן הליכה לפי השיפוע, סימון השבילים בדרך, נקודות מים ואזהרות. אפשר לשמור כ-PDF ולהדפיס לפני היציאה.</p>
+                <div class="chips"><span class="chip">שלבי המסלול</span><span class="chip">פרופיל גובה</span><span class="chip">הדפסה</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-topo" role="tabpanel" aria-labelledby="tt-topo">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-topo-800.avif 800w, assets/img/tour-topo-1200.avif 1200w, assets/img/tour-topo-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-topo-800.webp 800w, assets/img/tour-topo-1200.webp 1200w, assets/img/tour-topo-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-topo-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="מפה טופוגרפית של הר מירון עם קווי גובה, הצללת תבליט, מעיינות ושבילים מסומנים.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מפה טופוגרפית למטיילים</h3>
+                <p>קווי גובה עד כל 10 מטר בזום קרוב, הצללת תבליט, פסגות ומעיינות, והשבילים המסומנים בצבעים שלהם. ארבעה סגנונות מפה: רגילה, טבע וטיולים, טופוגרפית ולילה.</p>
+                <div class="chips"><span class="chip">קווי גובה</span><span class="chip">הצללה</span><span class="chip">שבילים מסומנים</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-3d" role="tabpanel" aria-labelledby="tt-3d">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-masada-800.avif 800w, assets/img/tour-masada-1200.avif 1200w, assets/img/tour-masada-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-masada-800.webp 800w, assets/img/tour-masada-1200.webp 1200w, assets/img/tour-masada-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-masada-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="תצוגה תלת־ממדית של צוק מצדה ומדבר יהודה, ומאחוריהם ים המלח, עם כרטיס המידע של מצדה.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מצדה, במבט תלת־ממדי</h3>
+                <p>מטים את המפה ורואים את התבליט: הצוק של מצדה, הנחלים של מדבר יהודה ובקע ים המלח, מנתוני הגובה של Copernicus. כפתור "תלת־ממד" בכרטיס של כל אתר.</p>
+                <div class="chips"><span class="chip">הטיה וסיבוב</span><span class="chip">תבליט אמיתי</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-syn" role="tabpanel" aria-labelledby="tt-syn">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-syn-800.avif 800w, assets/img/tour-syn-1200.avif 1200w, assets/img/tour-syn-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-syn-800.webp 800w, assets/img/tour-syn-1200.webp 1200w, assets/img/tour-syn-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-syn-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="כרטיס של בית כנסת בירושלים עם לוח המניינים השבועי.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>מתי המניין הבא?</h3>
+                <p>לוח המניינים של בית הכנסת – שחרית, מנחה וערבית לפי ימים – ישירות בכרטיס שלו, מפרויקט זמני התפילות הארצי של נדרים פלוס. מתעדכן כל שבוע.</p>
+                <div class="chips"><span class="chip">שחרית</span><span class="chip">מנחה</span><span class="chip">ערבית</span></div>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="tour-panel" id="tp-dark" role="tabpanel" aria-labelledby="tt-dark">
+            <figure>
+              <div class="window">
+                <picture>
+                  <source type="image/avif" srcset="assets/img/tour-dark-800.avif 800w, assets/img/tour-dark-1200.avif 1200w, assets/img/tour-dark-1800.avif 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <source type="image/webp" srcset="assets/img/tour-dark-800.webp 800w, assets/img/tour-dark-1200.webp 1200w, assets/img/tour-dark-1800.webp 1800w" sizes="(min-width: 1280px) 860px, (min-width: 900px) 62vw, 92vw">
+                  <img src="assets/img/tour-dark-1200.jpg" width="1440" height="900" loading="lazy" decoding="async"
+                    alt="האפליקציה במצב כהה: מרכז תל אביב בלילה, עם כרטיס תחנה ולוח היציאות שלה.">
+                </picture>
+              </div>
+              <figcaption>
+                <h3>נעים לעיניים גם בלילה</h3>
+                <p>ממשק בהיר או כהה, אוטומטית לפי Windows או לפי בחירה, ומפת לילה תואמת. שורת הכותרת והלשוניות מתחלפות יחד עם המפה.</p>
+                <div class="chips"><span class="chip">בהיר</span><span class="chip">כהה</span><span class="chip">אוטומטי</span></div>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ how it works + privacy -->
+    <section class="section" id="how" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">איך זה עובד</p>
+          <h2 id="how-title">מתקינים פעם אחת. המפה נשארת אצלכם.</h2>
+          <p>מפות בעברית היא תוכנה רגילה למחשב. המפה, החיפוש והניווט רצים במחשב שלכם, והאינטרנט נדרש רק כדי להוריד נתונים.</p>
+        </div>
+
+        <ol class="steps">
+          <li class="step reveal">
+            <h3>מורידים ומתקינים</h3>
+            <p>קובץ התקנה אחד ל-Windows 10/11. בלי הרשאות מנהל ובלי תוכנות נוספות.</p>
+          </li>
+          <li class="step reveal">
+            <h3>מורידים את נתוני ישראל</h3>
+            <p>בתפריט ← "עדכונים" ← "עדכן הכול": המפה, החיפוש, התחבורה הציבורית, הטופוגרפיה וזמני התפילות. פעם אחת.</p>
+          </li>
+          <li class="step reveal">
+            <h3>משתמשים, גם בלי רשת</h3>
+            <p>מכאן הכול עובד מהמחשב. פעם בשבוע אפשר לעדכן – בלחיצה, או אוטומטית ברקע.</p>
+          </li>
+        </ol>
+
+        <div class="split">
+          <div class="privacy-card reveal" id="privacy">
+            <h3>הפרטיות שלכם נשארת אצלכם</h3>
+            <p>אין שרת שיודע מה חיפשתם או לאן נסעתם. האפליקציה פועלת מקומית, על המחשב.</p>
+            <ul>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#cpu"></use></svg><div><b>חיפוש וניווט מקומיים</b><span>השאילתות לא יוצאות מהמחשב.</span></div></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#eye-off"></use></svg><div><b>בלי חשבון, בלי מעקב, בלי פרסומות</b><span>אין רישום, אין ניתוח שימוש ואין עוגיות מעקב.</span></div></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#shield"></use></svg><div><b>עדכונים שנבדקים לפני התקנה</b><span>כל קובץ נתונים נבדק מול טביעת <span class="nowrap">SHA-256</span> לפני ההתקנה.</span></div></li>
+            </ul>
+            <p class="more"><a href="privacy.html">מדיניות הפרטיות המלאה</a></p>
+          </div>
+
+          <div class="reveal">
+            <h3 class="sources-title">נבנה מנתונים פתוחים</h3>
+            <ul class="sources">
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#map"></use></svg><b>OpenStreetMap</b><span>המפה, הרחובות, הכתובות, נקודות העניין והשבילים – © תורמי OpenStreetMap, ‏ODbL.</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#bus"></use></svg><b>משרד התחבורה (GTFS)</b><span>הקווים, התחנות ולוחות הזמנים של התחבורה הציבורית.</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#mountain"></use></svg><b>Copernicus DEM</b><span>קווי הגובה, ההצללה, התלת־ממד ופרופילי הגובה.</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#aerial"></use></svg><b>מרכז מיפוי ישראל</b><span>תצלומי האוויר (govmap), לשימוש אישי בלבד.</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#globe"></use></svg><b>EOX – Sentinel-2 cloudless</b><span>תצלומי לוויין, כשתצלומי האוויר לא זמינים (מכיל נתוני Copernicus Sentinel).</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#clock"></use></svg><b>נדרים פלוס</b><span>זמני התפילות מפרויקט זמני התפילות הארצי.</span></li>
+              <li><svg aria-hidden="true"><use href="assets/img/icons.svg#data"></use></svg><b>data.gov.il ו-Wikidata</b><span>נתונים ממשלתיים פתוחים, ותיאורים ותמונות של אתרים.</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ what's new -->
+    <section class="section section-alt" id="new" aria-labelledby="new-title">
+      <div class="wrap news">
+        <div class="section-head">
+          <p class="eyebrow">מה חדש</p>
+          <h2 id="new-title">משתפרת כל הזמן.</h2>
+          <p>התכונות העיקריות שנוספו לאחרונה. הנתונים עצמם מתעדכנים כל שבוע.</p>
+          <p class="more"><a class="btn btn-ghost" href="changelog.html">כל השינויים<svg aria-hidden="true"><use href="assets/img/icons.svg#arrow"></use></svg></a></p>
+        </div>
+        <ol class="timeline">
+          <li class="reveal"><span class="tag">אפליקציית שולחן העבודה</span><h3>חלון משלה, עם לשוניות</h3><p>שורת כותרת מימין לשמאל, כמה מפות במקביל, וכותרות לשוניות שמתעדכנות לפי מה שבמפה.</p></li>
+          <li class="reveal"><span class="tag">טיולים</span><h3>מדריכי מסלול</h3><p>שלבים, זמן הליכה לפי שיפוע, פרופיל גובה, מים ובטיחות, והדפסה לשטח.</p></li>
+          <li class="reveal"><span class="tag">בתי כנסת</span><h3>זמני תפילות</h3><p>לוח המניינים בכרטיס של בית הכנסת, והמניין הבא בסביבה.</p></li>
+          <li class="reveal"><span class="tag">תחבורה ציבורית</span><h3>כל הקווים בתחנה</h3><p>הקווים, היציאות הקרובות ולוח זמנים מלא לכל תחנה, כל התחנות של כל קו, וסמלי המפעילים.</p></li>
+          <li class="reveal"><span class="tag">עדכונים</span><h3>עדכון שבועי מתוך האפליקציה</h3><p>חבילות נתונים חדשות כל שבוע, עם התקדמות, המשך אחרי ניתוק ובדיקת שלמות.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================================================ FAQ -->
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <div class="section-head center">
+          <p class="eyebrow">שאלות נפוצות</p>
+          <h2 id="faq-title">שאלות ותשובות</h2>
+        </div>
+        <div class="faq">
+          <details>
+            <summary><span>האם האפליקציה באמת עובדת בלי אינטרנט?</span></summary>
+            <div class="answer">
+              <p>כן. אחרי שמורידים את הנתונים פעם אחת, המפה, החיפוש, הניווט, התחבורה הציבורית, השבילים והטופוגרפיה עובדים מהמחשב בלבד. אינטרנט נדרש רק להורדת עדכונים, ולתצלומי אוויר באזור שעוד לא נשמר במחשב.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>מאיפה מגיעים הנתונים?</span></summary>
+            <div class="answer">
+              <p>ממקורות פתוחים: OpenStreetMap (מפה, רחובות, נקודות עניין ושבילים), משרד התחבורה (לוחות הזמנים של התחבורה הציבורית, GTFS), Copernicus DEM (גבהים), נדרים פלוס (זמני תפילות), data.gov.il ו-Wikidata. תצלומי האוויר הם של מרכז מיפוי ישראל, לשימוש אישי, ותצלומי הלוויין – Sentinel-2 cloudless של EOX.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>כל כמה זמן הנתונים מתעדכנים?</span></summary>
+            <div class="answer">
+              <p>פעם בשבוע. חבילות חדשות נבנות אוטומטית ומתפרסמות ב-GitHub. באפליקציה: תפריט ← "עדכונים" ← "עדכן הכול", או הפעלה של בדיקה אוטומטית שבועית. המפה ממשיכה לעבוד בזמן העדכון.</p>
+            </div>
+          </details>
+          <details id="netfree">
+            <summary><span>יש לי נטפרי (או סינון אחר). מה צריך לפתוח?</span></summary>
+            <div class="answer">
+              <p>ההורדה והעדכונים מגיעים מ-GitHub. אם ההורדה נחסמת, בקשו מהסינון לפתוח את הכתובות האלה:</p>
+              <ul class="hosts">
+                <li><code>github.com</code></li>
+                <li><code>release-assets.githubusercontent.com</code></li>
+                <li><code>objects.githubusercontent.com</code></li>
+              </ul>
+              <p>לתצלומי האוויר: <code>cdn.govmap.gov.il</code>, ולתצלומי הלוויין (חלופה): <code>tiles.maps.eox.at</code>. שלמות כל קובץ נבדקת מול טביעת <span class="nowrap">SHA-256</span>, כך שהסינון לא יכול לפגוע בנתונים.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>מה עם פרטיות?</span></summary>
+            <div class="answer">
+              <p>הכול רץ אצלכם. אין חשבון, אין מעקב, אין פרסומות, והחיפושים והמסלולים לא נשלחים לשום שרת. החיבורים היחידים לרשת הם הורדת העדכונים (מ-GitHub) ותצלומי האוויר (מ-govmap, או תצלומי לוויין מ-EOX) כשמפעילים אותם. <a href="privacy.html">למדיניות הפרטיות</a>.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>מופיעה ההודעה <bdi dir="rtl">"Windows הגן על המחשב"</bdi>. זה בסדר?</span></summary>
+            <div class="answer">
+              <p>כן. קובץ ההתקנה עדיין לא חתום בתעודה מסחרית, ולכן SmartScreen מציג אזהרה. לוחצים על <b>"מידע נוסף"</b> ואז על <b>"הפעל בכל זאת"</b>. הקובץ נבנה אוטומטית מקוד המקור הפתוח ב-GitHub. <a href="download.html#smartscreen">הסבר מפורט</a>.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>כמה זה עולה?</span></summary>
+            <div class="answer">
+              <p>שום דבר. אין תשלום, אין מנוי ואין רכישות בתוך האפליקציה. קוד המקור פתוח ב-GitHub.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>מה צריך כדי להריץ את האפליקציה?</span></summary>
+            <div class="answer">
+              <p>Windows 10 או 11 (64 ביט), ‏4GB זיכרון לפחות, וכ-2GB מקום פנוי לנתונים. החלון של האפליקציה משתמש ב-WebView2, שמותקן מראש ב-Windows 11 וב-Windows 10 מעודכן; בלעדיו המפה נפתחת בדפדפן. <a href="download.html#requirements">כל הדרישות</a>.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ CTA -->
+    <section class="cta-band" aria-labelledby="cta-title">
+      <div class="contours" aria-hidden="true">
+        <svg viewBox="0 0 1440 500" preserveAspectRatio="xMidYMid slice" fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M-20 420c180-40 300-160 470-140s240 120 410 100 270-170 430-190 160 40 170 30"/>
+          <path d="M-20 380c170-50 300-180 480-160s230 110 400 90 260-180 430-200 170 30 170 20"/>
+          <path d="M-20 340c160-60 310-200 490-180s220 100 390 80 250-190 430-210 180 20 170 10"/>
+          <path d="M-20 300c150-70 320-220 500-200s210 90 380 70 240-200 430-220 190 10 170 0"/>
+          <path d="M200 240c80-80 200-120 300-110s160 60 260 50 170-110 270-120"/>
+          <path d="M270 200c60-60 140-90 220-80s120 40 190 35 120-70 190-80"/>
+          <path d="M360 160c40-30 90-45 140-40s80 25 120 20"/>
+        </svg>
+      </div>
+      <div class="wrap">
+        <h2 id="cta-title">מוכנים לצאת לדרך?</h2>
+        <p>הורידו את מפות בעברית, ותהיה לכם מפה של כל הארץ – גם כשאין קליטה.</p>
+        <div class="dl">
+          <div class="hero-actions">
+            <a class="btn btn-primary btn-lg" href="https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe" data-dl-link>
+              <svg aria-hidden="true"><use href="assets/img/icons.svg#windows"></use></svg>
+              הורדה ל-Windows
+            </a>
+            <a class="btn btn-ghost btn-lg" href="download.html">הוראות התקנה</a>
+          </div>
+          <p class="dl-meta" data-dl-meta>
+            <span data-dl-version>הגרסה האחרונה</span>
+            <span data-dl-size><bdi>Windows 10/11</bdi> ‏(64 ביט)</span>
+            <span data-dl-date>ללא תשלום</span>
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-grid">
+        <div class="footer-about">
+          <a class="brand" href="./"><img src="favicon.svg" alt="" width="34" height="34"><span>מפות בעברית</span></a>
+          <p>מפת ישראל בעברית למחשב, שעובדת גם בלי אינטרנט. קוד פתוח, נתונים פתוחים.</p>
+        </div>
+        <nav aria-labelledby="f-product">
+          <h2 id="f-product">המוצר</h2>
+          <ul>
+            <li><a href="download.html">הורדה והתקנה</a></li>
+            <li><a href="./#features">יכולות</a></li>
+            <li><a href="changelog.html">מה חדש</a></li>
+            <li><a href="./#faq">שאלות נפוצות</a></li>
+          </ul>
+        </nav>
+        <nav aria-labelledby="f-project">
+          <h2 id="f-project">הפרויקט</h2>
+          <ul>
+            <li><a href="https://github.com/rishumit/hebrew-maps">קוד המקור ב-GitHub</a></li>
+            <li><a href="https://github.com/rishumit/hebrew-maps/releases">כל הגרסאות</a></li>
+            <li><a href="https://github.com/rishumit/hebrew-maps/issues">דיווח על תקלה</a></li>
+          </ul>
+        </nav>
+        <nav aria-labelledby="f-info">
+          <h2 id="f-info">מידע</h2>
+          <ul>
+            <li><a href="privacy.html">פרטיות</a></li>
+            <li><a href="download.html#netfree">רשת מסוננת</a></li>
+            <li><a href="./#how">מקורות הנתונים</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="attrib">
+        <p>נתוני המפה © <a href="https://www.openstreetmap.org/copyright">תורמי OpenStreetMap</a>, ברישיון ODbL. תחבורה ציבורית: משרד התחבורה והבטיחות בדרכים (GTFS). גבהים: <bdi>Copernicus DEM GLO-30 © DLR e.V. 2010–2014</bdi> ו-<bdi>© Airbus Defence and Space GmbH 2014–2018</bdi>, באדיבות תוכנית Copernicus של האיחוד האירופי ו-ESA.</p>
+        <p>תצלומי אוויר © מרכז מיפוי ישראל (govmap), לשימוש אישי. תצלומי לוויין: <bdi>Sentinel-2 cloudless © EOX IT Services GmbH (Contains modified Copernicus Sentinel data)</bdi>, <bdi>CC BY-NC-SA 4.0</bdi>. זמני תפילות: נדרים פלוס – פרוייקט זמני תפילות הארצי. data.gov.il: רישיון ממשלתי פתוח · Wikidata: ‏CC0 · ויקיפדיה ו-Wikimedia Commons: ‏CC BY-SA. גופן Heebo ברישיון <a href="assets/fonts/OFL.txt">SIL OFL 1.1</a>.</p>
+        <p>"Windows" הוא סימן מסחרי של Microsoft. האתר אינו אוסף נתונים ואינו משתמש בעוגיות.</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
