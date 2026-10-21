@@ -82,11 +82,12 @@ class FakeWeb:
                 return {"query": {"pages": pages}}
         if "he.wikipedia.org" in base:
             if p.get("generator") == "geosearch":
-                lat, lon = map(float, p["ggscoord"].split("|"))
-                if abs(lat - EIN_GEDI[0]) < 0.01:
-                    return {"query": {"pages": [{"title": "עין גדי (שמורת טבע)", "pageprops": {"wikibase_item": "Q1"}},
-                                                {"title": "ים המלח", "pageprops": {}}]}}
-                return {"query": {"pages": []}}
+                return {"query": {"pages": [
+                    {"title": "עין גדי (שמורת טבע)", "coordinates": [{"lat": LA, "lon": LO}],
+                     "pageprops": {"wikibase_item": "Q1"}},
+                    {"title": "ים המלח", "coordinates": [{"lat": LA + 0.001, "lon": LO}],
+                     "pageprops": {}},
+                ]}}
             if p.get("list") == "search":
                 return {"query": {"search": [{"title": "שביל ישראל"}] if "שביל ישראל" in p["srsearch"] else []}}
             if p.get("prop", "").startswith("extracts"):
@@ -141,6 +142,33 @@ class RichEtlTest(unittest.TestCase):
         self.assertNotIn("היסטוריה", text)  # only the introduction
         # a far article (ים המלח) is not matched to anything named differently
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM pois WHERE wikipedia = 'he:ים המלח'").fetchone()[0], 0)
+
+    def test_wikipedia_geosearch_batches_nearby_sites_and_filters_by_distance(self):
+        con = sqlite3.connect(":memory:")
+        con.execute("CREATE TABLE pois (id INTEGER PRIMARY KEY, wikipedia TEXT, wikidata TEXT)")
+        sites = [
+            {"id": 1, "name": "שמורת עין גדי", "lat": LA, "lon": LO, "radius": 200,
+             "wikipedia": None, "wikidata": None},
+            {"id": 2, "name": "שמורת עין גדי", "lat": LA + 0.001, "lon": LO, "radius": 200,
+             "wikipedia": None, "wikidata": None},
+            {"id": 3, "name": "שמורת עין גדי", "lat": LA + 0.2, "lon": LO, "radius": 200,
+             "wikipedia": None, "wikidata": None},
+        ]
+        for site in sites:
+            con.execute("INSERT INTO pois (id) VALUES (?)", (site["id"],))
+        web = FakeWeb()
+        http = rich.Http(None, opener=web, interval=0)
+
+        self.assertEqual(rich.step_wikipedia_match(con, http, sites, workers=2), 2)
+        wiki_calls = [(base, params) for base, params in web.calls if "he.wikipedia.org" in base]
+        self.assertEqual(len(wiki_calls), 2)
+        self.assertTrue(all(params["ggslimit"] == "500" for _, params in wiki_calls))
+        self.assertEqual(
+            con.execute("SELECT wikipedia FROM pois WHERE id IN (1, 2) ORDER BY id").fetchall(),
+            [("he:עין גדי (שמורת טבע)",), ("he:עין גדי (שמורת טבע)",)],
+        )
+        self.assertIsNone(con.execute("SELECT wikipedia FROM pois WHERE id = 3").fetchone()[0])
+        con.close()
 
     def test_facts_and_wikivoyage(self):
         facts = dict(self.con.execute("SELECT key, value FROM facts WHERE entity='poi' AND ref_id=?", (self.site,)))

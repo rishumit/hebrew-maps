@@ -534,16 +534,31 @@ def sample_points(lines: list[list[tuple[float, float]]], every_m: float, max_po
 # =========================================================================== steps
 
 def step_wikipedia_match(con: sqlite3.Connection, http: Http, sites: list[dict], workers: int) -> int:
-    """Find Hebrew Wikipedia articles (by location + name) for sites that have none."""
-    todo = [s for s in sites if not s["wikipedia"]]
-    log.info("wikipedia: matching %d sites without an article", len(todo))
+    """Find Hebrew Wikipedia articles (by location + name) for sites that have none.
 
-    def one(s: dict) -> tuple[str, str | None] | None:
-        data = http.mw(HEWIKI_API, generator="geosearch", ggscoord=f"{s['lat']:.6f}|{s['lon']:.6f}",
-                       ggsradius=int(min(10000, max(500, s["radius"] * 2))), ggslimit=15,
-                       prop="pageprops|coordinates", ppprop="wikibase_item|disambiguation")
+    Nearby sites share one geosearch request. The query radius covers every site's
+    original search circle; results are then filtered per site before name matching.
+    """
+    todo = [s for s in sites if not s["wikipedia"]]
+    cell_size = 0.02
+    groups: dict[tuple[int, int], list[dict]] = {}
+    for s in todo:
+        cell = (math.floor(s["lat"] / cell_size), math.floor(s["lon"] / cell_size))
+        groups.setdefault(cell, []).append(s)
+    log.info("wikipedia: matching %d sites without an article in %d geographic batches", len(todo), len(groups))
+
+    def search(s: dict, pages: list[dict]) -> tuple[str, str | None] | None:
+        radius = min(10000, max(500, s["radius"] * 2))
+        nearby = []
+        for p in pages:
+            coords = (p.get("coordinates") or [None])[0] or {}
+            if coords.get("lat") is None or coords.get("lon") is None:
+                continue
+            distance = geo.haversine(s["lat"], s["lon"], coords["lat"], coords["lon"])
+            if distance <= radius:
+                nearby.append((distance, p))
         best, best_score = None, 0.0
-        for p in data.get("query", {}).get("pages", []):
+        for _, p in sorted(nearby, key=lambda item: item[0]):
             if "disambiguation" in (p.get("pageprops") or {}):
                 continue
             sc = max(name_match(s["name"], p["title"]), name_match(p["title"], s["name"]) * 0.9)
@@ -553,17 +568,44 @@ def step_wikipedia_match(con: sqlite3.Connection, http: Http, sites: list[dict],
             return None
         return best["title"], (best.get("pageprops") or {}).get("wikibase_item")
 
+    def one(group: tuple[tuple[int, int], list[dict]]) -> list[dict]:
+        cell, members = group
+        lat = (cell[0] + 0.5) * cell_size
+        lon = (cell[1] + 0.5) * cell_size
+        radius = max(
+            min(10000, max(500, s["radius"] * 2)) + geo.haversine(lat, lon, s["lat"], s["lon"])
+            for s in members
+        )
+        data = http.mw(HEWIKI_API, generator="geosearch", ggscoord=f"{lat:.6f}|{lon:.6f}",
+                       ggsradius=int(min(10000, math.ceil(radius))), ggslimit=500,
+                       prop="pageprops|coordinates", ppprop="wikibase_item|disambiguation")
+        return data.get("query", {}).get("pages", [])
+
     n = 0
-    for s, res in _parallel(one, todo, workers, "wikipedia match"):
-        if not res:
+    for (_, members), pages in _parallel(one, list(groups.items()), workers, "wikipedia match"):
+        if pages is None:
             continue
-        title, qid = res
-        s["wikipedia"] = f"he:{title}"
-        if qid and not s["wikidata"]:
-            s["wikidata"] = qid
-        con.execute("UPDATE pois SET wikipedia = COALESCE(wikipedia, ?), wikidata = COALESCE(wikidata, ?) WHERE id = ?",
-                    (s["wikipedia"], qid, s["id"]))
-        n += 1
+        for s in members:
+            if len(pages) >= 500:
+                radius = int(min(10000, max(500, s["radius"] * 2)))
+                data = http.mw(HEWIKI_API, generator="geosearch",
+                               ggscoord=f"{s['lat']:.6f}|{s['lon']:.6f}", ggsradius=radius, ggslimit=15,
+                               prop="pageprops|coordinates", ppprop="wikibase_item|disambiguation")
+                candidates = data.get("query", {}).get("pages", [])
+            else:
+                candidates = pages
+            res = search(s, candidates)
+            if not res:
+                continue
+            title, qid = res
+            s["wikipedia"] = f"he:{title}"
+            if qid and not s["wikidata"]:
+                s["wikidata"] = qid
+            con.execute(
+                "UPDATE pois SET wikipedia = COALESCE(wikipedia, ?), wikidata = COALESCE(wikidata, ?) WHERE id = ?",
+                (s["wikipedia"], qid, s["id"]),
+            )
+            n += 1
     con.commit()
     log.info("wikipedia: %d new article matches", n)
     return n
