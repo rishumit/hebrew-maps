@@ -226,6 +226,16 @@ class TransitOldStoreUiTest(unittest.TestCase):
         real = [e for e in self.errors if "404" not in e and "Failed to load resource" not in e]
         self.assertEqual(real, [])
 
+    def test_server_error_is_not_reported_as_no_connection(self):
+        page = self.new_page()
+        page.route("**/api/transit/route/**", lambda r: r.fulfill(status=500, body="Internal Server Error", content_type="text/plain"))
+        page.evaluate("window.__map.__clickPoi({id: 14, name: 'x'}, [34.8001, 32.1001])")
+        page.locator(".poi-transit .tr-lines .tr-line-btn").first.click()
+        alert = page.locator(".alert")
+        expect(alert).to_contain_text("שגיאה בשרת")
+        expect(alert).to_contain_text("500")
+        expect(alert).not_to_contain_text("אין חיבור")
+
 
 if __name__ == "__main__":
     unittest.main()
