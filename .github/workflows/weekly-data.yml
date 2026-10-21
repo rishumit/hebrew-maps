@@ -179,7 +179,7 @@ jobs:
           name: osm-pbf
           path: data/sources
 
-      # Wikidata / Wikipedia / Wikivoyage / Commons answers are cached for 60 days
+      # HTTP answers and per-site Wikipedia matches are cached for 60 days across runs
       - name: Restore enrichment HTTP cache
         uses: actions/cache@v5
         with:

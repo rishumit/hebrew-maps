@@ -20,8 +20,8 @@ Run it on the live database without rebuilding the map::
     python -m hmaps.etl enrich              # all steps
     python -m hmaps.etl enrich --steps commons,wikipedia --limit 200
 
-Every HTTP answer is cached in ``data/cache/rich-http.sqlite`` (60 days), so an
-interrupted run resumes quickly and a full rebuild repeats only what is new.
+Every HTTP answer and per-site Wikipedia match is cached in
+``data/cache/rich-http.sqlite`` (60 days), so later runs repeat only what is new.
 The images themselves are NOT downloaded – the card loads them from Commons
 (``tools/media.py`` can fetch offline copies later).
 """
@@ -121,6 +121,10 @@ class Http:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             self._db = sqlite3.connect(cache_path, check_same_thread=False)
             self._db.execute("CREATE TABLE IF NOT EXISTS http (k TEXT PRIMARY KEY, ts REAL, body BLOB)")
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS wikipedia_matches "
+                "(k TEXT PRIMARY KEY, ts REAL NOT NULL, title TEXT, qid TEXT)"
+            )
             self._db.commit()
 
     @staticmethod
@@ -144,6 +148,30 @@ class Http:
         blob = zlib.compress(json.dumps(value, ensure_ascii=False).encode("utf-8"), 6)
         with self._lock:
             self._db.execute("INSERT OR REPLACE INTO http VALUES (?, ?, ?)", (k, time.time(), blob))
+            self._db.commit()
+
+    def get_wikipedia_match(self, key: str) -> tuple[bool, tuple[str, str | None] | None]:
+        if self._db is None:
+            return False, None
+        with self._lock:
+            row = self._db.execute(
+                "SELECT ts, title, qid FROM wikipedia_matches WHERE k = ?", (key,)
+            ).fetchone()
+        if row and (self.offline or time.time() - row[0] < self.ttl):
+            self.hits += 1
+            match = (row[1], row[2]) if row[1] is not None else None
+            return True, match
+        return False, None
+
+    def store_wikipedia_match(self, key: str, match: tuple[str, str | None] | None) -> None:
+        if self._db is None:
+            return
+        title, qid = match if match is not None else (None, None)
+        with self._lock:
+            self._db.execute(
+                "INSERT OR REPLACE INTO wikipedia_matches VALUES (?, ?, ?, ?)",
+                (key, time.time(), title, qid),
+            )
             self._db.commit()
 
     def get(self, url: str, params: dict | None = None, *, headers: dict | None = None, cache: bool = True,
@@ -541,11 +569,41 @@ def step_wikipedia_match(con: sqlite3.Connection, http: Http, sites: list[dict],
     """
     todo = [s for s in sites if not s["wikipedia"]]
     cell_size = 0.02
-    groups: dict[tuple[int, int], list[dict]] = {}
+    match_keys = {
+        s["id"]: json.dumps(
+            [_core_name(s["name"]), round(s["lat"], 6), round(s["lon"], 6), round(s["radius"], 3)],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        for s in todo
+    }
+    pending = []
+    cached = 0
     for s in todo:
+        found, match = http.get_wikipedia_match(match_keys[s["id"]])
+        if found:
+            cached += 1
+            if match is not None:
+                title, qid = match
+                s["wikipedia"] = f"he:{title}"
+                if qid and not s["wikidata"]:
+                    s["wikidata"] = qid
+                con.execute(
+                    "UPDATE pois SET wikipedia = COALESCE(wikipedia, ?), "
+                    "wikidata = COALESCE(wikidata, ?) WHERE id = ?",
+                    (s["wikipedia"], qid, s["id"]),
+                )
+        else:
+            pending.append(s)
+    con.commit()
+    groups: dict[tuple[int, int], list[dict]] = {}
+    for s in pending:
         cell = (math.floor(s["lat"] / cell_size), math.floor(s["lon"] / cell_size))
         groups.setdefault(cell, []).append(s)
-    log.info("wikipedia: matching %d sites without an article in %d geographic batches", len(todo), len(groups))
+    log.info(
+        "wikipedia: matching %d sites without an article in %d geographic batches (%d cached)",
+        len(pending), len(groups), cached,
+    )
 
     def search(s: dict, pages: list[dict]) -> tuple[str, str | None] | None:
         radius = min(10000, max(500, s["radius"] * 2))
@@ -595,6 +653,7 @@ def step_wikipedia_match(con: sqlite3.Connection, http: Http, sites: list[dict],
             else:
                 candidates = pages
             res = search(s, candidates)
+            http.store_wikipedia_match(match_keys[s["id"]], res)
             if not res:
                 continue
             title, qid = res

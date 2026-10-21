@@ -170,6 +170,36 @@ class RichEtlTest(unittest.TestCase):
         self.assertIsNone(con.execute("SELECT wikipedia FROM pois WHERE id = 3").fetchone()[0])
         con.close()
 
+    def test_wikipedia_matches_persist_across_changed_batches(self):
+        con = sqlite3.connect(":memory:")
+        con.execute("CREATE TABLE pois (id INTEGER PRIMARY KEY, wikipedia TEXT, wikidata TEXT)")
+        first = {"id": 1, "name": "שמורת עין גדי", "lat": LA, "lon": LO, "radius": 200,
+                 "wikipedia": None, "wikidata": None}
+        unmatched = {"id": 2, "name": "גן לאומי קיסריה", "lat": LA + 0.005, "lon": LO, "radius": 2000,
+                     "wikipedia": None, "wikidata": None}
+        for site in (first, unmatched):
+            con.execute("INSERT INTO pois (id) VALUES (?)", (site["id"],))
+        cache_path = self.dir / "persistent-wikipedia-cache.sqlite"
+        web = FakeWeb()
+        http = rich.Http(cache_path, opener=web, interval=0)
+
+        self.assertEqual(rich.step_wikipedia_match(con, http, [first, unmatched], workers=2), 1)
+        self.assertEqual(http.requests, 1)
+        http.close()
+
+        next_http = rich.Http(cache_path, opener=web, interval=0)
+        first_again = {**first, "wikipedia": None, "wikidata": None}
+        unmatched_again = {**unmatched, "wikipedia": None, "wikidata": None}
+        self.assertEqual(rich.step_wikipedia_match(con, next_http, [first_again], workers=2), 0)
+        self.assertEqual(first_again["wikipedia"], "he:עין גדי (שמורת טבע)")
+        self.assertEqual(next_http.requests, 0)
+
+        self.assertEqual(rich.step_wikipedia_match(con, next_http, [unmatched_again], workers=2), 0)
+        self.assertIsNone(unmatched_again["wikipedia"])
+        self.assertEqual(next_http.requests, 0)
+        next_http.close()
+        con.close()
+
     def test_facts_and_wikivoyage(self):
         facts = dict(self.con.execute("SELECT key, value FROM facts WHERE entity='poi' AND ref_id=?", (self.site,)))
         self.assertEqual(facts["inception"], "1971")
