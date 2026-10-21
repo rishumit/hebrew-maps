@@ -78,7 +78,9 @@ def sha256(path: Path) -> str:
 def plan(event: str, inputs: dict, previous: dict | None, now: datetime | None = None) -> dict[str, bool]:
     """Which components to build.
 
-    * manual run: exactly the ticked components;
+    * manual run: the ticked components, plus every component that has never been published
+      (no previous manifest, or no file for it) – so the very first run, even a manual one with
+      the default inputs (terrain unticked), builds the complete data set;
     * schedule: every weekly component; terrain (the DEM never changes) only in the first
       week of the month, or when the previous release has no terrain at all.
     """
@@ -89,7 +91,7 @@ def plan(event: str, inputs: dict, previous: dict | None, now: datetime | None =
     for comp in catalog.COMPONENTS:
         if event == "workflow_dispatch":
             v = inputs.get(comp.id)
-            out[comp.id] = v is True or str(v).lower() == "true"
+            out[comp.id] = v is True or str(v).lower() == "true" or comp.id not in have
         else:
             out[comp.id] = comp.weekly or now.day <= 7 or comp.id not in have
     return out
@@ -98,9 +100,12 @@ def plan(event: str, inputs: dict, previous: dict | None, now: datetime | None =
 def cmd_plan(args) -> int:
     inputs = json.loads(os.environ.get("INPUTS_JSON") or args.inputs or "{}") or {}
     now = _israel_now()
-    build = plan(args.event, inputs, _load(args.previous), now)
+    previous = _load(args.previous)
+    build = plan(args.event, inputs, previous, now)
     date = now.strftime("%Y-%m-%d")
-    _output(date=date, version=now.strftime("%Y%m%d"), tag=f"data-{date}",
+    # previous=false on the first run: later jobs then skip every download of the
+    # "previous-manifest" artifact instead of failing with "Artifact not found"
+    _output(date=date, previous=str(previous is not None).lower(), version=now.strftime("%Y%m%d"), tag=f"data-{date}",
             week=now.strftime("%G-W%V"), month=now.strftime("%Y-%m"),
             any=str(any(build.values())).lower(), components=",".join(c for c, b in build.items() if b) or "none",
             **{c: str(b).lower() for c, b in build.items()})

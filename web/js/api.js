@@ -94,5 +94,8 @@ export const api = {
     request('/api/satellite/estimate', { params: { bbox: bbox.join(','), minzoom, maxzoom } }),
   satelliteDownload: (bbox, minzoom, maxzoom) =>
     request('/api/satellite/download', { method: 'POST', body: { bbox, minzoom, maxzoom } }),
+  satelliteCountry: () => request('/api/satellite/country'),
+  satelliteDownloadCountry: (level) =>
+    request('/api/satellite/download', { method: 'POST', body: { area: 'country', level } }),
   satelliteCancel: () => request('/api/satellite/download/cancel', { method: 'POST', body: {} }),
 };

@@ -8,8 +8,10 @@
     python -m hmaps.etl enrich              # photos / texts / facts for trip sites and trails (hmaps.etl.rich)
     python -m hmaps.etl gtfs                # public transport timetables -> data/transit/ (hmaps.transit)
     python -m hmaps.etl zmanim              # synagogue prayer times (Nedarim Plus) -> live maps.db (hmaps.etl.zmanim)
-    python -m hmaps.etl satellite --bbox 34.75,32.03,34.83,32.12 --maxzoom 17
-                                            # govmap aerial photos for offline use -> data/tiles/satellite.mbtiles
+    python -m hmaps.etl satellite [--level basic|detailed|full]   # aerial photos of all of Israel for offline use
+    python -m hmaps.etl satellite --bbox 34.75,32.03,34.83,32.12 --maxzoom 17   # one area, more detail
+    python -m hmaps.etl satellite --test    # diagnose: one tile per source (status, type, size)
+                                            # -> data/tiles/satellite*.mbtiles (hmaps.api.satellite)
 
 The database is built under a temporary name and moved into place
 atomically, so a running API never sees a half-written file.

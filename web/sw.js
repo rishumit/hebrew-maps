@@ -1,5 +1,5 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.4.0';
+const VERSION = 'hmaps-1.4.1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const TILE_CACHE = 'hmaps-tiles-v1';
 const MAX_TILES = 4000;

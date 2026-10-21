@@ -82,6 +82,17 @@
           <button type="button" id="btn-sat-save-go" class="btn btn-primary btn-sm">הורדה</button>
           <button type="button" id="btn-sat-save-cancel" class="btn btn-secondary btn-sm">ביטול</button>
         </div>
+        <button type="button" id="btn-sat-country" class="btn btn-secondary btn-sm popover-btn" aria-describedby="sat-save-status" aria-expanded="false" aria-controls="sat-country"><span data-icon="download"></span>הורדת תצלומי אוויר לכל הארץ</button>
+        <fieldset id="sat-country" class="sat-country" hidden>
+          <legend>רמת פירוט</legend>
+          <label class="sat-level"><input type="radio" name="satlevel" value="basic" checked><span>בסיסי <small>(זום עד 13)</small></span><small class="sat-est" data-level="basic"></small></label>
+          <label class="sat-level"><input type="radio" name="satlevel" value="detailed"><span>מפורט <small>(זום עד 15)</small></span><small class="sat-est" data-level="detailed"></small></label>
+          <label class="sat-level"><input type="radio" name="satlevel" value="full"><span>מלא <small>(זום עד 16 – גדול מאוד)</small></span><small class="sat-est" data-level="full"></small></label>
+          <div class="sat-confirm">
+            <button type="button" id="btn-sat-country-go" class="btn btn-primary btn-sm">הורדה</button>
+            <button type="button" id="btn-sat-country-cancel" class="btn btn-secondary btn-sm">ביטול</button>
+          </div>
+        </fieldset>
         <progress id="sat-save-progress" class="sat-progress" max="100" value="0" aria-label="התקדמות שמירת תצלומי האוויר" hidden></progress>
         <p id="sat-save-status" class="sat-status" role="status" aria-live="polite"></p>
       </div>

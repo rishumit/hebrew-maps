@@ -85,6 +85,22 @@ def planetiler() -> Path:
     return jar
 
 
+# Planetiler options of type java.time.Duration: a bare number ("--http_timeout=120") aborts the
+# build with "Text cannot be parsed to a Duration" – they need a unit ("120s", "2m", "PT2M").
+DURATION_ARGS = {"http_timeout", "http_retry_wait", "log_interval", "loginterval"}
+
+
+def fix_durations(args: list[str]) -> list[str]:
+    """Append "s" to bare-number values of Planetiler's duration options."""
+    out = []
+    for a in args:
+        m = re.fullmatch(r"(--?)([A-Za-z_]+)=(\d+(?:\.\d+)?)", a)
+        if m and m.group(2).lower() in DURATION_ARGS:
+            a = f"{m.group(1)}{m.group(2)}={m.group(3)}s"
+        out.append(a)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--memory", default=os.environ.get("PLANETILER_MEMORY", "3g"))
@@ -108,8 +124,8 @@ def main() -> int:
     pbf_env = os.environ.get("HMAPS_PBF_PATH", "")
     pbf = Path(pbf_env) if pbf_env else DATA / "sources" / "israel-and-palestine.osm.pbf"
 
-    # PLANETILER_EXTRA_ARGS passes additional flags, e.g. "--http_timeout=120"
-    extra_args = os.environ.get("PLANETILER_EXTRA_ARGS", "").split()
+    # PLANETILER_EXTRA_ARGS passes additional flags, e.g. "--http_timeout=120s"
+    extra_args = fix_durations(os.environ.get("PLANETILER_EXTRA_ARGS", "").split())
 
     cmd = [java, *jvm, "-jar", str(jar), "--download", "--area=israel-and-palestine",
            f"--output={out}", "--force", "--languages=he,en,ar", "--maxzoom=14",

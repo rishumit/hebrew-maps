@@ -422,16 +422,30 @@ const app = {
     const status = $('#sat-save-status');
     const label = btn.lastChild;
     const LABEL = label.textContent;
+    const countryBtn = $('#btn-sat-country');
+    const countryBox = $('#sat-country');
     const fmt = (n) => Number(n).toLocaleString('he-IL');
-    const mb = (b) => (b >= 1e6 ? `${fmt(Math.round(b / 1e6))}MB` : `${fmt(Math.max(1, Math.round(b / 1e3)))}KB`);
+    const mb = (b) => {
+      if (b >= 1e9) return `${fmt(Math.round(b / 1e8) / 10)}GB`;
+      return b >= 1e6 ? `${fmt(Math.round(b / 1e6))}MB` : `${fmt(Math.max(1, Math.round(b / 1e3)))}KB`;
+    };
     let pending = null; // {bbox, minzoom, maxzoom}
     let timer = null;
     let lastBucket = -1;
 
+    const dur = (s) => {
+      if (s == null) return '';
+      if (s < 90) return 'פחות משתי דקות';
+      if (s < 3600) return `כ-${Math.round(s / 60)} דקות`;
+      if (s < 48 * 3600) return `כ-${fmt(Math.round(s / 360) / 10)} שעות`;
+      return `כ-${fmt(Math.round(s / 8640) / 10)} ימים`;
+    };
     const setRunning = (on) => {
       label.textContent = on ? 'עצירת ההורדה' : LABEL;
       btn.dataset.running = on ? '1' : '';
       bar.hidden = !on;
+      if (countryBtn) countryBtn.hidden = on;
+      if (on && countryBox) countryBox.hidden = true;
     };
     const finish = (job) => {
       clearInterval(timer);
@@ -440,7 +454,8 @@ const app = {
       const msg = {
         done: `האזור נשמר: ${fmt(job.fetched)} אריחים חדשים (${mb(job.bytes)}), ${fmt(job.skipped)} כבר היו שמורים. התצלומים יוצגו גם בלי אינטרנט.`,
         cancelled: `ההורדה נעצרה (${fmt(job.done)} מתוך ${fmt(job.total)}). אפשר להמשיך מאותה נקודה בלחיצה נוספת.`,
-        error: 'ההורדה נעצרה: אין חיבור לשרת תצלומי האוויר. מה שכבר ירד נשמר – נסו שוב כשיש אינטרנט.',
+        error: 'ההורדה נעצרה: אין חיבור לשרת תצלומי האוויר (או שהסינון חוסם אותו). מה שכבר ירד נשמר – נסו שוב '
+          + 'כשיש אינטרנט; לבדיקה: download-satellite.cmd --test',
       }[job.state] || '';
       status.textContent = msg;
     };
@@ -450,7 +465,9 @@ const app = {
       const bucket = Math.floor(job.percent / 10);
       if (bucket !== lastBucket) { // the live region speaks every 10%, not every second
         lastBucket = bucket;
-        status.textContent = `מוריד תצלומי אוויר: ${Math.floor(job.percent)}% (${fmt(job.done)} מתוך ${fmt(job.total)})`;
+        const eta = job.eta_seconds ? `, נותרו ${dur(job.eta_seconds)}` : '';
+        status.textContent = `מוריד תצלומי אוויר${job.area === 'israel' ? ' לכל הארץ' : ''}: `
+          + `${Math.floor(job.percent)}% (${fmt(job.done)} מתוך ${fmt(job.total)}${eta})`;
       }
     };
     const poll = async () => {
@@ -532,6 +549,53 @@ const app = {
         status.textContent = e.message;
       }
     });
+    // ---- whole country: level choice with estimates (tiles / size / time), then a background job
+    if (countryBtn && countryBox) {
+      const closeCountry = () => {
+        countryBox.hidden = true;
+        countryBtn.setAttribute('aria-expanded', 'false');
+      };
+      countryBtn.addEventListener('click', async () => {
+        if (!countryBox.hidden) { closeCountry(); return; }
+        confirmBox.hidden = true;
+        status.textContent = 'מחשב את גודל ההורדה…';
+        try {
+          const { levels } = await api.satelliteCountry();
+          for (const lv of levels) {
+            const el = countryBox.querySelector(`.sat-est[data-level="${lv.id}"]`);
+            if (!el) continue;
+            el.textContent = lv.missing === 0
+              ? 'כבר שמור במחשב'
+              : `${fmt(lv.missing)} אריחים, כ-${mb(lv.bytes_estimate)}, ${dur(lv.seconds_estimate)}`
+                + (lv.cached ? ` (${fmt(lv.cached)} כבר שמורים)` : '');
+          }
+          status.textContent = 'בחרו רמת פירוט. אפשר לעצור בכל רגע ולהמשיך אחר כך מאותה נקודה.';
+          countryBox.hidden = false;
+          countryBtn.setAttribute('aria-expanded', 'true');
+          countryBox.querySelector('input[name="satlevel"]:checked')?.focus();
+        } catch (e) {
+          status.textContent = e.message;
+        }
+      });
+      $('#btn-sat-country-cancel')?.addEventListener('click', () => {
+        closeCountry();
+        status.textContent = '';
+        countryBtn.focus();
+      });
+      $('#btn-sat-country-go')?.addEventListener('click', async () => {
+        const level = countryBox.querySelector('input[name="satlevel"]:checked')?.value || 'basic';
+        closeCountry();
+        try {
+          await api.satelliteDownloadCountry(level);
+          if (!$('#toggle-satellite').checked) $('#toggle-satellite').click();
+          watch();
+          btn.focus();
+        } catch (e) {
+          status.textContent = e.message;
+        }
+      });
+    }
+
     // a download started earlier (or from another tab) keeps showing its progress
     api.satelliteStatus().then((st) => {
       if (st.job && (st.job.state === 'running' || st.job.state === 'pending')) watch();

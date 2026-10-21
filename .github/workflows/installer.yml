@@ -32,7 +32,7 @@ jobs:
       # 1. Checkout
       # -----------------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # -----------------------------------------------------------------------
       # 2. Resolve version string
@@ -59,7 +59,7 @@ jobs:
       # 3. Python — use the same version as in the existing CI workflow
       # -----------------------------------------------------------------------
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -169,7 +169,7 @@ jobs:
       # 9. Upload installer as a workflow artifact (available on every run)
       # -----------------------------------------------------------------------
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: HebrewMaps-Setup-${{ steps.version.outputs.value }}
           path: installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
@@ -180,7 +180,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.version.outputs.value) }}
           name: "מפות בעברית v${{ steps.version.outputs.value }}"

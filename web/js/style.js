@@ -101,18 +101,21 @@ export function terrainLayers(t, terrain) {
 }
 
 // ------------------------------------------------------------------ satellite imagery
-// Aerial orthophotos of the Israeli Survey Department (govmap.gov.il), 2023, zoom 7–20.
+// Aerial orthophotos of the Survey of Israel (govmap.gov.il), zoom 7–19, with Sentinel-2
+// cloudless (EOX) as a fallback where govmap is unreachable (e.g. blocked by a filter).
 // The browser always asks our own server (/tiles/satellite/{z}/{x}/{y}.jpg, standard XYZ):
-// the CDN blocks direct browser requests (CORS + Referer) and uses a {z}/{y}/{x} path, and
-// the server keeps every tile in data/tiles/satellite.mbtiles so viewed or downloaded areas
-// work offline (hmaps/api/satellite.py).
+// govmap's tiles are on the Israeli TM grid (not WebMercator) and send no CORS headers, so the
+// server renders WebMercator tiles from them and keeps every tile in data/tiles/satellite*.mbtiles,
+// so viewed or downloaded areas work offline (hmaps/api/satellite.py).
 //
 // `satellite` option of omtStyle / fallbackStyle:
 //   false | null  — no satellite layer (default)
 //   true          — satellite on, fully opaque
 //   number        — satellite on with that opacity (0–1)
 
-const GOVMAP_ATTRIBUTION = 'תצלומי אוויר © <a href="https://www.govmap.gov.il" target="_blank" rel="noopener">מרכז מיפוי ישראל</a>';
+const GOVMAP_ATTRIBUTION = 'תצלומי אוויר © <a href="https://www.govmap.gov.il" target="_blank" rel="noopener">מרכז מיפוי ישראל</a>'
+  + ' · <a href="https://cloudless.eox.at" target="_blank" rel="noopener">Sentinel-2 cloudless © EOX</a>'
+  + ' (Contains modified Copernicus Sentinel data)';
 
 /** Opaque area fills that would hide the photo; in "hybrid" mode they only draw below zoom 7. */
 const SATELLITE_HIDES = new Set(['landcover', 'landuse', 'park', 'water', 'aeroway-area', 'building']);
@@ -124,8 +127,8 @@ export function satelliteSource() {
     tiles: ['/tiles/satellite/{z}/{x}/{y}.jpg'],
     tileSize: 256,
     minzoom: 7,
-    maxzoom: 20,
-    bounds: [34.2, 29.4, 35.9, 33.4], // Israel bounding box
+    maxzoom: 19,
+    bounds: [34.15, 29.4, 35.95, 33.45], // Israel bounding box (hmaps/api/satellite.py BOUNDS)
     attribution: GOVMAP_ATTRIBUTION,
   };
 }
