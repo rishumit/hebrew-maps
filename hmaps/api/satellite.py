@@ -315,9 +315,13 @@ class GovmapItm(Source):
         return best
 
     def fetch(self, z, x, y, timeout=FETCH_TIMEOUT):
-        import numpy as np
+        try:
+            import numpy as np
+            import PIL.Image  # noqa: F401 – decoding / encoding below
 
-        from ..core import itm
+            from ..core import itm
+        except ImportError as e:  # pragma: no cover – an install without Pillow: use the next source
+            raise Offline(f"govmap needs numpy + Pillow ({e})") from e
 
         # WebMercator pixel centres of the requested tile -> lon/lat -> ITM metres
         n = 1 << z
