@@ -12,6 +12,7 @@ installer/dist/
 installer/build/
 installer/icon.ico
 installer/HebrewMaps-Setup-*.exe
+installer/HebrewMaps-Setup.exe
 
 # Tauri desktop app (src-tauri/)
 src-tauri/target/
