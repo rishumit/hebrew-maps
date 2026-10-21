@@ -87,6 +87,7 @@ const app = {
       else if (hash.item) this.openItem({ id: hash.item }, { fly: !hash.center });
       else if (hash.q) this.search(hash.q, {});
     });
+    this.updateTitle();
     registerServiceWorker();
   },
 
@@ -748,6 +749,8 @@ const app = {
   _initEvents() {
     bus.on('select', (item) => this.openItem(item));
     bus.on('panel:close', (view) => this._onPanelClosed(view));
+    bus.on('panel:view', () => this.updateTitle());
+    bus.on('panel:close', () => this.updateTitle());
     bus.on('map:moved', debounce((v) => {
       store.set('view', { center: v.center, zoom: v.zoom });
       this.updateHash();
@@ -841,7 +844,46 @@ const app = {
     app._writingHash = true;
     history.replaceState(null, '', '#' + parts.join('&'));
     setTimeout(() => (app._writingHash = false), 0);
+    app.updateTitle();
   }, 250),
+
+  // ------------------------------------------------------------------ title
+  /**
+   * What the map shows, in a few words: the search, the selected place, "A ← B" for a route, or '' for just
+   * the map. null = a loading / error view (keep the previous title).
+   */
+  _titleInfo() {
+    const v = this.panel?.isOpen ? this.panel.current : null;
+    if (!v) return { title: '', kind: 'map' };
+    const key = String(v.key || '');
+    const type = key.split(':')[0];
+    if (key === 'directions') {
+      const { from, to } = this.directions || {};
+      const n = (p) => p.name || `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
+      return { title: from && to ? `${n(from)} ← ${n(to)}` : 'תכנון מסלול', kind: 'directions' };
+    }
+    const label = String(v.label || '');
+    const m = label.match(/^(?:תוצאות חיפוש עבור |מחפש: |פרטים: |פרטי שביל: |מדריך מסלול: |טוען מדריך מסלול: |טוען: )(.+)$/);
+    const kind = type === 'results' ? 'search' : ['poi', 'place', 'street', 'point'].includes(type) ? 'place'
+      : ['trail', 'guide', 'hike', 'hikes-near'].includes(type) ? 'hike' : 'panel';
+    if (m) return { title: m[1], kind };
+    if (/^(טוען|מאתר|מחפש|שגיאה)/.test(label) || !label) return null;
+    return { title: label, kind };
+  },
+
+  /** Sets document.title and, inside the desktop shell (web/desktop.html), reports the tab title and URL hash. */
+  updateTitle() {
+    const info = this._titleInfo();
+    if (info) this._title = info;
+    const t = this._title?.title || '';
+    document.title = t ? `${t} – מפות בעברית` : 'מפות בעברית';
+    if (window.parent !== window) {
+      // same-origin parent only (targetOrigin); X-Frame-Options keeps other sites from framing the map anyway
+      try {
+        window.parent.postMessage({ type: 'hmaps:state', title: t, kind: this._title?.kind || 'map', hash: location.hash }, location.origin);
+      } catch { /* not our shell */ }
+    }
+  },
 
   async share(item) {
     const url = new URL(location.href);
