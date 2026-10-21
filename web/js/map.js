@@ -328,11 +328,11 @@ export class MapView {
 
     // search results, endpoints, selection, my location
     this._addLayerSafe({ id: 'results', type: 'symbol', source: 'results',
-      layout: { 'icon-image': 'pin:result', 'icon-anchor': 'bottom', 'icon-allow-overlap': true,
+      layout: { 'icon-image': ['coalesce', ['get', 'img'], 'pin:result'], 'icon-anchor': 'bottom', 'icon-allow-overlap': true,
         'symbol-sort-key': ['get', 'order'],
         'text-field': ['get', 'label'], 'text-font': ['Noto Sans Medium'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 0.2],
         'text-optional': true, 'text-max-width': 9 },
-      paint: { 'text-color': dark ? '#FCA5A5' : '#B91C1C', 'text-halo-color': t.halo, 'text-halo-width': 1.5 } });
+      paint: { 'text-color': dark ? '#F3F4F6' : ['coalesce', ['get', 'color'], '#B91C1C'], 'text-halo-color': t.halo, 'text-halo-width': 1.5 } });
     this._addLayerSafe({ id: 'endpoints', type: 'symbol', source: 'endpoints',
       layout: { 'icon-image': ['concat', 'pin:', ['get', 'role']], 'icon-anchor': 'bottom', 'icon-allow-overlap': true } });
     // selection: a soft halo on the spot + the place's own icon, enlarged, in a pin of its
@@ -408,6 +408,9 @@ export class MapView {
       img = shieldImage(ref.join(':'), kind);
     } else if (id === 'pin:result') {
       img = markerImage('pin', '#DC2626', { size: 30, shape: 'pin' });
+    } else if (id.startsWith('res:')) {
+      const [, icon, color] = id.split(':');
+      img = markerImage(icon, color, { size: 32, shape: 'pin' });
     } else if (id.startsWith('sel:')) {
       const [, icon, color] = id.split(':');
       img = markerImage(icon, color, { size: 40, shape: 'pin' });
@@ -446,15 +449,26 @@ export class MapView {
     if (src) src.setData(data);
   }
 
+  /**
+   * Search / category results. Each result is drawn as a pin in its own category colour with
+   * its category icon (a red neutral pin only when the result has no category), and the small
+   * map icons of the same POIs are hidden so nothing is drawn twice.
+   */
   setResults(items) {
+    const ok = (v, re) => typeof v === 'string' && re.test(v);
+    const shown = items.filter((r) => r.location);
+    this.resultPois = new Set(shown.map((r) => /^poi-(\d+)$/.exec(r.id || '')?.[1]).filter(Boolean).map(Number));
     this._set('results', {
       type: 'FeatureCollection',
-      features: items.filter((r) => r.location).map((r, i) => ({
+      features: shown.map((r, i) => ({
         type: 'Feature', id: i,
-        properties: { id: r.id, label: r.name, order: i },
+        properties: { id: r.id, label: r.name, order: i,
+          ...(ok(r.icon, /^[\w-]+$/) && r.icon !== 'pin' && ok(r.color, /^#[0-9A-Fa-f]{3,8}$/)
+            ? { img: `res:${r.icon}:${r.color}`, color: r.color } : { img: 'pin:result' }) },
         geometry: { type: 'Point', coordinates: [r.location.lon, r.location.lat] },
       })),
     });
+    this._applySelectionFilter();
   }
 
   /**
@@ -472,12 +486,14 @@ export class MapView {
     this._applySelectionFilter();
   }
 
-  /** Hide the selected POI's own small icon – the selection pin shows the same icon, larger. */
+  /** Hide the small map icons of the selected POI and of the result POIs – their pins show the same icon. */
   _applySelectionFilter() {
     const m = this.map;
     if (!m?.getLayer?.('pois')) return;
     const base = ['!', ['has', 'count']];
-    m.setFilter('pois', this.selectedPoi != null ? ['all', base, ['!=', ['to-number', ['get', 'id']], this.selectedPoi]] : base);
+    const hide = [...(this.resultPois || [])];
+    if (this.selectedPoi != null) hide.push(this.selectedPoi);
+    m.setFilter('pois', hide.length ? ['all', base, ['!', ['in', ['to-number', ['get', 'id']], ['literal', hide]]]] : base);
   }
 
   setHighlight(geometry) {
