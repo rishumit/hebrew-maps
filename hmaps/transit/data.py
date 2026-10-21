@@ -191,20 +191,25 @@ class TransitData:
         for rs in groups.values():
             if len(rs) < 2:
                 continue
-            comps: list[list] = []  # [box, routes]
+            # connected components of overlapping boxes. Components are matched by position, never
+            # with ``list.remove`` / ``==``: they hold numpy boxes, whose ``==`` is element-wise
+            # (that raised "truth value of an array is ambiguous" on the real feed).
+            comps: list[tuple[tuple[float, float, float, float] | None, list[int]]] = []
             for r in rs:
-                b = box[r].copy()
-                if not np.isfinite(b).all():
-                    comps.append([b, [r]])
+                b = tuple(float(v) for v in box[r])
+                if not all(math.isfinite(v) for v in b):
+                    comps.append((None, [r]))
                     continue
-                hit = [c for c in comps if np.isfinite(c[0]).all() and b[0] - pad <= c[0][2] and c[0][0] - pad <= b[2]
-                       and b[1] - pad <= c[0][3] and c[0][1] - pad <= b[3]]
-                merged = [b, [r]]
-                for c in hit:
-                    comps.remove(c)
-                    merged[0] = np.r_[np.minimum(merged[0][:2], c[0][:2]), np.maximum(merged[0][2:], c[0][2:])]
-                    merged[1] += c[1]
-                comps.append(merged)
+                keep, members = [], [r]
+                for c in comps:
+                    cb = c[0]
+                    if cb is not None and b[0] - pad <= cb[2] and cb[0] - pad <= b[2] and b[1] - pad <= cb[3] and cb[1] - pad <= b[3]:
+                        b = (min(b[0], cb[0]), min(b[1], cb[1]), max(b[2], cb[2]), max(b[3], cb[3]))
+                        members += c[1]
+                    else:
+                        keep.append(c)
+                keep.append((b, members))
+                comps = keep
             for _, members in comps:
                 line[members] = min(members)
         return line, ptr, o
