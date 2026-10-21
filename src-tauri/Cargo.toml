@@ -19,6 +19,7 @@ tauri = { version = "2", features = ["custom-protocol"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
 open = "5"
+serde_json = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"

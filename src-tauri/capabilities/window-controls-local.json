@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "window-controls-local",
+  "description": "The bundled loading / error page (ui/index.html) draws its own title bar, because the window has no native frame: minimize, maximize, close and drag only. The map pages served by the local Python server get the same permissions at runtime, for their exact origin only (main.rs, grant_window_controls).",
+  "local": true,
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized"
+  ]
+}

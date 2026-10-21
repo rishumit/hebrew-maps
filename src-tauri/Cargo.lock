@@ -1413,6 +1413,7 @@ version = "1.0.0"
 dependencies = [
  "libc",
  "open",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",

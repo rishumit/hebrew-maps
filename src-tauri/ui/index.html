@@ -4,17 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>מפות בעברית</title>
-  <!-- Loading / error screen of the desktop app. Self-contained: no external resources, no IPC. -->
+  <!-- Loading / error screen of the desktop app. Self-contained: no external resources. The window has no
+       native frame, so this page draws the same RTL title bar as web/desktop.html (drag area, window buttons
+       on the left); its only IPC is those window commands (capabilities/window-controls-local.json). -->
   <style>
-    :root { color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --muted: #475569; --accent: #2563eb; --err: #b91c1c; --card: #ffffff; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #0b1220; --fg: #e2e8f0; --muted: #94a3b8; --accent: #60a5fa; --err: #fca5a5; --card: #111827; }
+    :root {
+      color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --muted: #475569; --accent: #2563eb; --err: #b91c1c; --card: #ffffff;
+      --tb-bg: #E7EBF0; --tb-fg: #1F2937; --tb-muted: #6B7280; --btn-hover: rgba(0,0,0,.065); --btn-press: rgba(0,0,0,.1); --line: #D3D9E1;
     }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220; --fg: #e2e8f0; --muted: #94a3b8; --accent: #60a5fa; --err: #fca5a5; --card: #111827;
+        --tb-bg: #0B0F15; --tb-fg: #E5E7EB; --tb-muted: #A3ADBB; --btn-hover: rgba(255,255,255,.075); --btn-press: rgba(255,255,255,.045); --line: #1F2733;
+      }
+    }
+    * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      display: grid; place-items: center; background: var(--bg); color: var(--fg);
-      font: 16px/1.6 "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
+      display: grid; place-items: center; background: var(--bg); color: var(--fg); padding-top: 40px;
+      font: 16px/1.6 "Segoe UI Variable Text", "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
     }
+    .titlebar {
+      position: fixed; inset: 0 0 auto 0; height: 40px; display: flex; align-items: stretch;
+      background: var(--tb-bg); border-bottom: 1px solid var(--line); user-select: none; -webkit-user-select: none;
+    }
+    .tb-brand { display: flex; align-items: center; gap: 8px; padding-inline: 14px 10px; font-size: 12px; font-weight: 500; color: var(--tb-fg); }
+    .tb-brand svg { width: 18px; height: 18px; }
+    .tb-drag { flex: 1; }
+    .winctl { display: flex; }
+    .winctl button {
+      width: 46px; height: 40px; padding: 0; border: 0; background: transparent; color: var(--tb-fg);
+      display: grid; place-items: center; cursor: default; transition: background-color .1s;
+    }
+    .winctl svg { display: block; shape-rendering: crispEdges; }
+    .winctl button:hover { background: var(--btn-hover); }
+    .winctl button:active { background: var(--btn-press); }
+    .winctl .close:hover, .winctl .close:focus-visible { background: #C42B1C; color: #fff; }
+    .winctl .close:active { background: #B3271A; }
+    .winctl button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+    .winctl .close:focus-visible { outline-color: #fff; }
+    html.blurred .tb-brand, html.blurred .winctl button:not(:hover) { color: var(--tb-muted); }
     main { text-align: center; padding: 24px; max-width: 560px; }
     svg.logo { width: 96px; height: 96px; display: block; margin: 0 auto 16px; }
     h1 { font-size: 1.6rem; margin: 0 0 8px; }
@@ -34,6 +63,29 @@
   </style>
 </head>
 <body>
+  <header class="titlebar" data-tauri-drag-region>
+    <div class="tb-brand" data-tauri-drag-region>
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E40AF"/></linearGradient></defs>
+        <rect width="512" height="512" rx="112" fill="url(#tg)"/>
+        <path d="M256 92c-62 0-112 48-112 108 0 82 112 196 112 196s112-114 112-196c0-60-50-108-112-108z" fill="#FFFFFF"/>
+        <circle cx="256" cy="200" r="44" fill="#2563EB"/>
+      </svg>
+      <span data-tauri-drag-region>מפות בעברית</span>
+    </div>
+    <div class="tb-drag" data-tauri-drag-region></div>
+    <div class="winctl" role="group" aria-label="פקדי החלון">
+      <button type="button" data-cmd="minimize" aria-label="מזעור" title="מזעור">
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10"><path d="M0 5.5h10" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" data-cmd="toggle_maximize" aria-label="הגדלה" title="הגדלה">
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" class="close" data-cmd="close" aria-label="סגירה" title="סגירה">
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10"><path d="M.5.5l9 9M9.5.5l-9 9" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+    </div>
+  </header>
   <main>
     <svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
       <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B82F6"/><stop offset="1" stop-color="#1E40AF"/></linearGradient></defs>
@@ -52,6 +104,18 @@
     </div>
   </main>
   <script>
+    (function () {
+      var ipc = window.__TAURI_INTERNALS__;
+      document.querySelectorAll(".winctl [data-cmd]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          if (ipc) ipc.invoke("plugin:window|" + b.dataset.cmd).catch(function () {});
+          else if (b.dataset.cmd === "close") window.close();
+        });
+      });
+      function focusState() { document.documentElement.classList.toggle("blurred", !document.hasFocus()); }
+      window.addEventListener("focus", focusState);
+      window.addEventListener("blur", focusState);
+    })();
     (function () {
       var q = new URLSearchParams(location.search);
       var err = q.get("error");

@@ -34,7 +34,7 @@ if (-not $env:HMAPS_BROWSER) {
   $desktop = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 }
 if ($desktop) {
-  $env:HMAPS_URL = "$url/map.html"
+  $env:HMAPS_URL = "$url/desktop.html"
   Start-Process -FilePath $desktop
 } else {
   Start-Process $url
