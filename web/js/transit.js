@@ -44,6 +44,156 @@ export function lineButton(x, fromStop, { small = true, direction } = {}) {
   return `<button type="button" class="tr-line-btn" data-line="${esc(x.route_id)}"${fromStop ? ` data-from="${esc(fromStop)}"` : ''}${direction != null ? ` data-dir="${esc(direction)}"` : ''} aria-label="${esc(label)}">${badge(x, { small })}</button>`;
 }
 
+const MAX_CHIPS = 30;
+
+/**
+ * Quick chips for every numbered line at a stop (from /stop/{id}/routes), each opening its line view.
+ * Lines without a number (Israel Railways) are left to the full list below: 30 identical "רכבת"
+ * chips say nothing. Busy stops (50–100+ lines) show the first chips and a "+N" link to the list.
+ */
+function chipsHtml(routes, stopId, listId) {
+  const lines = routes.groups.flatMap((g) => g.lines).filter((l) => l.route_short_name);
+  if (!lines.length) return '';
+  const chip = (l) => lineButton({ ...l, route_id: l.directions[0]?.route_id || l.id, headsign: l.directions[0]?.headsign },
+    stopId, { direction: l.directions[0]?.direction });
+  const more = lines.length - MAX_CHIPS;
+  return `<div class="tr-lines" role="group" aria-label="קווים בתחנה">${lines.slice(0, more > 0 ? MAX_CHIPS : undefined).map(chip).join('')}${more > 0
+    ? `<a class="tr-more" href="#${esc(listId)}" data-scroll="${esc(listId)}">ועוד ${more} קווים</a>` : ''}</div>`;
+}
+
+function departuresHtml(deps, stopId) {
+  return `<ul class="tr-deps">${deps.map((x) => `<li>
+      <span class="tr-dep-time"><bdi>${esc(x.time_text)}</bdi><small>${x.minutes <= 0 ? 'עכשיו' : x.minutes < 60 ? `בעוד ${x.minutes} דק׳` : ''}</small></span>
+      ${lineButton(x, stopId)}
+      <span class="tr-dep-head">${x.headsign ? 'לכיוון ' + esc(x.headsign) : ''}<small>${agencyBadge(x, { size: 'sm', alt: '' })}${esc(x.agency)}</small></span>
+    </li>`).join('')}</ul>`;
+}
+
+/** "ועוד N קווים" → the full list (opened when it is a disclosure). */
+function wireScroll(body) {
+  body.querySelectorAll('[data-scroll]').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const t = body.querySelector(`#${CSS.escape(a.dataset.scroll)}`);
+    if (t?.tagName === 'DETAILS') t.open = true;
+    t?.scrollIntoView({ block: 'start' });
+    t?.setAttribute('tabindex', '-1');
+    t?.focus({ preventScroll: true });
+  }));
+}
+
+// ------------------------------------------------------------------ POI card (bus stop / station on the map)
+/** OSM transport POIs → which GTFS stops to look for around them. */
+const POI_STOPS = {
+  bus_stop: { mode: 'bus', radius: 300, near: 60, max: 1 },
+  light_rail: { mode: 'light_rail', radius: 250, max: 4 },
+  train_station: { mode: 'rail', radius: 350, max: 4 },
+  bus_station: { mode: 'bus', radius: 200, max: 12 },
+};
+const POI_EMBED = 2; // stops shown with departures inside the card; the rest are links
+
+export function isTransitPoi(poi) {
+  return !!POI_STOPS[poi?.sub_category];
+}
+
+/** Placeholder of the "public transport" block of a POI card; filled by wirePoiTransit. */
+export function poiTransitHtml(poi) {
+  if (!isTransitPoi(poi)) return '';
+  return `<section class="poi-transit" aria-labelledby="pt-h"><h3 class="subtitle" id="pt-h">${svg(MODE_ICON[POI_STOPS[poi.sub_category].mode], { size: 18 })}<span>תחבורה ציבורית</span></h3>
+    <div class="pt-body">${poi._transit ? poiTransitBody(poi._transit) : '<div class="skeleton" aria-busy="true" aria-label="טוען זמני יציאה"><div class="sk-line w80"></div><div class="sk-line w60"></div></div>'}</div></section>`;
+}
+
+function stopTitle(s) {
+  const sub = [s.code ? `תחנה ${s.code}` : '', s.platform ? `רציף ${s.platform}` : '', s.distance > 40 ? `${s.distance} מ׳ מכאן` : ''].filter(Boolean).join(' · ');
+  return `${esc(s.name)}${sub ? ` <span class="tr-code">(${esc(sub)})</span>` : ''}`;
+}
+
+function poiTransitBody(st) {
+  if (st.error) return `<p class="p-empty">${esc(st.error)}</p>`;
+  if (!st.stops.length) return '<p class="p-empty">לא נמצאה תחנה תואמת בלוח הזמנים של התחבורה הציבורית.</p>';
+  const blocks = st.boards.map(({ stop, data, routes, error }) => {
+    const id = stop.id;
+    const listId = `pt-routes-${id}`;
+    const deps = data?.departures?.slice(0, 6) || [];
+    return `<div class="pt-stop">
+      <button type="button" class="tr-stop-btn pt-stop-title" data-stop="${esc(id)}" aria-label="${esc(`לוח זמנים מלא בתחנה ${stop.name}`)}">${svg(MODE_ICON[stop.modes?.[0]] || 'bus', { size: 16 })}<span>${stopTitle(stop)}</span></button>
+      ${error ? `<p class="p-empty">${esc(error)}</p>` : `
+      ${routes?.count ? chipsHtml(routes, id, listId)
+        : data.lines?.length ? `<div class="tr-lines" role="group" aria-label="קווים בתחנה">${data.lines.map((l) => lineButton(l, id)).join('')}</div>` : ''}
+      ${deps.length ? departuresHtml(deps, id) : '<p class="p-empty">אין יציאות בשלוש השעות הקרובות.</p>'}
+      ${routes?.count ? `<details class="pt-all" id="${esc(listId)}"><summary>כל הקווים בתחנה (${routes.count})</summary>${routesListHtml(routes, id)}</details>` : ''}
+      <button type="button" class="btn btn-secondary btn-sm pt-full" data-stop="${esc(id)}">${svg('clock', { size: 16 })}לוח זמנים מלא בתחנה</button>`}
+    </div>`;
+  }).join('');
+  const rest = st.stops.slice(st.boards.length);
+  return `${blocks}${rest.length ? `<h4 class="tr-mode-h">תחנות נוספות</h4><ul class="pt-more">${rest.map((s) => `<li>
+    <button type="button" class="tr-stop-btn" data-stop="${esc(s.id)}">${svg(MODE_ICON[s.modes?.[0]] || 'bus', { size: 14 })}<span>${stopTitle(s)}</span></button></li>`).join('')}</ul>` : ''}
+    <p class="tr-estimated">${svg('clock', { size: 16 })}<span>זמנים משוערים לפי לוח הזמנים</span></p>`;
+}
+
+async function loadPoiTransit(poi) {
+  const cfg = POI_STOPS[poi.sub_category];
+  const ref = String(poi.metadata?.ref || poi.ref || '').trim();
+  let stops;
+  try {
+    const res = await api.transitStops(poi.location.lat, poi.location.lon,
+      { radius: cfg.radius, mode: cfg.mode, code: /^\d+$/.test(ref) ? ref : undefined, limit: 20 });
+    stops = res.stops || [];
+  } catch (e) {
+    return { stops: [], boards: [], error: e.status === 503 ? 'נתוני התחבורה הציבורית עדיין לא הותקנו.' : e.message };
+  }
+  if (cfg.near) stops = stops[0]?.match === 'code' ? [stops[0]] : stops.filter((s) => s.distance <= cfg.near);
+  stops = stops.slice(0, cfg.max);
+  const boards = await Promise.all(stops.slice(0, POI_EMBED).map(async (stop) => {
+    const [data, routes] = await Promise.all([
+      api.transitStop(stop.id, undefined, undefined, 6).catch((e) => ({ error: e.message })),
+      api.transitStopRoutes(stop.id).catch(() => null),
+    ]);
+    return data.error ? { stop, error: data.error } : { stop, data, routes };
+  }));
+  return { stops, boards };
+}
+
+/** Load (once per card) and show the departures and lines of the stop(s) of a bus stop / station POI. */
+export function wirePoiTransit(body, app, poi) {
+  const sec = body.querySelector('.poi-transit');
+  if (!sec) return;
+  const planner = app.directions?.transit;
+  const wire = (root) => {
+    root.querySelectorAll('[data-stop]').forEach((b) => b.addEventListener('click', () => planner?.openStop(b.dataset.stop)));
+    planner?._wireLines(root);
+    wireScroll(root);
+  };
+  if (poi._transit) {
+    wire(sec);
+    return;
+  }
+  if (poi._transitP) return;
+  poi._transitP = loadPoiTransit(poi).then((st) => {
+    poi._transit = st;
+    const cur = document.querySelector('.poi-transit .pt-body');
+    if (!cur || !cur.isConnected) return;
+    cur.innerHTML = poiTransitBody(st);
+    wire(cur.closest('.poi-transit'));
+    const n = st.boards[0]?.data?.departures?.length;
+    if (st.boards.length) announce(`תחבורה ציבורית: ${st.boards[0].stop.name}${n ? `, ${n} יציאות קרובות` : ''}`);
+  });
+}
+
+/** Every line serving a stop, grouped by mode; each boarding direction is its own button (→ line view). */
+function routesListHtml(routes, stopId) {
+  return routes.groups.map((g) => `<h4 class="tr-mode-h">${svg(MODE_ICON[g.type] || 'bus', { size: 16 })}<span>${esc(g.mode_he)}</span></h4>
+    <ul class="tr-routes" aria-label="${esc(g.mode_he)}">${g.lines.map((l) => {
+      const name = l.route_short_name ? l.line : [l.mode_he, l.title].filter(Boolean).join(' ');
+      const dirs = l.directions.length
+        ? l.directions.map((d) => `<button type="button" class="tr-dir-btn" data-line="${esc(d.route_id)}" data-dir="${esc(d.direction)}" data-from="${esc(stopId)}"
+            aria-label="${esc(`${name}, ${l.agency}, לכיוון ${d.headsign} – כל התחנות של הקו`)}"><span aria-hidden="true">←</span><span>לכיוון ${esc(d.headsign)}</span></button>`).join('')
+        : `<button type="button" class="tr-dir-btn" data-line="${esc(l.id)}" data-from="${esc(stopId)}"
+            aria-label="${esc(`${name}, ${l.agency}, מסיים בתחנה – כל התחנות של הקו`)}"><span>מסיים בתחנה</span></button>`;
+      return `<li class="tr-route${l.terminates ? ' ends' : ''}"><span class="tr-route-badge" aria-hidden="true">${badge(l, { small: true })}</span>
+        <div class="tr-route-body">${!l.route_short_name && l.title ? `<span class="tr-route-title">${esc(l.title)}</span>` : ''}<span class="tr-agency">${esc(l.agency)}</span><div class="tr-route-dirs">${dirs}</div></div></li>`;
+    }).join('')}</ul>`).join('');
+}
+
 /** After a view re-renders with its data, the focused skeleton element is gone: move focus to the title. */
 function keepFocus(body) {
   if (body.contains(document.activeElement) || (document.activeElement && document.activeElement !== document.body && document.activeElement.isConnected)) return;
@@ -352,19 +502,8 @@ export class TransitPlanner {
   /** Every line serving the stop, grouped by mode; each boarding direction is its own button. */
   _routesHtml(routes, stopId) {
     if (!routes?.count) return '';
-    const groups = routes.groups.map((g) => `<h4 class="tr-mode-h">${svg(MODE_ICON[g.type] || 'bus', { size: 16 })}<span>${esc(g.mode_he)}</span></h4>
-      <ul class="tr-routes" aria-label="${esc(g.mode_he)}">${g.lines.map((l) => {
-        const name = l.route_short_name ? `${l.line}` : `${l.mode_he}`;
-        const dirs = l.directions.length
-          ? l.directions.map((d) => `<button type="button" class="tr-dir-btn" data-line="${esc(d.route_id)}" data-dir="${esc(d.direction)}" data-from="${esc(stopId)}"
-              aria-label="${esc(`${name}, ${l.agency}, לכיוון ${d.headsign} – כל התחנות של הקו`)}"><span aria-hidden="true">←</span><span>לכיוון ${esc(d.headsign)}</span></button>`).join('')
-          : `<button type="button" class="tr-dir-btn" data-line="${esc(l.id)}" data-from="${esc(stopId)}"
-              aria-label="${esc(`${name}, ${l.agency}, מסיים בתחנה – כל התחנות של הקו`)}"><span>מסיים בתחנה</span></button>`;
-        return `<li class="tr-route${l.terminates ? ' ends' : ''}"><span class="tr-route-badge" aria-hidden="true">${badge(l, { small: true })}</span>
-          <div class="tr-route-body"><span class="tr-agency">${esc(l.agency)}</span><div class="tr-route-dirs">${dirs}</div></div></li>`;
-      }).join('')}</ul>`).join('');
     return `<h3 class="subtitle" id="tr-routes-h">כל הקווים בתחנה <span class="p-sub">(${routes.count})</span></h3>
-      <section class="tr-routes-sec" aria-labelledby="tr-routes-h">${groups}</section>`;
+      <section class="tr-routes-sec" aria-labelledby="tr-routes-h">${routesListHtml(routes, stopId)}</section>`;
   }
 
   async openStop(id) {
@@ -372,6 +511,7 @@ export class TransitPlanner {
     const time = this.timeMode === 'now' ? undefined : `${this.when}:00`;
     let data = null;
     let routes = null;
+    let routesError = null;
     let error = null;
     const view = () => ({
       key: `transit-stop:${id}`, label: 'לוח זמנים בתחנה', snap: 'half',
@@ -388,29 +528,26 @@ export class TransitPlanner {
         }
         const s = data.stop;
         const sub = [s.code ? `תחנה ${s.code}` : '', s.city || '', s.platform ? `רציף ${s.platform}` : ''].filter(Boolean).join(' · ');
-        // quick chips: every line (from /routes when loaded), each opens its line view
-        const chips = routes?.count
-          ? routes.groups.flatMap((g) => g.lines).map((l) => lineButton({ ...l, route_id: l.directions[0]?.route_id || l.id,
-            headsign: l.directions[0]?.headsign }, s.id, { direction: l.directions[0]?.direction })).join('')
-          : data.lines.map((l) => `<span class="tr-badge sm" style="background:${esc(l.color)};color:${esc(l.text_color)}">${esc(l.line.replace(/^קו /, ''))}</span>`).join('');
+        // quick chips: every line (from /routes when loaded), each opens its line view; without /routes,
+        // the lines of the departures board (still clickable)
+        const chips = routes?.count ? chipsHtml(routes, s.id, 'tr-routes-h')
+          : data.lines.length ? `<div class="tr-lines" role="group" aria-label="קווים בתחנה">${data.lines.map((l) => lineButton(l, s.id)).join('')}</div>` : '';
         body.innerHTML = `${head(app, s.name, { sub })}
           <p class="tr-estimated">${svg('clock', { size: 16 })}<span>${esc(data.estimated_text)}</span></p>
           ${data.feed?.warning ? `<div class="tr-warning" role="status">${svg('alert', { size: 18 })}<div>${esc(data.feed.warning)}</div></div>` : ''}
-          ${chips ? `<div class="tr-lines" role="group" aria-label="קווים בתחנה">${chips}</div>` : ''}
+          ${chips}
           <h3 class="subtitle">היציאות הקרובות</h3>
-          ${data.departures.length ? `<ul class="tr-deps">${data.departures.map((x) => `<li>
-              <span class="tr-dep-time"><bdi>${esc(x.time_text)}</bdi><small>${x.minutes <= 0 ? 'עכשיו' : x.minutes < 60 ? `בעוד ${x.minutes} דק׳` : ''}</small></span>
-              ${lineButton(x, s.id)}
-              <span class="tr-dep-head">${x.headsign ? 'לכיוון ' + esc(x.headsign) : ''}<small>${agencyBadge(x, { size: 'sm', alt: '' })}${esc(x.agency)}</small></span>
-            </li>`).join('')}</ul>` : '<p class="p-empty">אין יציאות בשלוש השעות הקרובות.</p>'}
-          ${this._routesHtml(routes, s.id)}`;
+          ${data.departures.length ? departuresHtml(data.departures, s.id) : '<p class="p-empty">אין יציאות בשלוש השעות הקרובות.</p>'}
+          ${routesError ? `<p class="p-empty" role="status">לא ניתן להציג את כל הקווים בתחנה: ${esc(routesError)}</p>` : this._routesHtml(routes, s.id)}`;
         wireHead(body, app);
         this._wireLines(body);
+        wireScroll(body);
         keepFocus(body);
       },
     });
     app.panel.show(view());
-    const routesP = api.transitStopRoutes(id).catch(() => null); // the departures still show without it
+    // the departures still show without it, with a note
+    const routesP = api.transitStopRoutes(id).catch((e) => { routesError = e.message; return null; });
     try {
       data = await api.transitStop(id, time);
       routes = await routesP;
@@ -468,7 +605,7 @@ export class TransitPlanner {
         const base = fi != null ? data.stops[fi].offset : 0;
         const opts = data.directions;
         const cur = opts.findIndex((o) => o.current);
-        body.innerHTML = `${head(app, r.line, { sub: r.agency })}
+        body.innerHTML = `${head(app, r.route_short_name || !r.title ? r.line : `${r.line} ${r.title}`, { sub: r.agency })}
           <div class="tr-line-head">${badge(r)}<strong>לכיוון ${esc(data.headsign)}</strong></div>
           ${error ? `<div class="alert" role="alert">${svg('alert')}<div>${esc(error)}</div></div>` : ''}
           ${opts.length > 1 ? `<div class="tr-line-dir"><label for="tr-dir-sel">כיוון</label>

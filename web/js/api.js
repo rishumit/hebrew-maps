@@ -81,7 +81,9 @@ export const api = {
       signal,
       timeout: 25000,
     }),
-  transitStop: (id, time, signal) => request(`/api/transit/stop/${encodeURIComponent(id)}`, { params: { time }, signal }),
+  transitStop: (id, time, signal, limit) => request(`/api/transit/stop/${encodeURIComponent(id)}`, { params: { time, limit }, signal }),
+  transitStops: (lat, lon, { radius, mode, code, limit } = {}, signal) =>
+    request('/api/transit/stops', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6), radius, mode, code, limit }, signal }),
   transitStopRoutes: (id, signal) => request(`/api/transit/stop/${encodeURIComponent(id)}/routes`, { signal }),
   transitRoute: (id, { direction, fromStop } = {}, signal) =>
     request(`/api/transit/route/${encodeURIComponent(id)}`, { params: { direction, from_stop: fromStop }, signal }),

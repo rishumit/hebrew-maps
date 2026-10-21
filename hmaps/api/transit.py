@@ -4,7 +4,7 @@
     GET /api/transit/stop/{id}?time=ISO&limit=20                         next departures at a stop
     GET /api/transit/stop/{id}/routes                                    every line serving a stop
     GET /api/transit/route/{id}?direction=&from_stop=                    a line's ordered stops and path
-    GET /api/transit/stops?lat=&lon=&radius=500                          stops nearby
+    GET /api/transit/stops?lat=&lon=&radius=500&mode=&code=              stops nearby (POI cards: by mode / sign number)
     GET /api/transit/status                                              feed dates and freshness
 
 When ``data/transit`` has not been built the endpoints answer 503 with a
@@ -170,7 +170,12 @@ async def stops_ep(req: Request) -> Response:
         pt = _latlon(f"{lat},{lon}" if lat and lon else None, "lat/lon")
         radius = _num(req, "radius", 500, 10, 2000)
         limit = int(_num(req, "limit", 20, 1, 100))
-        res = await run_in_threadpool(planner.nearby_stops, data, pt[0], pt[1], radius, limit)
+        mode = req.query_params.get("mode") or None
+        code = req.query_params.get("code") or None
+        if code is not None and not code.isdigit():
+            code = None  # an OSM ref that is not a sign number ("12א", "N/A") just does not match
+        res = await run_in_threadpool(planner.nearby_stops, data, pt[0], pt[1], radius, limit, mode,
+                                      int(code) if code else None)
     except planner.TransitError as e:
         return _err(e.status, e.code, e.message)
     return JSONResponse({"stops": res}, headers={"Cache-Control": "public, max-age=3600"})

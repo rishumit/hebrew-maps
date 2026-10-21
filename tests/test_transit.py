@@ -369,6 +369,8 @@ class OldStoreTest(unittest.TestCase):
         self.assertEqual(one["route_ids"], sorted([self.rid["r1n"], self.rid["r1nb"]]))
         self.assertEqual({x["headsign"] for x in one["directions"]}, {"פא"})  # boarded at G only towards F
         self.assertIsNone(one["directions"][0]["direction_id"])
+        rail = next(g for g in res["groups"] if g["type"] == "rail")["lines"][0]
+        self.assertEqual(rail["title"], "תחנת פא – תחנת חית")  # unnamed lines get their end points
         v = self.planner.line_view(d, int(self.rid["r1nb"]), None, d.id_index["G"])
         self.assertEqual([s["id"] for s in v["stops"]], ["G", "F"])
         self.assertEqual(v["from_index"], 0)
@@ -382,14 +384,31 @@ class OldStoreTest(unittest.TestCase):
         bus = next(g for g in res["groups"] if g["type"] == "bus")
         self.assertEqual(bus["lines"][0]["route_ids"], ["r1n", "r1nb"])
 
+    def test_nearby_stops_by_mode_and_code(self):
+        d = self.data
+        # around F: the rail stop F (code 1006) and nothing else within 300 m
+        res = self.planner.nearby_stops(d, 32.0502, 34.8001, 300, 5, mode="rail")
+        self.assertEqual([(s["id"], s["modes"]) for s in res], [("F", ["rail", "bus"])])
+        self.assertEqual(self.planner.nearby_stops(d, 32.0502, 34.8001, 300, 5, mode="light_rail"), [])
+        # C and C2 are 100 m apart: the sign number picks C2 although C is nearer
+        res = self.planner.nearby_stops(d, 32.0000, 34.8200, 300, 5, code=1003)
+        self.assertEqual([s["id"] for s in res], ["C2", "C"])
+        self.assertEqual(res[0]["match"], "code")
+        self.assertNotIn("match", res[1])
+
 
 class OldStoreApiTest(unittest.TestCase):
     """The endpoints the stop card and line view call, on an old-format store, answer 200 – fast."""
 
     @classmethod
     def setUpClass(cls):
+        import shutil
+
+        from tests.helpers import sample_db
+
         cls.root = Path(tempfile.mkdtemp(prefix="hmaps-transit-oldapi-"))
         _old_store(cls.root)
+        shutil.copy(sample_db(), cls.root / "maps.db")
         cls.api = ApiServer(cls.root)
 
     @classmethod
@@ -410,6 +429,19 @@ class OldStoreApiTest(unittest.TestCase):
                     s, view, _ = self.api.get(f"/api/transit/route/{dr['route_id']}", direction=str(dr["direction"]), from_stop=sid)
                     self.assertEqual(s, 200, (sid, dr, view))
                     self.assertEqual(view["stops"][view["from_index"]]["id"], sid)
+        s, body, _ = self.api.get("/api/transit/stops", lat="32.0", lon="34.82", radius="300", code="1003", mode="bus")
+        self.assertEqual(s, 200)
+        self.assertEqual(body["stops"][0]["id"], "C2")
+        s, body, _ = self.api.get("/api/transit/stops", lat="32.0", lon="34.82", radius="300", code="12א")
+        self.assertEqual(s, 200)  # an OSM ref that is not a number just does not match
+
+    def test_poi_card_has_the_stop_sign_number(self):
+        s, body, _ = self.api.get("/api/poi/poi-14")
+        self.assertEqual(s, 200, body)
+        self.assertEqual(body["sub_category"], "bus_stop")
+        self.assertEqual(body["metadata"]["ref"], "20915")
+        s, body, _ = self.api.get("/api/poi/poi-2")
+        self.assertIsNone(body["metadata"]["ref"])
 
 
 class TransitApiTest(unittest.TestCase):
