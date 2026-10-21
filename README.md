@@ -204,10 +204,38 @@ tests/       יחידה, אינטגרציה, דפדפן (Playwright), ביצוע
 docs/        מסמכי הפרויקט + מימוש, החלטות, תפעול, API
 ```
 
+## אתר ההורדה ופרסום גרסה
+
+אתר המוצר וההורדה נמצא ב-`site/` (HTML ו-CSS סטטיים, בלי שלב build ובלי משאבים חיצוניים) ומתפרסם ב-GitHub Pages:
+**https://rishumit.github.io/hebrew-maps/**. כפתורי ההורדה מצביעים על קישור קבוע,
+`https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe`, שתמיד מוביל לגרסת האפליקציה האחרונה.
+מספר הגרסה, הגודל והתאריך נטענים בדפדפן מ-`api.github.com`; אם הבקשה נחסמת (למשל בסינון), הכפתור עובד בכל זאת.
+
+**הפעלה חד-פעמית של האתר:** ‏Settings ← Pages ← Build and deployment ← Source: **GitHub Actions**.
+מכאן כל push ל-`main` שמשנה את `site/**` מפרסם את האתר (`.github/workflows/pages.yml`; אפשר גם להריץ ידנית מלשונית Actions ← "Product site (GitHub Pages)").
+המאגר צריך להיות ציבורי, כדי שהאתר וקובצי ההתקנה יהיו נגישים לכולם.
+
+**פרסום גרסת אפליקציה** (בונה את המתקין ויוצר Release שמסומן "Latest", עם `HebrewMaps-Setup-X.Y.Z.exe` ועם עותק בשם הקבוע `HebrewMaps-Setup.exe`):
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+או: Actions ← **Windows Installer** ← Run workflow, עם מספר גרסה ו-`release` מסומן.
+חבילות הנתונים השבועיות (`data-*`) נוצרות עם `--latest=false`, כך שהן אף פעם לא תופסות את מקום "הגרסה האחרונה" של האפליקציה.
+עד שמתפרסמת גרסת אפליקציה ראשונה, קישור ההורדה באתר מחזיר 404.
+
+בדיקת האתר לפני push:
+```bash
+python tools/check_site.py site                    # קישורים, עוגנים, alt/width/height, כותרות
+npx --yes html-validate site/*.html
+cd site && python -m http.server 8000              # http://localhost:8000/
+```
+את תמונות האתר מצלמים מהאפליקציה עצמה, על נתוני ישראל המלאים (‏1440×900 ב-2x), ושומרים ב-`site/assets/img` כ-AVIF,‏ WebP ו-JPEG.
+
 ## רישוי ומקורות
 - נתוני OpenStreetMap: © תורמי OpenStreetMap, רישיון ODbL. חובה להציג ייחוס (מוצג במפה).
 - data.gov.il: רישיון ממשלתי פתוח · Wikidata: ‏CC0 · ויקיפדיה ו-Wikimedia Commons: ‏CC BY-SA.
 - גבהים (קווי גובה, הצללה, פרופיל): ‏Copernicus DEM GLO-30 ‏© DLR e.V. 2010–2014 ו-© Airbus Defence and Space GmbH 2014–2018, באדיבות תוכנית Copernicus של האיחוד האירופי ו-ESA. הרישיון מתיר שימוש חופשי, כולל מסחרי, בתנאי ייחוס ("Copernicus DEM © DLR/Airbus, ESA", מוצג במפה). ‏[ADR 0008](docs/adr/0008-terrain.md)
 - תצלומי אוויר (אורתופוטו): ‏© מרכז מיפוי ישראל, דרך govmap.gov.il (ייחוס מוצג במפה כשהשכבה פעילה).
+- תצלומי לוויין (חלופה): ‏Sentinel-2 cloudless © EOX IT Services GmbH (Contains modified Copernicus Sentinel data), ‏CC BY-NC-SA 4.0.
 - MapLibre GL JS: ‏BSD-3 · OSRM: ‏BSD-2 · Planetiler: ‏Apache-2.0 · גופן DejaVu (גיבוי לתוויות): רישיון חופשי.
 - קוד הפרויקט: [לקבוע]

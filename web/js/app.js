@@ -1085,8 +1085,7 @@ function fatal(message, retry = false) {
 }
 
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator && window.isSecureContext && !location.search.includes('nosw')
-      && location.pathname !== '/' && location.pathname !== '/index.html') {
+  if ('serviceWorker' in navigator && window.isSecureContext && !location.search.includes('nosw')) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
 }

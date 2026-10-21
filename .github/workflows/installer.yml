@@ -176,7 +176,18 @@ jobs:
           retention-days: 30
 
       # -----------------------------------------------------------------------
-      # 10. Create GitHub Release (only on version tags or when manually requested)
+      # 10. Version-less copy for a stable download link (the product site links to
+      #     https://github.com/<repo>/releases/latest/download/HebrewMaps-Setup.exe).
+      #     The weekly data releases are created with --latest=false, so "latest" is
+      #     always the newest app release.
+      # -----------------------------------------------------------------------
+      - name: Stable installer name
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+        shell: pwsh
+        run: Copy-Item installer\HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe installer\HebrewMaps-Setup.exe -Force
+
+      # -----------------------------------------------------------------------
+      # 11. Create GitHub Release (only on version tags or when manually requested)
       # -----------------------------------------------------------------------
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
@@ -187,14 +198,21 @@ jobs:
           body: |
             ## התקנה / Installation
 
-            הורידו את `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` והריצו.
+            הורידו את `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` והריצו
+            (`HebrewMaps-Setup.exe` הוא אותו קובץ, בשם קבוע לקישור "הגרסה האחרונה").
 
-            Download `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` and run it.
+            Download `HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe` and run it
+            (`HebrewMaps-Setup.exe` is the same file under a stable name for the "latest" link).
+
+            אתר ההורדה / Download page: https://rishumit.github.io/hebrew-maps/
 
             **דרישות מערכת / System requirements:** Windows 10/11 x64
 
             ---
             Built automatically from commit ${{ github.sha }}
-          files: installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+          files: |
+            installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+            installer/HebrewMaps-Setup.exe
           draft: false
           prerelease: false
+          make_latest: "true"
