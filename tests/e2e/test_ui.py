@@ -286,6 +286,64 @@ class UiTest(unittest.TestCase):
         self.assertIn("kosher=1", page.evaluate("window.__poiTiles[0]"))
         self.assert_clean(page)
 
+    def test_satellite_whole_country_download(self):
+        """Layers popover: level choice with estimates, start, progress, stop (API mocked: no imagery server)."""
+        import json as _json
+        page = self.new_page()
+        state = {"job": None, "posted": None, "polls": 0}
+        levels = [{"id": "basic", "name_he": "בסיסי", "maxzoom": 13, "tiles": 3056, "cached": 0, "missing": 3056,
+                   "bytes_estimate": 76_000_000, "seconds_estimate": 611},
+                  {"id": "detailed", "name_he": "מפורט", "maxzoom": 15, "tiles": 40950, "cached": 0, "missing": 40950,
+                   "bytes_estimate": 1_020_000_000, "seconds_estimate": 8190},
+                  {"id": "full", "name_he": "מלא", "maxzoom": 16, "tiles": 158316, "cached": 0, "missing": 158316,
+                   "bytes_estimate": 3_950_000_000, "seconds_estimate": 31663}]
+
+        def job(st="running", done=1200):
+            return {"state": st, "total": 40950, "done": done, "percent": round(100 * done / 40950, 1), "fetched": done,
+                    "skipped": 0, "missing": 0, "failed": 0, "bytes": done * 25000, "error": None, "area": "israel",
+                    "source": "govmap", "rate": 5.0, "eta_seconds": 7000}
+
+        def handle(route):
+            url = route.request.url
+            if url.endswith("/api/satellite/country"):
+                body = {"levels": levels, "source": "govmap"}
+            elif url.endswith("/api/satellite/download") and route.request.method == "POST":
+                state["posted"] = _json.loads(route.request.post_data)
+                state["job"] = job()
+                body = {"job": state["job"]}
+                return route.fulfill(status=202, content_type="application/json", body=_json.dumps(body))
+            elif url.endswith("/api/satellite/download/cancel"):
+                state["job"] = job("cancelled", 1500)
+                body = {"job": state["job"]}
+            else:  # status
+                state["polls"] += 1
+                body = {"job": state["job"], "cache": {"tiles": 0, "bytes": 0, "disk_bytes": 0, "by_zoom": {}},
+                        "offline": False, "sources": []}
+            route.fulfill(status=200, content_type="application/json", body=_json.dumps(body))
+
+        page.route("**/api/satellite/**", handle)
+        page.route("**/tiles/satellite/**", lambda r: r.fulfill(status=204, body=""))
+        page.locator("#btn-layers").click()
+        page.locator("#btn-sat-country").click()
+        expect(page.locator("#sat-country")).to_be_visible()
+        expect(page.locator('.sat-est[data-level="detailed"]')).to_contain_text("40,950")
+        expect(page.locator('.sat-est[data-level="full"]')).to_contain_text("שעות")
+        self.assertEqual(page.locator("#btn-sat-country").get_attribute("aria-expanded"), "true")
+        page.locator('input[name="satlevel"][value="detailed"] + span').click()
+        page.screenshot(path=str(SHOTS / "sat-country-levels.png"))
+        page.locator("#btn-sat-country-go").click()
+        wait_js(page, "document.querySelector('#sat-save-status').textContent.includes('לכל הארץ')")
+        self.assertEqual(state["posted"], {"area": "country", "level": "detailed"})
+        expect(page.locator("#sat-save-progress")).to_be_visible()
+        expect(page.locator("#sat-country")).to_be_hidden()
+        expect(page.locator("#btn-sat-country")).to_be_hidden()
+        self.assertTrue(page.locator("#toggle-satellite").is_checked())
+        expect(page.locator("#btn-sat-save")).to_contain_text("עצירת ההורדה")
+        page.locator("#btn-sat-save").click()
+        wait_js(page, "document.querySelector('#sat-save-status').textContent.includes('ההורדה נעצרה')")
+        expect(page.locator("#btn-sat-country")).to_be_visible()
+        self.assert_clean(page)
+
     def test_chip_and_more_categories(self):
         page = self.new_page()
         page.locator('#chips [data-chip="synagogue"]').click()
