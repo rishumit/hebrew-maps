@@ -1,0 +1,234 @@
+/* מפות בעברית – desktop shell: RTL title bar (brand · tabs · window buttons) over one map per tab. */
+
+@font-face {
+  font-family: 'Heebo';
+  src: url('/fonts-ui/Heebo.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  --tb-h: 40px;
+  --tab-h: 32px;
+  --tab-r: 8px;
+  --tab-max: 232px;
+  --tab-min: 48px;
+  --font: 'Heebo', 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
+
+  /* light (matches the map's light UI: --bg #fff, gray-800 text) */
+  --tb-bg: #E7EBF0;
+  --tb-bg-inactive: #F0F2F5;
+  --tb-fg: #1F2937;
+  --tb-muted: #4B5563;
+  --tab-active: #FFFFFF;
+  --tab-hover: rgba(255, 255, 255, .55);
+  --tab-sep: #B9C1CC;
+  --btn-hover: rgba(0, 0, 0, .065);
+  --btn-press: rgba(0, 0, 0, .1);
+  --focus: #2563EB;
+  --accent: #2563EB;
+  --line: #D3D9E1;
+  --close-hover: #C42B1C;
+  --close-press: #B3271A;
+  --view-bg: #FFFFFF;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --tb-bg: #0A0D12;
+  --tb-bg-inactive: #10151C;
+  --tb-fg: #E5E7EB;
+  --tb-muted: #A3ADBB;
+  --tab-active: #1E2632;
+  --tab-hover: rgba(255, 255, 255, .06);
+  --tab-sep: #2E3746;
+  --btn-hover: rgba(255, 255, 255, .075);
+  --btn-press: rgba(255, 255, 255, .045);
+  --focus: #60A5FA;
+  --accent: #60A5FA;
+  --line: #1F2733;
+  --view-bg: #0F141B;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --tb-bg: #0A0D12;
+    --tb-bg-inactive: #10151C;
+    --tb-fg: #E5E7EB;
+    --tb-muted: #A3ADBB;
+    --tab-active: #1E2632;
+    --tab-hover: rgba(255, 255, 255, .06);
+    --tab-sep: #2E3746;
+    --btn-hover: rgba(255, 255, 255, .075);
+    --btn-press: rgba(255, 255, 255, .045);
+    --focus: #60A5FA;
+    --accent: #60A5FA;
+    --line: #1F2733;
+    --view-bg: #0F141B;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  font-family: var(--font); font-size: 12px; color: var(--tb-fg); background: var(--view-bg);
+  -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* ------------------------------------------------------------------ title bar */
+.titlebar {
+  position: fixed; inset: 0 0 auto 0; height: var(--tb-h); z-index: 10;
+  display: flex; align-items: stretch; background: var(--tb-bg);
+  transition: background-color .15s;
+}
+/* hairline under the bar; the active tab covers it so it "merges" with the map below */
+.titlebar::after {
+  content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--line); pointer-events: none;
+}
+html.blurred .titlebar { background: var(--tb-bg-inactive); }
+html.blurred .tb-title, html.blurred .wc-btn, html.blurred .tb-new { color: var(--tb-muted); }
+
+.tb-brand {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding-inline: 14px 10px; color: var(--tb-fg);
+}
+.tb-logo { width: 18px; height: 18px; display: block; flex: none; -webkit-user-drag: none; }
+.tb-title { font-size: 12px; font-weight: 500; letter-spacing: .1px; white-space: nowrap; }
+@media (max-width: 760px) { .tb-title { display: none; } }
+
+.tb-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; }
+.tabstrip {
+  flex: 0 1 auto; min-width: 0; height: 100%; display: flex; align-items: flex-end;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior: contain;
+  padding-inline: 8px; scroll-behavior: smooth;
+}
+.tabstrip::-webkit-scrollbar { display: none; }
+.tb-drag { flex: 1 0 40px; align-self: stretch; }
+
+/* ------------------------------------------------------------------ tabs */
+.tab {
+  --bg: transparent;
+  /* explicit width: the container query (inline-size containment) gives the tab no intrinsic width */
+  position: relative; flex: 0 1 auto; width: var(--tab-max); min-width: var(--tab-min); height: var(--tab-h);
+  display: flex; align-items: center; margin-inline-end: 1px;
+  border-radius: var(--tab-r) var(--tab-r) 0 0; background: var(--bg); color: var(--tb-muted);
+  container-type: inline-size; transition: background-color .12s;
+}
+.tab + .tab::before {
+  /* separator on the right edge (RTL: between this tab and the previous one) */
+  content: ''; position: absolute; inset-inline-start: -1px; top: 9px; width: 1px; height: 14px; background: var(--tab-sep);
+  transition: opacity .12s;
+}
+.tab:hover:not(.active) { --bg: var(--tab-hover); color: var(--tb-fg); }
+.tab.active, .tab.active + .tab, .tab:hover, .tab:hover + .tab { --sep: 0; }
+.tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before { opacity: 0; }
+.tab.active {
+  --bg: var(--tab-active); color: var(--tb-fg); z-index: 2;
+  height: calc(var(--tab-h) + 1px); margin-bottom: -1px; /* covers the bar's hairline */
+  box-shadow: 0 0 0 .5px rgba(0, 0, 0, .06), 0 -1px 2px rgba(0, 0, 0, .04);
+}
+:root[data-theme="dark"] .tab.active { box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05); }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] .tab.active { box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05); } }
+/* the concave "feet" that join the active tab to the content (Chrome / Edge shape) */
+.tab.active .foot {
+  position: absolute; bottom: 0; width: var(--tab-r); height: var(--tab-r); pointer-events: none;
+  background: radial-gradient(circle at var(--fx) 0, transparent calc(var(--tab-r) - .5px), var(--tab-active) var(--tab-r));
+}
+.tab.active .foot-s { inset-inline-start: calc(-1 * var(--tab-r)); --fx: 0; }
+.tab.active .foot-e { inset-inline-end: calc(-1 * var(--tab-r)); --fx: 100%; }
+[dir="rtl"] .tab.active .foot-s { --fx: 100%; }
+[dir="rtl"] .tab.active .foot-e { --fx: 0; }
+.tab:not(.active) .foot { display: none; }
+
+.tab-main {
+  flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px;
+  padding-inline: 12px 6px; border: 0; background: none; cursor: default; text-align: start;
+  border-radius: inherit; outline-offset: -3px;
+}
+.tab-icon {
+  flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--accent);
+}
+.tab:not(.active) .tab-icon { color: inherit; opacity: .9; }
+.tab-icon svg { width: 16px; height: 16px; }
+.tab-title {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 16px;
+  /* fade out instead of "…" (as browsers do) */
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+}
+[dir="rtl"] .tab-title { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px); mask-image: linear-gradient(to right, transparent, #000 18px); }
+.tab.loading .tab-icon svg { display: none; }
+.tab.loading .tab-icon::after {
+  content: ''; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+  animation: tab-spin .8s linear infinite;
+}
+@keyframes tab-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tab.loading .tab-icon::after { animation-duration: 2.4s; } }
+
+.tab-close {
+  flex: none; width: 20px; height: 20px; margin-inline-end: 6px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: none; color: var(--tb-muted); cursor: default;
+}
+.tab-close:hover { background: var(--btn-hover); color: var(--tb-fg); }
+.tab-close:active { background: var(--btn-press); }
+.tab-close svg { width: 10px; height: 10px; }
+
+/* narrow tabs: drop the title, then the close button of background tabs (like Chrome) */
+@container (max-width: 92px) {
+  .tab-main { padding-inline: 10px 2px; }
+  .tab-title { display: none; }
+}
+@container (max-width: 64px) {
+  .tab:not(.active) .tab-close { display: none; }
+  .tab-main { justify-content: center; padding-inline: 0; }
+  .tab.active .tab-icon { display: none; }
+  .tab.active .tab-close { margin-inline: auto; }
+}
+
+.tab.dragging { z-index: 5; transition: none; cursor: default; }
+.tab.settling { transition: transform .15s ease-out; }
+
+.tb-new {
+  flex: none; width: 28px; height: 28px; margin: 0 4px 2px; padding: 0; border: 0; border-radius: 6px;
+  display: grid; place-items: center; background: none; color: var(--tb-fg); cursor: default; align-self: flex-end;
+  margin-bottom: 3px;
+}
+.tb-new:hover { background: var(--btn-hover); }
+.tb-new:active { background: var(--btn-press); }
+
+/* ------------------------------------------------------------------ window buttons (left in RTL) */
+.winctl { flex: none; display: flex; align-items: stretch; }
+.wc-btn {
+  width: 46px; height: var(--tb-h); padding: 0; border: 0; border-radius: 0; background: transparent;
+  display: grid; place-items: center; color: var(--tb-fg); cursor: default;
+  transition: background-color .1s, color .1s;
+}
+.wc-btn svg { display: block; shape-rendering: crispEdges; }
+.wc-btn:hover { background: var(--btn-hover); }
+.wc-btn:active { background: var(--btn-press); }
+.wc-close:hover, .wc-close:focus-visible { background: var(--close-hover); color: #fff; }
+.wc-close:active { background: var(--close-press); color: rgba(255, 255, 255, .85); }
+.wc-btn:focus-visible { outline-offset: -3px; }
+.wc-close:focus-visible { outline-color: #fff; }
+.wc-btn .i-restore { display: none; }
+html.maximized .wc-btn .i-max { display: none; }
+html.maximized .wc-btn .i-restore { display: block; }
+
+/* ------------------------------------------------------------------ views */
+.views { position: fixed; inset: var(--tb-h) 0 0 0; background: var(--view-bg); }
+.view { position: absolute; inset: 0; }
+.view iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--view-bg); }
+/* background tabs stay alive (instant switching) but are not painted, focusable or announced */
+.view:not(.active) { visibility: hidden; pointer-events: none; }
+.noscript { padding: 24px; font-size: 16px; }
+
+@media (forced-colors: active) {
+  .tab.active { outline: 1px solid CanvasText; }
+  .wc-close:hover { background: Highlight; color: HighlightText; }
+}

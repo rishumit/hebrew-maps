@@ -112,10 +112,20 @@ class ApiTest(unittest.TestCase):
 
     def test_app_code_is_revalidated(self):
         """JS/CSS must not be cached heuristically, or code updates never reach the browser."""
-        for path in ("/js/map.js", "/css/app.css", "/index.html", "/map.html", "/sw.js"):
+        for path in ("/js/map.js", "/css/app.css", "/index.html", "/map.html", "/desktop.html", "/js/desktop.js", "/sw.js"):
             s, _, h = self.api.get(path)
             self.assertEqual(s, 200, path)
             self.assertEqual(h.get("cache-control"), "no-cache", path)
+
+    def test_desktop_shell_headers(self):
+        """The tab shell frames /map.html (same origin) and may reach the Tauri IPC channel; nothing else changes."""
+        _, _, shell = self.api.get("/desktop.html")
+        _, _, page = self.api.get("/map.html")
+        self.assertIn("connect-src 'self' ipc: http://ipc.localhost;", shell["content-security-policy"])
+        self.assertNotIn("ipc", page["content-security-policy"])
+        for h in (shell, page):
+            self.assertIn("frame-ancestors 'self'", h["content-security-policy"])
+            self.assertEqual(h["x-frame-options"], "SAMEORIGIN")
 
     def test_tiles(self):
         x, y = geo.lonlat_to_tile(34.7752, 32.0753, 15)
