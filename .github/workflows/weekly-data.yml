@@ -169,7 +169,8 @@ jobs:
     needs: [plan, osm]
     if: needs.plan.outputs.maps == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    # GitHub-hosted runners cap a job at 360 min; leave a little margin under that
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-hmaps
