@@ -6,6 +6,9 @@
     python tools/release.py manifest --tag data-2026-10-22 --previous prev/manifest.json   # dist/manifest.json
     python tools/release.py prepare-db --artifacts dist --previous prev/manifest.json      # maps.db for the media job
     python tools/release.py prune    --manifest dist/manifest.json --releases releases.json  # old releases to delete
+    python tools/release.py bundle   --manifest dist/manifest.json --dist dist --dist old --date 2026-10-22 --out offline
+                                     # offline update file(s) HebrewMaps-Update-<date>.zip (--list-missing first:
+                                     # "<release> <file>" of every component ZIP that is not in the --dist folders)
 
 The component catalog (ids, ZIP layout, Hebrew texts) lives in hmaps/core/components.py
 and is shared with the online updater (hmaps/api/updates.py).
@@ -300,7 +303,9 @@ def notes(m: dict) -> str:
                     f"{e.get('file') or '—'} |")
     return (f"## עדכון נתונים שבועי – {m['date']}\n\n"
             "חבילות הנתונים של מפות בעברית. התוכנה מעדכנת אותן בעצמה: תפריט ← **עדכונים**, "
-            "או `update-online-windows.cmd` / `python -m hmaps update`.\n\n" + "\n".join(rows) +
+            "או `update-online-windows.cmd` / `python -m hmaps update`.\n\n"
+            "**מחשב בלי אינטרנט?** הורידו את `HebrewMaps-Update-<תאריך>.zip` (כל החבילות בקובץ אחד), העבירו "
+            "בדיסק-און-קי, ובתוכנה: עדכונים ← **עדכון מקובץ**.\n\n" + "\n".join(rows) +
             "\n\n`manifest.json` מפרט לכל רכיב גרסה, גודל ו-SHA-256. רכיבים שלא נבנו מחדש מצביעים על הקובץ "
             "מגרסה קודמת.\n\nנתונים: © תורמי OpenStreetMap (ODbL), Copernicus DEM © DLR/Airbus/ESA, "
             "משרד התחבורה (GTFS), ויקיפדיה/ויקינתונים/ויקישיתוף, נדרים פלוס.\n")
@@ -341,6 +346,130 @@ def cmd_prepare_db(args) -> int:
     prev["_source"] = args.previous
     updates.install("maps", data, manifest=prev, force=True)
     print(f"maps.db from {prev['components']['maps'].get('release')}")
+    return 0
+
+
+# =========================================================================== offline update file
+
+#: a little under GitHub's 2 GiB asset limit (ZIP headers, manifest, README)
+BUNDLE_LIMIT = MAX_ASSET - 32 * 1024 ** 2
+BUNDLE_PREFIX = "HebrewMaps-Update"
+BUNDLE_README = """\ufeffמפות בעברית – קובץ עדכון לנתונים, למחשב בלי אינטרנט
+גרסת נתונים: {date}{part}
+
+איך מעדכנים:
+1. מעתיקים את הקובץ הזה (כמו שהוא, בלי לפתוח אותו) לדיסק-און-קי ומחברים למחשב שבו מותקנת התוכנה.
+2. פותחים את "מפות בעברית" ← תפריט (☰) ← "עדכונים" ← "עדכון מקובץ…" ובוחרים את הקובץ.
+3. התוכנה בודקת כל חבילה (SHA-256) ומתקינה רק מה שחדש יותר ממה שכבר במחשב. המפה ממשיכה לעבוד בינתיים.
+
+התוכנה עצמה עוד לא מותקנת? מעתיקים גם את HebrewMaps-Setup.exe מדף ההורדה, מתקינים, ואז מעדכנים מהקובץ.
+דף ההורדה: https://rishumit.github.io/hebrew-maps/download.html#offline
+
+בחבילה:
+{items}
+"""
+
+
+def _find(dirs: list[Path], name: str) -> Path | None:
+    for d in dirs:
+        p = d / name
+        if p.is_file():
+            return p
+    return None
+
+
+def bundle_missing(manifest: dict, dirs: list[Path]) -> list[tuple[str, str]]:
+    """(release, file) of every component ZIP of the manifest that is not in *dirs* yet."""
+    out = []
+    for e in manifest["components"].values():
+        if e.get("file") and not _find(dirs, e["file"]):
+            out.append((e.get("release") or manifest.get("release"), e["file"]))
+    return out
+
+
+def bundle_names(date: str, parts: int) -> list[str]:
+    if parts == 1:
+        return [f"{BUNDLE_PREFIX}-{date}.zip"]
+    return [f"{BUNDLE_PREFIX}-{date}-part{i}.zip" for i in range(1, parts + 1)]
+
+
+def stable_name(name: str) -> str:
+    """HebrewMaps-Update-2026-10-22[-part2].zip -> HebrewMaps-Update[-part2].zip (the data-latest link)."""
+    return re.sub(rf"^{BUNDLE_PREFIX}-\d{{4}}-\d{{2}}-\d{{2}}", BUNDLE_PREFIX, name)
+
+
+def bundle(manifest: dict, dirs: list[Path], out: Path, date: str, limit: int = BUNDLE_LIMIT) -> list[Path]:
+    """Every component ZIP of *manifest* in one (or, above *limit*, a few) offline update file(s).
+
+    Each file is self-contained: a manifest.json listing only the components inside it, the component
+    ZIPs (stored – they are compressed already) and a Hebrew README.txt."""
+    entries = [(cid, e) for cid, e in manifest["components"].items() if e.get("file")]
+    if not entries:
+        raise SystemExit("bundle: the manifest lists no component files")
+    missing = [f for _, f in bundle_missing(manifest, dirs)]
+    if missing:
+        raise SystemExit("bundle: missing component files: " + ", ".join(missing))
+    paths = {cid: _find(dirs, e["file"]) for cid, e in entries}
+    sizes = {cid: paths[cid].stat().st_size for cid, _ in entries}
+    # first-fit decreasing; the order inside a file follows the catalog
+    bins: list[list[str]] = []
+    for cid in sorted(sizes, key=lambda c: -sizes[c]):
+        if sizes[cid] > limit:
+            raise SystemExit(f"bundle: {paths[cid].name} alone is larger than an offline file may be")
+        for b in bins:
+            if sum(sizes[c] for c in b) + sizes[cid] <= limit:
+                b.append(cid)
+                break
+        else:
+            bins.append([cid])
+    order = {cid: i for i, cid in enumerate(catalog.IDS)}
+    bins = sorted((sorted(b, key=order.get) for b in bins), key=lambda b: order[b[0]])
+    out.mkdir(parents=True, exist_ok=True)
+    result = []
+    for i, (b, name) in enumerate(zip(bins, bundle_names(date, len(bins))), 1):
+        m = {k: v for k, v in manifest.items() if k != "components" and not k.startswith("_")}
+        m["components"] = {cid: {k: v for k, v in manifest["components"][cid].items() if k != "url"} for cid in b}
+        m["bundle"] = {"part": i, "parts": len(bins), "date": date}
+        items = "\n".join(f"  • {manifest['components'][cid].get('name_he') or cid} – "
+                          f"{manifest['components'][cid].get('date') or ''} ({sizes[cid] / 1e6:.0f} MB)" for cid in b)
+        part = f" · קובץ {i} מתוך {len(bins)} (צריך את כולם)" if len(bins) > 1 else ""
+        path = out / name
+        tmp = path.with_name(path.name + ".tmp")
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+            zf.writestr("manifest.json", json.dumps(m, ensure_ascii=False, indent=1))
+            zf.writestr("README.txt", BUNDLE_README.format(date=date, part=part, items=items))
+            for cid in b:
+                zf.write(paths[cid], manifest["components"][cid]["file"])
+        os.replace(tmp, path)
+        print(f"{name}: {', '.join(b)} – {path.stat().st_size / 1e6:.0f} MB")
+        result.append(path)
+    return result
+
+
+def cmd_bundle(args) -> int:
+    m = _load(args.manifest)
+    if not m:
+        raise SystemExit("bundle: no manifest")
+    dirs = [Path(d) for d in (args.dist or ["dist"])]
+    if args.list_missing:
+        for rel, f in bundle_missing(m, dirs):
+            print(rel, f)
+        return 0
+    if not args.date or not args.out:
+        raise SystemExit("bundle: --date and --out are required")
+    files = bundle(m, dirs, Path(args.out), args.date)
+    if args.stable:
+        st = Path(args.stable)
+        st.mkdir(parents=True, exist_ok=True)
+        for f in files:
+            target = st / stable_name(f.name)
+            target.unlink(missing_ok=True)
+            try:
+                os.link(f, target)
+            except OSError:
+                import shutil
+                shutil.copyfile(f, target)
+    _output(bundles=" ".join(f.name for f in files), parts=len(files))
     return 0
 
 
@@ -396,9 +525,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--manifest", required=True)
     p.add_argument("--releases", required=True, help="JSON from: gh release list --json tagName")
     p.add_argument("--keep", type=int, default=6)
+    p = sub.add_parser("bundle")
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--dist", action="append", help="folder with component ZIPs (repeatable)")
+    p.add_argument("--date", help="YYYY-MM-DD")
+    p.add_argument("--out", help="folder for the offline update file(s)")
+    p.add_argument("--stable", help="also link them here under the stable names of the data-latest release")
+    p.add_argument("--list-missing", action="store_true", help="only print '<release> <file>' of absent ZIPs")
     args = ap.parse_args(argv)
     return {"plan": cmd_plan, "pack": cmd_pack, "verify": cmd_verify, "manifest": cmd_manifest,
-            "prepare-db": cmd_prepare_db, "prune": cmd_prune}[args.cmd](args)
+            "prepare-db": cmd_prepare_db, "prune": cmd_prune, "bundle": cmd_bundle}[args.cmd](args)
 
 
 if __name__ == "__main__":

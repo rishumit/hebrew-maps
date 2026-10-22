@@ -16,6 +16,14 @@ and the command line (also for a weekly Windows scheduled task, see
     python -m hmaps update --check               # what is new?
     python -m hmaps update                       # install every available update
     python -m hmaps update --component transit   # only one component (repeatable)
+    python -m hmaps update --bundle E:\\HebrewMaps-Update-2026-10-22.zip   # offline update file
+
+Offline update file (for computers without internet): every weekly release also
+carries ``HebrewMaps-Update-<date>.zip`` – manifest.json plus the component ZIPs
+(see ``tools/release.py bundle``). It is copied with a USB stick and installed
+from the "עדכונים" page ("עדכון מקובץ", ``POST /api/updates/offline`` with the
+file as the request body) or with ``--bundle``; every component inside is
+verified against the SHA-256 of that manifest exactly like an online download.
 
 Robustness: the manifest is read from a plain release download URL (no GitHub
 API rate limit), with the REST API as a fallback; downloads resume with HTTP
@@ -397,6 +405,7 @@ class Job:
     code: str | None = None
     started: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"))
     finished: str | None = None
+    source: str = "online"  # online | file (an offline update file)
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -651,7 +660,8 @@ class _Lock:
             pass
 
 
-def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | None = None) -> dict:
+def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | None = None,
+                source: str | None = None) -> dict:
     """Extract + swap a component ZIP into *data* and record it in components.json."""
     work = data / "updates"
     staging = extract(component_id, zip_path, work / "staging" / component_id)
@@ -662,7 +672,7 @@ def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | Non
     entry = entry or {}
     rec = {"version": entry.get("version"), "date": entry.get("date"), "release": entry.get("release"),
            "file": entry.get("file") or zip_path.name, "sha256": entry.get("sha256"), "size": entry.get("size"),
-           "source": "online" if entry else "file",
+           "source": source or ("online" if entry else "file"),
            "installed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if not rec["version"]:
         rec.update({k: v for k, v in _stamp(time.time()).items() if k != "source"})
@@ -708,14 +718,7 @@ def install(component_id: str, data: Path | None = None, job: Job | None = None,
                 on_progress(got, total)
 
         download(_asset_url(manifest, entry), dest, job.total or None, progress)
-        job.state = "verifying"
-        if job.total and dest.stat().st_size != job.total:
-            dest.unlink(missing_ok=True)
-            raise UpdateError("size_mismatch", "גודל הקובץ שהורד שגוי (ייתכן שסינון האינטרנט חסם אותו). נסו שוב.")
-        if entry.get("sha256") and sha256_file(dest) != entry["sha256"].lower():
-            dest.unlink(missing_ok=True)
-            raise UpdateError("checksum", "בדיקת השלמות של הקובץ שהורד נכשלה (ייתכן שסינון האינטרנט שינה אותו). "
-                                          "הקובץ נמחק ולא הותקן.")
+        _verify(dest, entry, job)
         job.state = "installing"
         try:
             rec = install_zip(component_id, dest, data, {**entry, "release": entry.get("release") or manifest.get("release")})
@@ -724,11 +727,126 @@ def install(component_id: str, data: Path | None = None, job: Job | None = None,
     return rec
 
 
+def _verify(dest: Path, entry: dict, job: Job) -> None:
+    """Size + SHA-256 of a downloaded / copied component ZIP against its manifest entry."""
+    job.state = "verifying"
+    offline = job.source == "file"
+    if job.total and dest.stat().st_size != job.total:
+        dest.unlink(missing_ok=True)
+        raise UpdateError("size_mismatch", "קובץ העדכון פגום או חלקי (הגודל שגוי). העתיקו אותו שוב." if offline else
+                          "גודל הקובץ שהורד שגוי (ייתכן שסינון האינטרנט חסם אותו). נסו שוב.")
+    if entry.get("sha256") and sha256_file(dest) != entry["sha256"].lower():
+        dest.unlink(missing_ok=True)
+        raise UpdateError("checksum", "בדיקת השלמות של קובץ העדכון נכשלה – הקובץ פגום. הורידו והעתיקו אותו שוב."
+                          if offline else "בדיקת השלמות של הקובץ שהורד נכשלה (ייתכן שסינון האינטרנט שינה אותו). "
+                                          "הקובץ נמחק ולא הותקן.")
+
+
+# =========================================================================== offline update file
+
+#: file name of the offline update file on the release pages (``-partN`` when split, see tools/release.py)
+BUNDLE_PREFIX = "HebrewMaps-Update"
+
+
+def uploads_dir(data: Path) -> Path:
+    return data / "updates" / "offline"
+
+
+def _bad_bundle(msg: str = "") -> UpdateError:
+    return UpdateError("bad_bundle", msg or "הקובץ שנבחר אינו קובץ עדכון של מפות בעברית. "
+                                           f"בחרו את הקובץ {BUNDLE_PREFIX}-….zip שהורד מאתר ההורדה.")
+
+
+def read_bundle(path: Path) -> dict:
+    """The manifest of an offline update file, limited to the components that are inside it."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = set(zf.namelist())
+            if "manifest.json" not in names:
+                raise _bad_bundle()
+            m = _validate_manifest(json.loads(zf.read("manifest.json").decode("utf-8")), str(path))
+    except UpdateError:
+        raise
+    except FileNotFoundError:
+        raise UpdateError("not_found", "קובץ העדכון לא נמצא.") from None
+    except (zipfile.BadZipFile, ValueError, KeyError, OSError) as e:
+        raise _bad_bundle("קובץ העדכון פגום או שהעתקתו לא הושלמה. העתיקו אותו שוב.") from e
+    comps = {}
+    for cid, e in m["components"].items():
+        f = (e or {}).get("file")
+        if cid in catalog.BY_ID and f and "/" not in f and "\\" not in f and f in names:
+            comps[cid] = e
+    if not comps:
+        raise _bad_bundle("בקובץ העדכון אין חבילות נתונים.")
+    m["components"] = comps
+    m["_source"] = str(path)
+    return m
+
+
+def install_from_bundle(component_id: str, bundle: Path, data: Path | None = None, job: Job | None = None,
+                        force: bool = False, manifest: dict | None = None, on_progress=None) -> dict:
+    """Copy one component ZIP out of an offline update file, verify it (size + SHA-256) and install it."""
+    data = data or data_dir()
+    job = job or Job(component_id, source="file")
+    job.source = "file"
+    catalog.get(component_id)
+    manifest = manifest or read_bundle(bundle)
+    entry = manifest["components"].get(component_id)
+    if not entry:
+        raise UpdateError("unavailable", "הרכיב הזה לא נמצא בקובץ העדכון.")
+    if not compatible(entry):
+        raise UpdateError("app_too_old", f"העדכון דורש גרסה {entry.get('min_app_version')} של התוכנה או חדשה יותר. "
+                                         "התקינו קודם את הגרסה החדשה של מפות בעברית (גם קובץ ההתקנה אפשר להעביר "
+                                         "בדיסק-און-קי).")
+    if not force and not needs_update(installed(data).get(component_id), entry):
+        job.state = "done"
+        return load_state(data)["components"].get(component_id) or {}
+    job.version = entry.get("version")
+    job.total = int(entry.get("size") or 0)
+    with _Lock(data / "updates" / ".lock"):
+        free = shutil.disk_usage(data if data.exists() else data.parent).free
+        if job.total and free < job.total * 2:
+            raise UpdateError("disk_full", "אין מספיק מקום פנוי בדיסק להתקנת העדכון.")
+        dest = data / "updates" / "downloads" / entry["file"]
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        part = dest.with_name(dest.name + ".part")
+        job.state = "downloading"  # copying out of the file; the UI words it by job.source
+        job.downloaded = 0
+        try:
+            with zipfile.ZipFile(bundle) as zf, zf.open(entry["file"]) as src, open(part, "wb") as out:
+                while chunk := src.read(CHUNK):
+                    out.write(chunk)
+                    job.downloaded += len(chunk)
+                    if on_progress:
+                        on_progress(job.downloaded, job.total)
+            os.replace(part, dest)
+        except (zipfile.BadZipFile, OSError, EOFError) as e:
+            part.unlink(missing_ok=True)
+            if isinstance(e, OSError) and getattr(e, "errno", None) == 28:
+                raise UpdateError("disk_full", "אין מספיק מקום פנוי בדיסק להתקנת העדכון.") from e
+            raise UpdateError("bad_bundle", "קובץ העדכון פגום או שהעתקתו לא הושלמה. העתיקו אותו שוב.") from e
+        _verify(dest, entry, job)
+        job.state = "installing"
+        try:
+            rec = install_zip(component_id, dest, data,
+                              {**entry, "release": entry.get("release") or manifest.get("release")}, source="offline")
+        finally:
+            dest.unlink(missing_ok=True)
+    return rec
+
+
+def bundle_plan(manifest: dict, data: Path, force: bool = False) -> list[str]:
+    """Components of an offline update file that are newer than the installed data (all with *force*)."""
+    inst = installed(data)
+    return [cid for cid in catalog.IDS if cid in manifest["components"]
+            and (force or needs_update(inst.get(cid), manifest["components"][cid]))]
+
+
 # =========================================================================== background jobs
 
 _jobs: dict[str, Job] = {}
 _jobs_lock = threading.Lock()
-_queue: list[tuple[Job, bool]] = []
+_queue: list[tuple[Job, bool, Path | None]] = []
 _worker: threading.Thread | None = None
 
 
@@ -744,10 +862,14 @@ def _run_queue(data: Path) -> None:
         with _jobs_lock:
             if not _queue:
                 _worker = None
+                _cleanup_uploads(data)
                 return
-            job, force = _queue.pop(0)
+            job, force, bundle = _queue.pop(0)
         try:
-            install(job.component, data, job, force=force)
+            if bundle is not None:
+                install_from_bundle(job.component, bundle, data, job, force=force)
+            else:
+                install(job.component, data, job, force=force)
             job.state = "done"
         except UpdateError as e:
             job.state, job.code, job.error = "error", e.code, e.message
@@ -757,8 +879,20 @@ def _run_queue(data: Path) -> None:
         job.finished = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def start(component_ids: list[str], data: Path | None = None, force: bool = False) -> list[dict]:
-    """Queue background installs (one at a time). Already active components are not queued twice."""
+def _cleanup_uploads(data: Path) -> None:
+    """Offline update files uploaded through the browser are temporary copies: drop them once installed."""
+    for p in uploads_dir(data).glob("upload-*"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def start(component_ids: list[str], data: Path | None = None, force: bool = False,
+          bundle: Path | None = None) -> list[dict]:
+    """Queue background installs (one at a time). Already active components are not queued twice.
+
+    With *bundle* the components come from that offline update file instead of the internet."""
     global _worker
     data = data or data_dir()
     out = []
@@ -768,11 +902,15 @@ def start(component_ids: list[str], data: Path | None = None, force: bool = Fals
             if cur and cur.state in ACTIVE:
                 out.append(cur.as_dict())
                 continue
-            job = Job(cid)
+            job = Job(cid, source="file" if bundle is not None else "online")
             _jobs[cid] = job
-            _queue.append((job, force))
+            _queue.append((job, force, bundle))
             out.append(job.as_dict())
-        if _queue and _worker is None:
+        if _worker is None:
+            if not _queue:
+                if bundle is not None:
+                    _cleanup_uploads(data)
+                return out
             _worker = threading.Thread(target=_run_queue, args=(data,), name="hmaps-updates", daemon=True)
             _worker.start()
     return out
@@ -804,6 +942,49 @@ def _routes():
     async def updates_status(req: Request):
         return JSONResponse(status(), headers={"Cache-Control": "no-store"})
 
+    async def updates_offline(req: Request):
+        """The offline update file as the request body (chosen in the "עדכונים" page): store, read, queue."""
+        from starlette.requests import ClientDisconnect
+
+        if not _allowed(req):
+            return err(403, "forbidden", "התקנת עדכונים אפשרית רק מהמחשב שעליו רצה התוכנה.")
+        if req.headers.get("x-hmaps-update") != "1":
+            return err(400, "missing_header", "בקשה לא תקינה.")
+        if status()["busy"]:
+            return err(409, "busy", "עדכון אחר עדיין רץ. המתינו שיסתיים ונסו שוב.")
+        data = data_dir()
+        up = uploads_dir(data)
+        up.mkdir(parents=True, exist_ok=True)
+        length = int(req.headers.get("content-length") or 0)
+        if length and shutil.disk_usage(up).free < length * 3:
+            return err(507, "disk_full", "אין מספיק מקום פנוי בדיסק לקובץ העדכון ולהתקנתו.")
+        path = up / f"upload-{int(time.time() * 1000)}.zip"
+        part = path.with_name(path.name + ".part")
+        try:
+            with open(part, "wb") as f:
+                async for chunk in req.stream():
+                    if chunk:
+                        f.write(chunk)
+            os.replace(part, path)
+        except (ClientDisconnect, OSError) as e:
+            part.unlink(missing_ok=True)
+            if isinstance(e, OSError) and getattr(e, "errno", None) == 28:
+                return err(507, "disk_full", "אין מספיק מקום פנוי בדיסק לקובץ העדכון ולהתקנתו.")
+            return err(400, "upload_failed", "העתקת הקובץ נקטעה. נסו שוב.")
+        try:
+            m = await run_in_threadpool(read_bundle, path)
+        except UpdateError as e:
+            path.unlink(missing_ok=True)
+            return err(400, e.code, e.message)
+        force = req.query_params.get("force") in ("1", "true")
+        ids = await run_in_threadpool(bundle_plan, m, data, force)
+        rel = m.get("release")
+        if not ids:
+            path.unlink(missing_ok=True)
+            return JSONResponse({"jobs": [], "release": rel,
+                                 "message": "הנתונים במחשב כבר עדכניים כמו בקובץ הזה (או חדשים ממנו)."})
+        return JSONResponse({"jobs": start(ids, data, force=force, bundle=path), "release": rel}, status_code=202)
+
     async def updates_install(req: Request):
         if not _allowed(req):
             return err(403, "forbidden", "התקנת עדכונים אפשרית רק מהמחשב שעליו רצה התוכנה.")
@@ -827,6 +1008,7 @@ def _routes():
     return [
         Route("/api/updates", updates_check),
         Route("/api/updates/status", updates_status),
+        Route("/api/updates/offline", updates_offline, methods=["POST"]),
         Route("/api/updates/{component}", updates_install, methods=["POST"]),
     ]
 
@@ -856,6 +1038,8 @@ def cli(argv: list[str] | None = None) -> int:
     ap.add_argument("--data", help="data directory (default: HMAPS_DATA or ./data)")
     ap.add_argument("--manifest", help="manifest URL or local path (default: the data-latest release)")
     ap.add_argument("--zip", help="install a local component ZIP (requires exactly one --component)")
+    ap.add_argument("--bundle", action="append", metavar="FILE",
+                    help=f"install from an offline update file ({BUNDLE_PREFIX}-<date>.zip, repeatable for split files)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     if args.manifest:
@@ -867,6 +1051,8 @@ def cli(argv: list[str] | None = None) -> int:
         rec = install_zip(args.component[0], Path(args.zip), data)
         print(f"הותקן: {args.component[0]} ({rec['version']})")
         return 0
+    if args.bundle:
+        return _cli_bundles([Path(b) for b in args.bundle], data, args.component, args.force)
 
     info = check(force=True, data=data)
     if info["error"]:
@@ -908,4 +1094,28 @@ def cli(argv: list[str] | None = None) -> int:
         except UpdateError as e:
             failed += 1
             print(f"  ✗ {catalog.get(cid).name_he}: {e.message}")
+    return 1 if failed else 0
+
+
+def _cli_bundles(bundles: list[Path], data: Path, only: list[str] | None, force: bool) -> int:
+    failed = 0
+    for path in bundles:
+        try:
+            m = read_bundle(path)
+        except UpdateError as e:
+            print(f"שגיאה: {path.name}: {e.message}")
+            failed += 1
+            continue
+        print(f"קובץ עדכון {path.name} · גרסת נתונים {m.get('release') or '—'}")
+        ids = [c for c in bundle_plan(m, data, force) if not only or c in only]
+        if not ids:
+            print("  הנתונים במחשב כבר עדכניים כמו בקובץ הזה.")
+        for cid in ids:
+            try:
+                print(f"מתקין {catalog.get(cid).name_he} …", flush=True)
+                rec = install_from_bundle(cid, path, data, force=force, manifest=m)
+                print(f"  ✓ {catalog.get(cid).name_he}: {rec.get('date') or rec.get('version') or 'מעודכן'}")
+            except UpdateError as e:
+                failed += 1
+                print(f"  ✗ {catalog.get(cid).name_he}: {e.message}")
     return 1 if failed else 0

@@ -94,6 +94,8 @@
             הורדה ל-Windows
           </a>
         </div>
+        <p class="dl-alt"><svg aria-hidden="true"><use href="assets/img/icons.svg#offline"></use></svg>
+          מחשב בלי אינטרנט? <a href="#offline">קובץ עדכון לנתונים להעברה בדיסק-און-קי</a></p>
       </div>
     </section>
 
@@ -178,6 +180,36 @@
           <p><b>הנתונים</b> – חבילות חדשות נבנות כל שבוע: מפה ונקודות עניין, מפת בסיס, תחבורה ציבורית, תמונות וזמני תפילות (נתוני הגובה – פעם בחודש). מעדכנים מתוך האפליקציה: תפריט ← "עדכונים" ← "עדכן הכול", או מפעילים שם בדיקה אוטומטית שבועית. המפה ממשיכה לעבוד בזמן ההורדה.</p>
           <p><b>האפליקציה עצמה</b> – מורידים את קובץ ההתקנה העדכני מהדף הזה ומריצים אותו מעל הגרסה הקיימת. ההגדרות והנתונים שכבר הורדו נשמרים. מה השתנה? <a href="changelog.html">מה חדש</a>.</p>
 
+          <h2 id="offline">עדכון במחשב בלי אינטרנט</h2>
+          <p>במחשב שאינו מחובר לאינטרנט מעדכנים את הנתונים מקובץ אחד שמעבירים בדיסק-און-קי. הקובץ כולל את כל חבילות הנתונים – מפה ונקודות עניין, מפת בסיס, טופוגרפיה, תחבורה ציבורית, תמונות וזמני תפילות – ומתעדכן כל שבוע יחד עם העדכון המקוון.</p>
+          <div class="dl dl-offline" data-off>
+            <a class="btn btn-primary" href="https://github.com/rishumit/hebrew-maps/releases/download/data-latest/HebrewMaps-Update.zip" data-off-link>
+              <svg aria-hidden="true"><use href="assets/img/icons.svg#download"></use></svg>
+              הורדת קובץ העדכון
+            </a>
+            <p class="dl-meta" data-off-meta>
+              <span data-off-date>הנתונים העדכניים</span>
+              <span data-off-size>קובץ <bdi>ZIP</bdi> אחד</span>
+              <span><a href="https://github.com/rishumit/hebrew-maps/releases?q=data-&amp;expanded=true">גרסאות קודמות</a></span>
+            </p>
+            <ul class="dl-parts" data-off-parts hidden></ul>
+          </div>
+          <ol class="install">
+            <li>
+              <h3>מורידים במחשב עם אינטרנט</h3>
+              <p>לוחצים על "הורדת קובץ העדכון" ושומרים את <code>HebrewMaps-Update.zip</code> על דיסק-און-קי. <b>לא פותחים את הקובץ</b> – מעבירים אותו כמו שהוא. התוכנה עוד לא מותקנת במחשב היעד? מעתיקים גם את <code>HebrewMaps-Setup.exe</code> (<a href="#install">למעלה</a>).</p>
+            </li>
+            <li>
+              <h3>פותחים את התוכנה במחשב היעד</h3>
+              <p>מחברים את הדיסק-און-קי, פותחים את "מפות בעברית", ובתפריט (☰) בוחרים <b>"עדכונים"</b> ← <b>"עדכון מקובץ…"</b> ובוחרים את הקובץ.</p>
+            </li>
+            <li>
+              <h3>זהו</h3>
+              <p>כל חבילה נבדקת מול טביעת <span class="nowrap">SHA-256</span>, ומותקן רק מה שחדש יותר ממה שכבר במחשב. המפה ממשיכה לעבוד בזמן ההתקנה.</p>
+            </li>
+          </ol>
+          <p>כשהקובץ גדול מ-2GB הוא מחולק לכמה קבצים (<code>-part1</code>, <code>-part2</code>…). מורידים את כולם ומתקינים אותם בזה אחר זה. מחשב עם רשת מסוננת? אותן <a href="#netfree">כתובות</a> צריכות להיות פתוחות גם להורדת הקובץ.</p>
+
           <h2 id="uninstall">הסרה</h2>
           <p>הגדרות Windows ← אפליקציות ← אפליקציות מותקנות ← "מפות בעברית" ← הסרת התקנה (או "הוספה או הסרה של תוכניות" בלוח הבקרה). הנתונים שהורדתם אחרי ההתקנה נשארים בתיקייה <code>%LOCALAPPDATA%\Programs\HebrewMaps\data</code>, כדי שלא תצטרכו להוריד הכול מחדש בהתקנה הבאה. לא צריכים אותם? מוחקים את התיקייה.</p>
         </div>
@@ -191,6 +223,7 @@
               <li><a href="#requirements">דרישות מערכת</a></li>
               <li><a href="#netfree">רשת מסוננת</a></li>
               <li><a href="#updates">עדכונים</a></li>
+              <li><a href="#offline">עדכון בלי אינטרנט</a></li>
               <li><a href="#uninstall">הסרה</a></li>
             </ul>
           </div>

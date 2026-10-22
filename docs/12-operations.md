@@ -72,6 +72,13 @@ schtasks /Create /F /SC WEEKLY /D FRI /ST 06:10 /TN "HebrewMaps online update" /
 
 משתני סביבה: `HMAPS_UPDATES_REPO` (ברירת מחדל `rishumit/hebrew-maps`), ‏`HMAPS_UPDATES_MANIFEST` (כתובת או נתיב מקומי, למשל למראה פנימית), ‏`HMAPS_UPDATES=local|any|off` (מי רשאי להתקין דרך ה-API; ברירת המחדל: רק המחשב המקומי).
 
+### עדכון במחשב בלי אינטרנט (קובץ עדכון)
+כל ריצה שבועית מפרסמת גם **קובץ עדכון** אחד עם כל הרכיבים: ‏`HebrewMaps-Update-YYYY-MM-DD.zip` בגרסה המתוארכת, ואותו קובץ בשם קבוע `HebrewMaps-Update.zip` ב-`data-latest` (הקישור באתר: `download.html#offline`). מעל כ-2GB (מגבלת GitHub לקובץ) הוא מתחלק ל-`-part1`, ‏`-part2`… וכל חלק עומד בפני עצמו.
+
+- **מבנה:** ZIP לא דחוס עם `manifest.json` (רק הרכיבים שבקובץ, ‏`"bundle": {"part", "parts", "date"}`), ה-ZIP של כל רכיב, ו-`README.txt` בעברית. נבנה ב-`tools/release.py bundle`; רכיבים שלא נבנו מחדש השבוע מורדים מהגרסה הקודמת שלהם.
+- **התקנה:** עדכונים ← "עדכון מקובץ…" (הקובץ נשלח לשרת המקומי ב-`POST /api/updates/offline`, נשמר זמנית ב-`data/updates/offline/` ונמחק בסוף), או בשורת הפקודה: `python -m hmaps update --bundle E:\HebrewMaps-Update-2026-10-22.zip`.
+- כל רכיב מועתק מתוך הקובץ ונבדק מול הגודל וה-SHA-256 שב-manifest, בדיוק כמו בהורדה מקוונת, ומותקן רק אם הוא חדש מהמותקן. ב-`components.json` הוא נרשם עם `"source": "offline"`.
+
 ### פרסום הנתונים: ‏`.github/workflows/weekly-data.yml`
 רץ כל יום חמישי ב-20:00 UTC (22:00 או 23:00 בישראל), וגם ידנית (Actions ← Weekly data release ← Run workflow), עם תיבת סימון לכל רכיב.
 
@@ -93,7 +100,7 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 | transit | ‏`hmaps.etl gtfs --force` | – |
 | zmanim | מתחיל מהתמונה הקודמת (שמות בתי כנסת), ‏`hmaps.etl zmanim --fetch` | – |
 | media | ‏`tools/media.py` על ה-maps.db של הריצה (או של הגרסה הקודמת אם לא נבנה) | התמונות שכבר הורדו |
-| publish | אימות, ‏`manifest.json`, יצירת הגרסה המתוארכת, עדכון `data-latest`, ומחיקת גרסאות ישנות | – |
+| publish | אימות, ‏`manifest.json`, יצירת הגרסה המתוארכת, עדכון `data-latest`, קובץ העדכון ללא אינטרנט, ומחיקת גרסאות ישנות | – |
 
 כל משימת רכיב מסיימת ב-`tools/release.py pack` (ZIP במבנה הקבוע) וב-`tools/release.py verify` (מבנה, ‏`PRAGMA quick_check`, מספר שורות – למשל לפחות 10,000 נקודות עניין). כשרכיב נכשל, ה-publish ממשיך עם השאר, והרכיב שנכשל נשאר בגרסה הקודמת שלו.
 
@@ -101,8 +108,8 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 
 | גרסה (tag) | תוכן |
 |------------|------|
-| `data-YYYY-MM-DD` | ‏`hmaps-<component>-<YYYYMMDD>.zip` לכל רכיב שנבנה בריצה + ‏`manifest.json`. לא מסומנת "Latest", כדי שגרסת התוכנה (`v*`, ‏installer.yml) תישאר האחרונה |
-| `data-latest` | ‏pre-release שמכיל רק את `manifest.json` העדכני (מצביע) |
+| `data-YYYY-MM-DD` | ‏`hmaps-<component>-<YYYYMMDD>.zip` לכל רכיב שנבנה בריצה + ‏`manifest.json` + קובץ העדכון ללא אינטרנט `HebrewMaps-Update-YYYY-MM-DD.zip`. לא מסומנת "Latest", כדי שגרסת התוכנה (`v*`, ‏installer.yml) תישאר האחרונה |
+| `data-latest` | ‏pre-release שמכיל את `manifest.json` העדכני (מצביע) ואת `HebrewMaps-Update.zip` (קובץ העדכון ללא אינטרנט בשם קבוע) |
 
 ‏`manifest.json` מפרט תמיד את כל הרכיבים. רכיב שלא נבנה מחדש מקבל `"status": "unchanged"` ומצביע על הקובץ מגרסה קודמת, ורכיב שעוד לא פורסם מקבל `"unavailable"`:
 ```json

@@ -124,7 +124,8 @@
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
 
   function apply(rel) {
-    if (!rel || !rel.tag) return;
+    // only an app release (vX.Y.Z) – never a data release that GitHub happens to call "latest"
+    if (!rel || !/^v\d/i.test(rel.tag)) return;
     const version = rel.tag.replace(/^v/i, '');
     metas.forEach((m) => {
       const v = m.querySelector('[data-dl-version]');
@@ -171,5 +172,55 @@
       } catch { /* storage blocked */ }
     })
     .catch(() => { /* API blocked / offline / rate limited – the static link and text stay */ })
+    .finally(() => clearTimeout(timer));
+})();
+
+// ------------------------------------------------------------ offline update file (download.html#offline)
+// The weekly data workflow keeps HebrewMaps-Update.zip (or -part1/-part2… above 2 GB) on the
+// data-latest release; the static link above works without JS, this only adds date / size and
+// lists every file when the update is split.
+(() => {
+  const box = document.querySelector('[data-off]');
+  if (!box) return;
+  const REPO = 'rishumit/hebrew-maps';
+  const NAME = /^HebrewMaps-Update(?:-part(\d+))?\.zip$/;
+  const fmtSize = (b) => (b >= 1e9
+    ? `${(b / 1073741824).toLocaleString('he-IL', { maximumFractionDigits: 1 })} GB`
+    : `${(b / 1048576).toLocaleString('he-IL', { maximumFractionDigits: 0 })} MB`);
+  const fmtDate = (iso) => new Date(iso).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+  const ctrl = 'AbortController' in window ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl && ctrl.abort(), 6000);
+  fetch(`https://api.github.com/repos/${REPO}/releases/tags/data-latest`, {
+    headers: { Accept: 'application/vnd.github+json' },
+    signal: ctrl ? ctrl.signal : undefined,
+    referrerPolicy: 'no-referrer',
+    credentials: 'omit',
+  })
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((rel) => {
+      const files = (Array.isArray(rel.assets) ? rel.assets : [])
+        .filter((a) => NAME.test(a.name) && /^https:\/\/github\.com\//.test(a.browser_download_url))
+        .map((a) => ({ ...a, part: Number((a.name.match(NAME) || [])[1] || 0) }))
+        .sort((a, b) => a.part - b.part);
+      if (!files.length) return;
+      const total = files.reduce((n, a) => n + (a.size || 0), 0);
+      const d = box.querySelector('[data-off-date]');
+      const s = box.querySelector('[data-off-size]');
+      const when = files[0].updated_at || rel.published_at;
+      if (d && when) d.textContent = `נתונים מ-${fmtDate(when)}`;
+      if (s && total) s.innerHTML = `<bdi>${fmtSize(total)}</bdi>${files.length > 1 ? ` ב-${files.length} קבצים` : ''}`;
+      const link = box.querySelector('[data-off-link]');
+      if (files.length === 1) {
+        link.href = files[0].browser_download_url;
+        return;
+      }
+      link.href = files[0].browser_download_url;
+      const ul = box.querySelector('[data-off-parts]');
+      ul.innerHTML = files.map((a, i) => `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
+        + `קובץ ${i + 1} מתוך ${files.length} · <bdi>${fmtSize(a.size)}</bdi></a></li>`).join('');
+      ul.hidden = false;
+      link.hidden = true;
+    })
+    .catch(() => { /* API blocked / offline / rate limited – the static link stays */ })
     .finally(() => clearTimeout(timer));
 })();

@@ -209,6 +209,13 @@ p.more, .section-head p.more { margin-top: var(--s-6); }
   .dl-meta > span + span::before { display: none; }
 }
 
+/* offline update file (download page) */
+.dl-alt { margin-top: var(--s-3); display: flex; align-items: center; gap: .45rem; font-size: var(--fs-sm); color: var(--muted); }
+.dl-alt svg { width: 18px; height: 18px; flex: none; }
+.dl-offline { margin-bottom: var(--s-6); }
+.prose .dl-parts { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; }
+.dl-parts[hidden] { display: none !important; }
+
 /* ------------------------------------------------------------------ header */
 .site-header {
   position: sticky; top: 0; z-index: 50;

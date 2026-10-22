@@ -412,6 +412,76 @@ class UpdaterTest(unittest.TestCase):
         self.assertEqual(job["state"], "done", job)
         self.assertEqual(job["percent"], 100.0)
 
+    # ------------------------------------------------------------------ offline update file
+    def make_bundle(self, limit: int | None = None) -> list[Path]:
+        m = release.build_manifest(self.rel, TAG, VERSION, DATE, None, repo="o/r")
+        out = Path(tempfile.mkdtemp(prefix="bundle-", dir=self.root))
+        kw = {"limit": limit} if limit else {}
+        return release.bundle(m, [self.rel], out, DATE, **kw)
+
+    def test_offline_bundle_is_built_and_installed(self):
+        m = release.build_manifest(self.rel, TAG, VERSION, DATE, None, repo="o/r")
+        self.assertEqual(release.bundle_missing(m, [self.root / "nowhere"])[0][0], TAG)
+        self.assertEqual(release.bundle_missing(m, [self.rel]), [])
+        (bundle,) = self.make_bundle()
+        self.assertEqual(bundle.name, f"HebrewMaps-Update-{DATE}.zip")
+        with zipfile.ZipFile(bundle) as zf:
+            names = set(zf.namelist())
+            bm = json.loads(zf.read("manifest.json"))
+            self.assertIn("דיסק-און-קי", zf.read("README.txt").decode("utf-8"))
+        self.assertTrue({"manifest.json", "README.txt", f"hmaps-basemap-{VERSION}.zip"} <= names)
+        self.assertEqual(bm["bundle"], {"part": 1, "parts": 1, "date": DATE})
+        self.assertEqual(set(updates.read_bundle(bundle)["components"]), set(bm["components"]))
+
+        # no internet at all: the manifest URL is unreachable
+        os.environ["HMAPS_UPDATES_MANIFEST"] = "http://127.0.0.1:9/manifest.json"
+        self.assertEqual(updates.cli(["--data", str(self.data), "--bundle", str(bundle), "-c", "basemap", "-c", "zmanim"]), 0)
+        st = updates.load_state(self.data)["components"]
+        self.assertEqual((st["basemap"]["source"], st["basemap"]["release"], st["basemap"]["version"]),
+                         ("offline", TAG, VERSION))
+        self.assertTrue(list((self.data / "tiles").glob("israel-*.mbtiles")))
+        self.assertNotIn("terrain", st)
+        self.assertNotIn("basemap", updates.bundle_plan(updates.read_bundle(bundle), self.data))
+        self.assertIn("terrain", updates.bundle_plan(updates.read_bundle(bundle), self.data))
+        self.assertFalse(any((self.data / "updates" / "downloads").iterdir()))
+
+    def test_offline_bundle_split_and_rejects(self):
+        sizes = sorted(p.stat().st_size for p in self.rel.glob("hmaps-*.zip"))
+        parts = self.make_bundle(limit=sizes[-1] + 10)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(all(p.name.startswith(f"HebrewMaps-Update-{DATE}-part") for p in parts))
+        self.assertEqual(release.stable_name(parts[1].name), "HebrewMaps-Update-part2.zip")
+        seen = []
+        for p in parts:
+            seen += list(updates.read_bundle(p)["components"])
+        self.assertEqual(sorted(seen), sorted(c for c in catalog.IDS if c != "transit"))
+        with self.assertRaises(SystemExit):
+            self.make_bundle(limit=10)
+
+        junk = self.root / "junk.zip"
+        with zipfile.ZipFile(junk, "w") as zf:
+            zf.writestr("hello.txt", "x")
+        with self.assertRaises(updates.UpdateError) as cm:
+            updates.read_bundle(junk)
+        self.assertEqual(cm.exception.code, "bad_bundle")
+        half = self.root / "half.zip"
+        half.write_bytes(parts[0].read_bytes()[:200])
+        with self.assertRaises(updates.UpdateError):
+            updates.read_bundle(half)
+
+        # a tampered component inside a well-formed file is rejected by its SHA-256
+        (bundle,) = self.make_bundle()
+        bad = self.root / "tampered.zip"
+        with zipfile.ZipFile(bundle) as src, zipfile.ZipFile(bad, "w") as dst:
+            m = json.loads(src.read("manifest.json"))
+            m["components"]["zmanim"]["sha256"] = "0" * 64
+            dst.writestr("manifest.json", json.dumps(m))
+            dst.writestr(m["components"]["zmanim"]["file"], src.read(m["components"]["zmanim"]["file"]))
+        with self.assertRaises(updates.UpdateError) as cm:
+            updates.install_from_bundle("zmanim", bad, self.data)
+        self.assertEqual(cm.exception.code, "checksum")
+        self.assertNotIn("zmanim", updates.load_state(self.data)["components"])
+
 
 class UpdatesApiTest(unittest.TestCase):
     @classmethod
@@ -443,6 +513,42 @@ class UpdatesApiTest(unittest.TestCase):
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
+
+    def test_offline_upload(self):
+        bdir = self.root / "bundle"
+        m = release.build_manifest(self.root / "release", TAG, VERSION, DATE, None, repo="o/r")
+        (bundle,) = release.bundle(m, [self.root / "release"], bdir, DATE)
+        def up(body: bytes, header: bool = True):
+            req = urllib.request.Request(self.api.url("/api/updates/offline"), data=body, method="POST",
+                                         headers={"X-HMaps-Update": "1"} if header else {})
+            try:
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read())
+        for _ in range(100):  # let a job of another test finish first
+            if not self.api.get("/api/updates/status")[1]["busy"]:
+                break
+            time.sleep(0.1)
+        s, body = up(b"not a zip at all")
+        self.assertEqual((s, body["error"]["code"]), (400, "bad_bundle"))
+        s, body = up(bundle.read_bytes(), header=False)
+        self.assertEqual(s, 400)
+        s, body = up(bundle.read_bytes() + b"", header=True)
+        self.assertIn(s, (200, 202), body)
+        self.assertEqual(body["release"], TAG)
+        for _ in range(100):
+            s, st, _ = self.api.get("/api/updates/status")
+            if not st["busy"]:
+                break
+            time.sleep(0.1)
+        if body["jobs"]:
+            self.assertTrue(all(j["source"] == "file" for j in body["jobs"]))
+            for j in body["jobs"]:
+                self.assertEqual(st["jobs"][j["component"]]["state"], "done", st)
+        self.assertFalse(list((self.data / "updates" / "offline").glob("upload-*")), "the uploaded copy is removed")
+        s, body = up(bundle.read_bytes())
+        self.assertEqual((s, body["jobs"]), (200, []))
 
     def test_check_install_status(self):
         s, body, h = self.api.get("/api/updates")

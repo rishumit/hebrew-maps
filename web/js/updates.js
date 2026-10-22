@@ -2,6 +2,8 @@
 // A panel view listing every data component (installed vs. available, size), with "עדכן" per
 // item and "עדכן הכול", live progress while the server downloads + installs in the background,
 // and an optional automatic weekly check that shows a small, dismissible notice.
+// "עדכון מקובץ" installs an offline update file (HebrewMaps-Update-<date>.zip, copied with a USB
+// stick from the download site) on a computer without internet: POST /api/updates/offline.
 
 import { svg } from './icons.js';
 import { $, announce, bus, esc, store, toast } from './util.js';
@@ -10,10 +12,12 @@ import { head, loadingView, wireHead } from './views.js';
 const KEY = 'updates';
 const WEEK = 7 * 24 * 3600 * 1000;
 const ACTIVE = ['queued', 'downloading', 'verifying', 'installing'];
+const SITE_OFFLINE = 'https://rishumit.github.io/hebrew-maps/download.html#offline';
 
 let info = null; // last /api/updates answer
 let pollTimer = null;
 let appRef = null;
+let uploading = false;
 const watched = new Set(); // components installed since the panel started polling
 
 // ------------------------------------------------------------------ data
@@ -65,7 +69,10 @@ function jobText(job) {
   if (!job) return '';
   switch (job.state) {
     case 'queued': return 'ממתין לתורו…';
-    case 'downloading': return job.percent != null ? `מוריד… ${Math.floor(job.percent)}%` : 'מוריד…';
+    case 'downloading': {
+      const verb = job.source === 'file' ? 'מעתיק מקובץ העדכון…' : 'מוריד…';
+      return job.percent != null ? `${verb} ${Math.floor(job.percent)}%` : verb;
+    }
     case 'verifying': return 'בודק את שלמות הקובץ…';
     case 'installing': return 'מתקין…';
     case 'done': return 'הותקן בהצלחה';
@@ -78,7 +85,11 @@ function statusOf(c) {
   const job = c.job;
   if (job && ACTIVE.includes(job.state)) return { cls: 'busy', text: jobText(job) };
   if (job && job.state === 'error') return { cls: 'error', text: job.error || 'העדכון נכשל' };
-  if (!c.available || !c.available.file) return { cls: 'na', text: 'עדיין לא זמין בגרסה המקוונת' };
+  if (job && job.state === 'done' && job.source === 'file' && !c.update_available) return { cls: 'ok', text: 'הותקן מקובץ עדכון' };
+  if (!c.available || !c.available.file) {
+    return c.installed?.source === 'offline' ? { cls: 'ok', text: 'הותקן מקובץ עדכון' }
+      : { cls: 'na', text: info?.online === false ? 'אין חיבור לבדיקה' : 'עדיין לא זמין בגרסה המקוונת' };
+  }
   if (!c.compatible) return { cls: 'error', text: 'דורש גרסה חדשה יותר של התוכנה' };
   if (c.update_available) return { cls: 'new', text: c.installed ? 'עדכון זמין' : 'זמין להתקנה' };
   return { cls: 'ok', text: 'מעודכן' };
@@ -123,7 +134,8 @@ function render(body, app) {
     <div class="p-section upd-intro">
       <p>חבילות הנתונים של המפה מתעדכנות פעם בשבוע ומורדות מ-GitHub. כל חבילה נבדקת (SHA-256) לפני ההתקנה,
         והמפה ממשיכה לעבוד ועוברת לנתונים החדשים בלי הפעלה מחדש.</p>
-      ${err ? `<div class="alert upd-alert" role="alert">${svg('alert')}<div>${esc(err.message)}</div></div>` : ''}
+      ${err ? `<div class="alert upd-alert" role="alert">${svg('alert')}<div>${esc(err.message)}${['offline', 'timeout', 'blocked'].includes(err.code)
+        ? '<br>בלי אינטרנט? אפשר לעדכן מקובץ עדכון – ראו "מחשב בלי אינטרנט?" למטה.' : ''}</div></div>` : ''}
       <p class="upd-checked" data-role="checked">${info?.checked_at ? `נבדק לאחרונה: ${esc(fmtTime(info.checked_at))}` : 'עדיין לא נבדק'}
         ${info?.release ? `<span class="upd-release">· גרסת נתונים ${esc(info.release.replace(/^data-/, ''))}</span>` : ''}</p>
       <div class="upd-actions">
@@ -134,11 +146,30 @@ function render(body, app) {
       <label class="switch upd-auto"><input type="checkbox" data-act="auto" ${auto ? 'checked' : ''}>
         <span>לבדוק אוטומטית פעם בשבוע ולהודיע כשיש עדכון</span></label>
     </div>
+    <section class="p-section upd-offline" aria-labelledby="upd-off-h">
+      <h3 id="upd-off-h">מחשב בלי אינטרנט?</h3>
+      <p>במחשב עם אינטרנט מורידים את <b>קובץ העדכון</b> מאתר ההורדה
+        (<bdi dir="ltr">${esc(SITE_OFFLINE.replace(/^https:\/\//, ''))}</bdi>), מעבירים אותו בדיסק-און-קי, ובוחרים אותו כאן.
+        רק חבילות חדשות יותר ממה שכבר במחשב מותקנות.</p>
+      <input type="file" accept=".zip,application/zip" hidden data-act="file" aria-label="קובץ עדכון" tabindex="-1">
+      <button type="button" class="btn btn-secondary btn-sm" data-act="pick" ${busy || uploading ? 'disabled' : ''}>
+        ${svg('download', { size: 16 })}עדכון מקובץ…</button>
+      <div class="upd-progress" data-role="upload" ${uploading ? '' : 'hidden'}>
+        <progress max="100" aria-labelledby="upd-off-h" aria-describedby="upd-up-t"></progress>
+        <span class="upd-ptext" id="upd-up-t">מעתיק את הקובץ…</span>
+      </div>
+    </section>
     <ul class="upd-list" aria-label="חבילות נתונים">${(info?.components || []).map(itemHtml).join('')}</ul>
     <p class="upd-foot">אפשר לעדכן גם בלי לפתוח את המפה: <code>update-online-windows.cmd</code> או <code>python -m hmaps update</code>.</p>`;
   wireHead(body, app);
   body.querySelector('[data-act="refresh"]').addEventListener('click', () => refresh(app, true));
   body.querySelector('[data-act="all"]').addEventListener('click', () => install(app, 'all'));
+  const file = body.querySelector('[data-act="file"]');
+  body.querySelector('[data-act="pick"]').addEventListener('click', () => file.click());
+  file.addEventListener('change', () => {
+    if (file.files?.[0]) installFile(app, file.files[0]);
+    file.value = '';
+  });
   body.querySelector('[data-act="auto"]').addEventListener('change', (e) => {
     store.set('updates:auto', e.target.checked);
     announce(e.target.checked ? 'בדיקה שבועית אוטומטית הופעלה' : 'בדיקה שבועית אוטומטית בוטלה');
@@ -209,6 +240,69 @@ async function install(app, id) {
     rerender(app);
     startPolling(app);
   } catch (e) {
+    announce(e.message, true);
+    info = { ...(info || { components: [] }), error: { message: e.message } };
+    rerender(app);
+  }
+}
+
+// the offline update file is sent to the local server as the request body (XHR: upload progress)
+function upload(fileObj, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/updates/offline');
+    xhr.setRequestHeader('X-HMaps-Update', '1');
+    xhr.setRequestHeader('Content-Type', 'application/zip');
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* empty */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data || {});
+      else reject(new Error(data?.error?.message || 'העדכון מהקובץ נכשל. נסו שוב.'));
+    };
+    xhr.onerror = () => reject(new Error('אין חיבור לשרת המפות. ודאו שהתוכנה פועלת ונסו שוב.'));
+    xhr.send(fileObj);
+  });
+}
+
+async function installFile(app, fileObj) {
+  if (!/\.zip$/i.test(fileObj.name)) {
+    announce('בחרו את קובץ העדכון – קובץ ZIP ששמו מתחיל ב-HebrewMaps-Update.', true);
+    return;
+  }
+  uploading = true;
+  rerender(app);
+  announce(`מעתיק את ${fileObj.name}…`);
+  const box = () => app.panel.body.querySelector('[data-role="upload"]');
+  let last = -1;
+  try {
+    const res = await upload(fileObj, (f) => {
+      const pct = Math.floor(f * 100);
+      if (pct === last) return;
+      last = pct;
+      const b = box();
+      if (!b) return;
+      b.querySelector('progress').value = pct;
+      b.querySelector('.upd-ptext').textContent = pct < 100 ? `מעתיק את הקובץ… ${pct}%` : 'בודק את הקובץ…';
+    });
+    uploading = false;
+    const rel = res.release ? ` (נתונים מ-${fmtDate(res.release.replace(/^data-/, ''))})` : '';
+    if (!res.jobs?.length) {
+      announce((res.message || 'הנתונים במחשב כבר עדכניים.') + rel);
+      rerender(app);
+      return;
+    }
+    announce(`מתקין ${res.jobs.length === 1 ? 'חבילה אחת' : `${res.jobs.length} חבילות`} מהקובץ${rel}`);
+    for (const j of res.jobs) {
+      watched.add(j.component);
+      const c = info?.components?.find((x) => x.id === j.component);
+      if (c) c.job = j;
+    }
+    if (info) info.busy = true;
+    rerender(app);
+    startPolling(app);
+  } catch (e) {
+    uploading = false;
     announce(e.message, true);
     info = { ...(info || { components: [] }), error: { message: e.message } };
     rerender(app);

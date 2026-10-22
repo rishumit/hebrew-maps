@@ -3437,6 +3437,176 @@
     }
    }
   },
+  "/api/updates/offline": {
+   "post": {
+    "summary": "התקנה מקובץ עדכון (HebrewMaps-Update-….zip) – למחשב בלי אינטרנט",
+    "description": "גוף הבקשה הוא קובץ העדכון עצמו. כל רכיב שבו נבדק מול SHA-256 של ה-manifest שבקובץ ומותקן ברקע אם הוא חדש מהמותקן. מותר רק מהמחשב המקומי ודורש כותרת X-HMaps-Update: 1.",
+    "parameters": [
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "description": "1 = התקנה מחדש גם אם הגרסה עדכנית",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "X-HMaps-Update",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "1"
+       ]
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/zip": {
+       "schema": {
+        "type": "string",
+        "format": "binary"
+       }
+      }
+     }
+    },
+    "responses": {
+     "202": {
+      "description": "המשימות נוספו לתור",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "jobs": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "component": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string",
+              "enum": [
+               "queued",
+               "downloading",
+               "verifying",
+               "installing",
+               "done",
+               "error"
+              ]
+             },
+             "downloaded": {
+              "type": "integer"
+             },
+             "total": {
+              "type": "integer"
+             },
+             "percent": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "version": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "error": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "description": "הודעה בעברית"
+             },
+             "code": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "examples": [
+               "checksum",
+               "offline",
+               "rate_limited",
+               "busy"
+              ]
+             },
+             "started": {
+              "type": "string"
+             },
+             "finished": {
+              "type": [
+               "string",
+               "null"
+              ]
+             }
+            }
+           }
+          },
+          "release": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "הנתונים במחשב כבר עדכניים כמו בקובץ"
+     },
+     "400": {
+      "description": "הקובץ אינו קובץ עדכון / פגום",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "403": {
+      "description": "לא מהמחשב המקומי",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "409": {
+      "description": "עדכון אחר עדיין רץ",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "507": {
+      "description": "אין מספיק מקום בדיסק",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/updates/{component}": {
    "post": {
     "summary": "הורדה, בדיקת SHA-256 והתקנה ברקע של רכיב (או all – כל מה שיש לו עדכון)",

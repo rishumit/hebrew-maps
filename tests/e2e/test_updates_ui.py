@@ -1,4 +1,5 @@
-"""Browser test of the "עדכונים" panel: list, "עדכן הכול", progress → installed, weekly notice.
+"""Browser test of the "עדכונים" panel: list, "עדכן הכול", progress → installed, weekly notice,
+"עדכון מקובץ" (offline update file) without internet.
 
     python -m unittest tests.e2e.test_updates_ui
 """
@@ -32,6 +33,8 @@ class UpdatesUiTest(unittest.TestCase):
             if e.get("file"):
                 e["url"] = f"{base}/{e['file']}"
         (rel / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+        cls.bundle = release.bundle(release.build_manifest(rel, tu.TAG, tu.VERSION, tu.DATE, None, repo="o/r"),
+                                    [rel], cls.root / "offline", tu.DATE)[0]
         data = cls.root / "data"
         data.mkdir()
         shutil.copy(sample_db(), data / "maps.db")
@@ -103,6 +106,35 @@ class UpdatesUiTest(unittest.TestCase):
         expect(page.locator("#panel-title")).to_have_text("עדכונים")
         expect(notice).to_have_count(0)
         self.assertEqual(self.errors, [])
+    def test_2_offline_file(self):
+        # a computer without internet: the manifest is unreachable, the update comes from a USB file
+        data = self.root / "data-offline"
+        data.mkdir()
+        shutil.copy(sample_db(), data / "maps.db")
+        api = ApiServer(data, extra_env={"HMAPS_UPDATES_MANIFEST": "http://127.0.0.1:9/manifest.json"})
+        try:
+            self.api, keep = api, self.api
+            page = self.page(mobile=True)
+            self.api = keep
+            page.click("#btn-menu")
+            page.click('[data-menu="updates"]')
+            expect(page.locator("#panel-title")).to_have_text("עדכונים")
+            expect(page.locator(".upd-offline")).to_contain_text("מחשב בלי אינטרנט?")
+            self.assertEqual(page.evaluate(AUDIT_JS), [])
+            page.set_input_files('[data-act="file"]', str(self.bundle))
+            basemap = page.locator('.upd-item[data-id="basemap"]')
+            expect(basemap.locator(".upd-badge")).to_have_text("הותקן מקובץ עדכון", timeout=15000)
+            expect(page.locator('.upd-item[data-id="zmanim"] .upd-badge')).to_have_text("הותקן מקובץ עדכון")
+            expect(page.locator("#sr-status")).to_have_text("העדכון הסתיים בהצלחה")
+            page.screenshot(path=str(SHOTS / "updates-offline-mobile.png"), full_page=True)
+            st = json.loads((data / "components.json").read_text(encoding="utf-8"))["components"]
+            self.assertEqual(st["basemap"]["source"], "offline")
+            # the same file again: nothing newer
+            page.set_input_files('[data-act="file"]', str(self.bundle))
+            expect(page.locator("#sr-status")).to_contain_text("כבר עדכניים", timeout=15000)
+            self.assertEqual(self.errors, [])
+        finally:
+            api.stop()
 
 if __name__ == "__main__":
     unittest.main()

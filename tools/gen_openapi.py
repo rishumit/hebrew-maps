@@ -294,6 +294,20 @@ spec["paths"].update({
     "/api/updates/status": {"get": {"summary": "התקדמות משימות העדכון שרצות ברקע", "responses": ok("משימות", {
         "type": "object", "properties": {"busy": {"type": "boolean"},
                                          "jobs": {"type": "object", "additionalProperties": UpdJob}}})}},
+    "/api/updates/offline": {"post": {
+        "summary": "התקנה מקובץ עדכון (HebrewMaps-Update-….zip) – למחשב בלי אינטרנט",
+        "description": "גוף הבקשה הוא קובץ העדכון עצמו. כל רכיב שבו נבדק מול SHA-256 של ה-manifest שבקובץ ומותקן ברקע "
+                       "אם הוא חדש מהמותקן. מותר רק מהמחשב המקומי ודורש כותרת X-HMaps-Update: 1.",
+        "parameters": [q("force", "1 = התקנה מחדש גם אם הגרסה עדכנית"),
+                       {"name": "X-HMaps-Update", "in": "header", "required": True, "schema": {"type": "string", "enum": ["1"]}}],
+        "requestBody": {"required": True, "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}}},
+        "responses": {"202": {"description": "המשימות נוספו לתור", "content": {"application/json": {"schema": {
+            "type": "object", "properties": {"jobs": {"type": "array", "items": UpdJob}, "release": {"type": ["string", "null"]}}}}}},
+                      "200": {"description": "הנתונים במחשב כבר עדכניים כמו בקובץ"},
+                      "400": {"description": "הקובץ אינו קובץ עדכון / פגום", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                      "403": {"description": "לא מהמחשב המקומי", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                      "409": {"description": "עדכון אחר עדיין רץ", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                      "507": {"description": "אין מספיק מקום בדיסק", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}}}},
     "/api/updates/{component}": {"post": {
         "summary": "הורדה, בדיקת SHA-256 והתקנה ברקע של רכיב (או all – כל מה שיש לו עדכון)",
         "description": "מותר רק מהמחשב המקומי (HMAPS_UPDATES=local|any|off) ודורש כותרת X-HMaps-Update: 1.",
