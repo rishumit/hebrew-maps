@@ -1,6 +1,6 @@
 """Download the POI images once, so the map shows them without internet.
 
-    python tools/media.py [--width 500] [--workers 2] [--interval 1.0] [--retry-failed]
+    python tools/media.py [--width 500] [--workers 2] [--interval 1.0] [--retry-failed] [--max-minutes N]
 
 Reads the image URLs from the live database (data/maps.db), stores a resized
 copy of each one under data/media/ and prints a summary. Already downloaded
@@ -19,6 +19,10 @@ Results of each image:
               --retry-failed is given;
 * temporary errors (no connection, rate limiting, timeouts) are simply tried
   again on the next run.
+
+--max-minutes stops cleanly after that many minutes (exit code 0) and keeps
+everything downloaded so far – used by CI, where a job has a hard time limit:
+each weekly run continues where the previous one stopped.
 """
 
 from __future__ import annotations
@@ -193,6 +197,8 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=1.0,
                     help="minimum seconds between requests (default 1.0; Wikimedia limits fast clients)")
     ap.add_argument("--retry-failed", action="store_true", help="try again the images that failed permanently before")
+    ap.add_argument("--max-minutes", type=float, default=0,
+                    help="stop cleanly after this many minutes and keep what was downloaded (default: no limit)")
     args = ap.parse_args()
     THROTTLE.interval = max(0.0, args.interval)
 
@@ -232,8 +238,14 @@ def main() -> int:
     last_error = ""
     t0 = last_print = time.time()
     stop = threading.Event()
+    deadline = t0 + args.max_minutes * 60 if args.max_minutes > 0 else None
+    out_of_time = False
 
     def one(url: str) -> tuple[str, int, str, str]:
+        nonlocal out_of_time
+        if deadline is not None and time.time() >= deadline and not stop.is_set():
+            out_of_time = True
+            stop.set()
         if stop.is_set():
             return url, 0, "skipped", ""
         k = media.key(url)
@@ -302,6 +314,9 @@ def main() -> int:
         pool.shutdown(wait=True, cancel_futures=True)
         report(final=True)
 
+    if out_of_time:
+        print(f"\nTime limit of {args.max_minutes:.0f} min reached – stopped cleanly; "
+              f"{len(todo) - counts['done']} images left for the next run.", flush=True)
     offline = sum(1 for u in urls if (out / media.key(u)).exists())
     print(f"\nDone: {counts['ok']} new images ({total_bytes / 1e6:.0f} MB) in {(time.time() - t0) / 60:.0f} min."
           f" Offline now: {offline} of {len(urls)}.")

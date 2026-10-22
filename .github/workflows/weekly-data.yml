@@ -375,7 +375,10 @@ jobs:
     # also runs when maps was not requested / failed: it then uses the previous release's maps.db
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # ~37k images at Wikimedia's pace take ~20 h, far more than one job may run (360 min max).
+    # media.py therefore stops by itself after --max-minutes, the partial set is packaged and
+    # cached, and each weekly run continues where the previous one stopped.
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-hmaps
@@ -397,16 +400,27 @@ jobs:
 
       # images are only downloaded once: keep data/media between runs
       - name: Restore image cache
-        uses: actions/cache@v5
+        uses: actions/cache/restore@v5
         with:
           path: data/media
           key: media-${{ github.run_id }}
           restore-keys: media-
 
       - name: Download POI images
-        # Wikimedia rate limits vary; a partial download is still worth publishing
+        # Wikimedia rate limits vary; a partial download is still worth publishing.
+        # Stops by itself after 290 min, leaving time for saving the cache + packaging.
         continue-on-error: true
-        run: python tools/media.py --workers 3 --interval 0.8
+        timeout-minutes: 300
+        run: python tools/media.py --workers 3 --interval 0.8 --max-minutes 290
+
+      # saved explicitly (not by the post step of actions/cache) so that progress is kept
+      # even when a later step fails
+      - name: Save image cache
+        if: always()
+        uses: actions/cache/save@v5
+        with:
+          path: data/media
+          key: media-${{ github.run_id }}
 
       - name: Package + verify
         run: |
