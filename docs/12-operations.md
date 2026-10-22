@@ -120,6 +120,13 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 ```
 בכל ZIP יש `component.json` (רכיב, גרסה, commit). מבנה הקבצים בכל רכיב מוגדר ב-`hmaps/core/components.py` ומשותף ל-CI ולתוכנה. הגרסאות המתוארכות נשמרות 6 שבועות, וגרסה שה-manifest עדיין מפנה אליה לא נמחקת.
 
+### תצלומי אוויר לכל הארץ: ‏`.github/workflows/satellite.yml`
+הרצה ידנית בלבד (Actions ← Aerial photos (offline package) ← Run workflow). מורידה את תצלומי govmap לכל הארץ עד הזום שנבחר (ברירת מחדל 16: כ-158,000 אריחים, כ-4GB, כ-9 שעות) ל-`satellite.mbtiles`.
+- כל סבב עוצר מעצמו אחרי `minutes` (ברירת מחדל 320), שומר את האריחים במטמון של Actions ומפעיל את הסבב הבא בעצמו, עד שסבב עובר על כל האריחים (עד `max_rounds`).
+- בסיום: `tools/sat_pack.py pack` מחלק את הקובץ לחלקים מתחת ל-2GB ‏(`HebrewMaps-Satellite-z16.mbtiles.001`…) ויוצר `HebrewMaps-Satellite-z16-install.cmd`, שמחבר אותם ב-Windows, בודק SHA-256 ומתקין ל-`data\tiles\satellite.mbtiles`.
+- הפלט הוא **טיוטת ריליס** `satellite-z16` – גלויה רק למי שיש לו הרשאת כתיבה. התצלומים מוגבלים לשימוש אישי לפי תנאי govmap, ולכן אין לפרסם את הטיוטה.
+- הרצה חוזרת מרעננת: אריחים שכבר במטמון נשמרים. להורדה מלאה מחדש מוחקים את המטמון `satellite-z…` ב-Actions ← Caches.
+
 ### בנייה מקומית (למתקדמים)
 `update-data.cmd` (Docker) / ‏`update-windows.cmd` מורידים גרסה חדשה של OSM, בונים מאגר חדש ומחליפים אותו **בלי השבתה** (החלפה אטומית ו-hot reload). אחר כך הם בונים מפת בסיס חדשה ומפעילים מחדש את הניווט. הניווט לא זמין לכ-15 דקות, עד שהגרפים החדשים מוכנים.
 

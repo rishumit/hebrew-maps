@@ -1,0 +1,186 @@
+name: Aerial photos (offline package)
+run-name: "Aerial photos z${{ inputs.maxzoom }} · round ${{ inputs.round }}"
+
+# Downloads the govmap orthophoto for all of Israel up to zoom 16 (~158,000 tiles, ~4 GB, ~9 h at
+# govmap's pace) into data/tiles/satellite.mbtiles – the same download as `download-satellite.cmd
+# --level full` on a PC – and publishes it as a DRAFT release "satellite-z<maxzoom>".
+#
+# Why a draft: the aerial photos are © Survey of Israel / govmap and licensed for personal use only,
+# so they are never part of the public releases. A draft release is visible only to people with write
+# access to the repository (Releases page, logged in).
+#
+# A job may run at most 6 h, so the download runs in rounds: each round stops cleanly after `minutes`
+# (SIGINT – the CLI keeps every tile), saves the tiles in the Actions cache and dispatches the next
+# round itself, until a round goes through every tile. That round packs the file (split into parts
+# under GitHub's 2 GiB asset limit, plus HebrewMaps-Satellite-z16-install.cmd that joins them on
+# Windows, checks the SHA-256 and installs it) and replaces the draft release.
+#
+# Running it again later refreshes the package: cached tiles are kept and only missing ones are
+# fetched (delete the "satellite-z…" cache in Actions → Caches for a full re-download).
+# The cache of a z16 run is ~4 GB of the repository's Actions cache quota.
+
+on:
+  workflow_dispatch:
+    inputs:
+      maxzoom:
+        description: "זום מרבי (13–17). 15 ≈ 1GB, 16 ≈ 4GB, 17 ≈ 16GB"
+        default: "16"
+      workers:
+        description: "בקשות במקביל ל-govmap (1–8)"
+        default: "6"
+      minutes:
+        description: "דקות הורדה בכל סבב (עד 320)"
+        default: "320"
+      max_rounds:
+        description: "מספר סבבים מרבי (כל סבב עד ~6 שעות)"
+        default: "6"
+      round:
+        description: "מספר הסבב – נקבע אוטומטית, השאירו 1"
+        default: "1"
+
+concurrency:
+  group: satellite
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # the draft release
+  actions: write    # dispatch the next round, delete the previous round's cache
+
+jobs:
+  download:
+    name: Aerial photos z${{ inputs.maxzoom }} – round ${{ inputs.round }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      HMAPS_DATA: data
+      PYTHONUTF8: "1"
+      GH_TOKEN: ${{ github.token }}
+      MAXZOOM: ${{ inputs.maxzoom }}
+      WORKERS: ${{ inputs.workers }}
+      MINUTES: ${{ inputs.minutes }}
+      ROUND: ${{ inputs.round }}
+      MAX_ROUNDS: ${{ inputs.max_rounds }}
+      MBTILES: data/tiles/satellite.mbtiles
+      NAME: HebrewMaps-Satellite-z${{ inputs.maxzoom }}
+      TAG: satellite-z${{ inputs.maxzoom }}
+    steps:
+      - name: Check inputs
+        run: |
+          for v in MAXZOOM WORKERS MINUTES ROUND MAX_ROUNDS; do
+            [[ "${!v}" =~ ^[0-9]+$ ]] || { echo "::error::$v must be a number (got '${!v}')"; exit 1; }
+          done
+          (( MAXZOOM >= 7 && MAXZOOM <= 17 )) || { echo "::error::maxzoom must be 7–17"; exit 1; }
+          (( WORKERS >= 1 && WORKERS <= 8 )) || { echo "::error::workers must be 1–8"; exit 1; }
+          (( MINUTES >= 10 && MINUTES <= 320 )) || { echo "::error::minutes must be 10–320"; exit 1; }
+
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-hmaps
+        with:
+          requirements: requirements.txt
+
+      # the cache archive, the database and the release parts each take ~4 GB at z16
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h .
+
+      - name: Restore tiles of earlier rounds
+        uses: actions/cache/restore@v5
+        with:
+          path: data/tiles/satellite.mbtiles
+          key: satellite-z${{ inputs.maxzoom }}-${{ github.run_id }}
+          restore-keys: satellite-z${{ inputs.maxzoom }}-
+
+      - name: Tiles so far
+        run: python tools/sat_pack.py stats "$MBTILES"
+
+      - name: Can GitHub reach govmap?
+        run: python -m hmaps.etl satellite --test --source govmap
+
+      - name: Download (stops cleanly after ${{ inputs.minutes }} min)
+        id: dl
+        run: |
+          mkdir -p data/tiles
+          set +e
+          timeout -s INT -k 5m "${MINUTES}m" \
+            python -m hmaps.etl satellite --source govmap --minzoom 7 --maxzoom "$MAXZOOM" --workers "$WORKERS" --yes
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" -eq 124 ]; then
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::round $ROUND reached its $MINUTES min – the next round continues"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::the download stopped with exit code $code – the tiles so far are kept, the next round retries"
+          fi
+          python tools/sat_pack.py checkpoint "$MBTILES"
+          python tools/sat_pack.py stats "$MBTILES"
+          [ -f "$MBTILES" ] && echo "have=true" >> "$GITHUB_OUTPUT" || echo "have=false" >> "$GITHUB_OUTPUT"
+
+      - name: Save tiles for the next round
+        id: save
+        if: always() && steps.dl.outputs.have == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: data/tiles/satellite.mbtiles
+          key: satellite-z${{ inputs.maxzoom }}-${{ github.run_id }}
+
+      - name: Drop the previous round's cache
+        if: always() && steps.save.outcome == 'success'
+        run: |
+          gh cache list --key "satellite-z${MAXZOOM}-" --limit 100 --json key -q '.[].key' |
+            { grep -vx "satellite-z${MAXZOOM}-${GITHUB_RUN_ID}" || true; } |
+            while read -r k; do gh cache delete "$k" || true; done
+
+      - name: Start the next round
+        if: steps.dl.outputs.complete == 'false' && steps.save.outcome == 'success' && fromJSON(inputs.round) < fromJSON(inputs.max_rounds)
+        run: |
+          gh workflow run satellite.yml --ref "$GITHUB_REF_NAME" \
+            -f maxzoom="$MAXZOOM" -f workers="$WORKERS" -f minutes="$MINUTES" \
+            -f max_rounds="$MAX_ROUNDS" -f round="$((ROUND + 1))"
+          echo "### סבב $ROUND הסתיים – סבב $((ROUND + 1)) הופעל אוטומטית" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Out of rounds
+        if: steps.dl.outputs.complete == 'false' && fromJSON(inputs.round) >= fromJSON(inputs.max_rounds)
+        run: |
+          echo "::error::still not complete after $MAX_ROUNDS rounds – run the workflow again (the tiles so far are kept)"
+          exit 1
+
+      - name: Pack (parts under 2 GB + install script)
+        if: steps.dl.outputs.complete == 'true'
+        run: python tools/sat_pack.py pack "$MBTILES" --name "$NAME" --out sat-dist
+
+      - name: Replace the draft release
+        if: steps.dl.outputs.complete == 'true'
+        run: |
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+                  -q ".[] | select(.draft and .tag_name == \"$TAG\") | .id")
+          python - <<'PY' > notes.md
+          import json, os
+          info = json.load(open(f"sat-dist/{os.environ['NAME']}.json"))
+          z = " · ".join(f"z{k}: {v:,}" for k, v in info["by_zoom"].items())
+          parts = info["parts"]
+          print(f"""## תצלומי אוויר לשימוש בלי אינטרנט – זום עד {os.environ['MAXZOOM']}
+
+          **טיוטה פרטית** – גלויה רק למי שיש לו הרשאת כתיבה לריפו. התצלומים © המרכז למיפוי ישראל (govmap),
+          לשימוש אישי בלבד – לא לפרסם את הטיוטה ולא להפיץ את הקבצים.
+
+          **התקנה ב-Windows:** מורידים את כל הקבצים ({len(parts)} {'חלקים' if len(parts) > 1 else 'קובץ'} + `{os.environ['NAME']}-install.cmd`)
+          לאותה תיקייה, סוגרים את "מפות בעברית" ומריצים את קובץ ה-cmd. הוא מחבר את החלקים, בודק SHA-256
+          ומתקין ל-`%LOCALAPPDATA%\\Programs\\HebrewMaps\\data\\tiles\\satellite.mbtiles`.
+
+          | | |
+          |---|---|
+          | אריחים | {info['tiles']:,} ({z}) |
+          | גודל | {info['size'] / 1e9:.2f} GB |
+          | SHA-256 | `{info['sha256']}` |
+          | נבנה | commit {os.environ['GITHUB_SHA'][:7]}, ריצה {os.environ['GITHUB_RUN_ID']} |
+          """.replace("\n          ", "\n"))
+          PY
+          gh release create "$TAG" sat-dist/*.mbtiles* sat-dist/*-install.cmd --draft --target "$GITHUB_SHA" \
+            --title "תצלומי אוויר – זום עד $MAXZOOM (טיוטה פרטית)" --notes-file notes.md
+          for id in $old; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"; done
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
