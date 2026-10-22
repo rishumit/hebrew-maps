@@ -26,6 +26,9 @@ jobs:
   build-installer:
     name: Build Windows Installer
     runs-on: windows-latest
+    # the default GITHUB_TOKEN is read-only in this repository; creating the release needs write
+    permissions:
+      contents: write
 
     steps:
       # -----------------------------------------------------------------------
