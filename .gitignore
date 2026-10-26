@@ -17,3 +17,5 @@ installer/HebrewMaps-Setup.exe
 # Tauri desktop app (src-tauri/)
 src-tauri/target/
 src-tauri/gen/
+installer/app-manifest.json
+installer/notes.md

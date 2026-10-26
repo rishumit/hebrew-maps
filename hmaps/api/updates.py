@@ -8,7 +8,9 @@ newest manifest (see :mod:`hmaps.core.components` for the layout).
     GET  /api/updates[?refresh=1]     installed vs. available version of every component
     POST /api/updates/{component}     download + verify + install in the background
                                       ({component} = maps | basemap | … | all)
-    GET  /api/updates/status          progress of the background jobs
+    GET  /api/updates/status          progress of the background jobs (+ "app": the program update)
+    GET  /api/updates/app             installed vs. newest program version (appupdate.py)
+    POST /api/updates/app             download + verify + start the program installer
 
 and the command line (also for a weekly Windows scheduled task, see
 ``update-online-windows.cmd``)::
@@ -17,6 +19,7 @@ and the command line (also for a weekly Windows scheduled task, see
     python -m hmaps update                       # install every available update
     python -m hmaps update --component transit   # only one component (repeatable)
     python -m hmaps update --bundle E:\\HebrewMaps-Update-2026-10-22.zip   # offline update file
+    python -m hmaps update --app [--check]       # the program itself (see appupdate.py)
 
 Offline update file (for computers without internet): every weekly release also
 carries ``HebrewMaps-Update-<date>.zip`` – manifest.json plus the component ZIPs
@@ -123,29 +126,55 @@ def _local_path(url: str) -> Path | None:
     return None
 
 
-def _open(url: str, headers: dict | None = None, timeout: float = 30):
-    """urlopen with a User-Agent, falling back to an unverified TLS context behind content filters."""
+class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows redirects only to URLs that *allow* accepts (the app installer: GitHub hosts only)."""
+
+    def __init__(self, allow):
+        self.allow = allow
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not self.allow(newurl):
+            raise UpdateError("bad_url", "שרת העדכונים הפנה לכתובת לא מורשית – ההורדה בוטלה.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _urlopen(req, timeout: float, context: ssl.SSLContext | None, allow):
+    if allow is None:
+        return urllib.request.urlopen(req, timeout=timeout, context=context) if context else \
+            urllib.request.urlopen(req, timeout=timeout)
+    handlers = [_CheckedRedirects(allow)]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    return urllib.request.build_opener(*handlers).open(req, timeout=timeout)
+
+
+def _open(url: str, headers: dict | None = None, timeout: float = 30, allow=None):
+    """urlopen with a User-Agent, falling back to an unverified TLS context behind content filters.
+
+    *allow*: optional ``url -> bool`` checked for the URL and every redirect."""
     global _insecure
+    if allow is not None and not allow(url):
+        raise UpdateError("bad_url", "כתובת ההורדה אינה מורשית – ההורדה בוטלה.")
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     if _insecure and url.startswith("https:"):
-        return urllib.request.urlopen(req, timeout=timeout, context=_insecure_ctx())
+        return _urlopen(req, timeout, _insecure_ctx(), allow)
     try:
-        return urllib.request.urlopen(req, timeout=timeout)
+        return _urlopen(req, timeout, None, allow)
     except urllib.error.URLError as e:
         if not (url.startswith("https:") and _is_cert_error(e)):
             raise
         log.warning("TLS certificate rejected (%s) – probably a filtering proxy; continuing without "
                     "certificate verification, downloads are verified by SHA-256", getattr(e, "reason", e))
         _insecure = True
-        return urllib.request.urlopen(req, timeout=timeout, context=_insecure_ctx())
+        return _urlopen(req, timeout, _insecure_ctx(), allow)
 
 
-def _read_json(url: str, timeout: float = 20) -> dict | list:
+def _read_json(url: str, timeout: float = 20, allow=None, headers: dict | None = None) -> dict | list:
     local = _local_path(url)
     if local is not None:
         return json.loads(local.read_text(encoding="utf-8"))
-    with _open(url, {"Accept": "application/json"}, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    with _open(url, {"Accept": "application/json", **(headers or {})}, timeout=timeout, allow=allow) as r:
+        return json.loads(r.read(4 * 1024 * 1024).decode("utf-8"))
 
 
 def _http_error(e: Exception) -> UpdateError:
@@ -379,8 +408,10 @@ def check(force: bool = False, data: Path | None = None) -> dict:
             "installed": inst[comp.id], "available": avail,
             "update_available": upd and ok, "compatible": ok, "job": jobs.get(comp.id),
         })
+    from . import appupdate
     return {
-        "app_version": __version__, "online": manifest is not None, "error": error,
+        "app_version": __version__, "app": appupdate.check_app(force=force),
+        "online": manifest is not None, "error": error,
         "release": (manifest or {}).get("release") or st.get("release"),
         "generated": (manifest or {}).get("generated"),
         "checked_at": now if manifest is not None else st.get("last_check"),
@@ -421,10 +452,14 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def download(url: str, dest: Path, size: int | None = None, progress=None) -> Path:
-    """Download *url* to *dest*, resuming ``dest.part`` with HTTP Range; retried with back-off."""
+def download(url: str, dest: Path, size: int | None = None, progress=None, allow=None) -> Path:
+    """Download *url* to *dest*, resuming ``dest.part`` with HTTP Range; retried with back-off.
+
+    *allow*: optional ``url -> bool`` every URL and redirect must pass (the app installer)."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
+    if allow is not None and not allow(url):
+        raise UpdateError("bad_url", "כתובת ההורדה אינה מורשית – ההורדה בוטלה.")
     local = _local_path(url)
     if local is not None:  # a local file (tests, CI, a copied release folder)
         if not local.exists():
@@ -443,7 +478,7 @@ def download(url: str, dest: Path, size: int | None = None, progress=None) -> Pa
         if size and have == size:
             break
         try:
-            with _open(url, {"Range": f"bytes={have}-"} if have else None, timeout=60) as r:
+            with _open(url, {"Range": f"bytes={have}-"} if have else None, timeout=60, allow=allow) as r:
                 status = getattr(r, "status", None) or 200
                 if have and status != 206:  # server ignored the range: start over
                     have = 0
@@ -851,9 +886,10 @@ _worker: threading.Thread | None = None
 
 
 def status() -> dict:
+    from . import appupdate
     with _jobs_lock:
         jobs = {cid: j.as_dict() for cid, j in _jobs.items()}
-    return {"busy": any(j["state"] in ACTIVE for j in jobs.values()), "jobs": jobs}
+    return {"busy": any(j["state"] in ACTIVE for j in jobs.values()), "jobs": jobs, "app": appupdate.job_status()}
 
 
 def _run_queue(data: Path) -> None:
@@ -1005,9 +1041,37 @@ def _routes():
             return err(404, "unknown_component", "רכיב עדכון לא מוכר.")
         return JSONResponse({"jobs": start(ids, force=force)}, status_code=202)
 
+    async def app_check(req: Request):
+        from . import appupdate
+        force = req.query_params.get("refresh") in ("1", "true")
+        return JSONResponse(await run_in_threadpool(appupdate.check_app, force), headers={"Cache-Control": "no-store"})
+
+    async def app_install(req: Request):
+        """The program itself: download + verify + start the installer (appupdate.py)."""
+        from . import appupdate
+        if not _allowed(req):
+            return err(403, "forbidden", "עדכון התוכנה אפשרי רק מהמחשב שעליו היא רצה.")
+        if req.headers.get("x-hmaps-update") != "1":
+            return err(400, "missing_header", "בקשה לא תקינה.")
+        ok, why = appupdate.can_self_update()
+        if not ok:
+            return err(400, "unsupported", why or "עדכון אוטומטי אינו זמין כאן.")
+        if status()["busy"]:
+            return err(409, "busy", "עדכון נתונים עדיין רץ. המתינו שיסתיים ונסו שוב.")
+        info = await run_in_threadpool(appupdate.check_app, True)
+        if info["error"]:
+            return err(502, info["error"]["code"], info["error"]["message"])
+        force = req.query_params.get("force") in ("1", "true")
+        if not info["update_available"] and not force:
+            return JSONResponse({"job": None, "message": "התוכנה כבר בגרסה העדכנית."})
+        return JSONResponse({"job": appupdate.start(force=force), "version": info["available"]["version"]},
+                            status_code=202)
+
     return [
         Route("/api/updates", updates_check),
         Route("/api/updates/status", updates_status),
+        Route("/api/updates/app", app_check),  # before /api/updates/{component}
+        Route("/api/updates/app", app_install, methods=["POST"]),
         Route("/api/updates/offline", updates_offline, methods=["POST"]),
         Route("/api/updates/{component}", updates_install, methods=["POST"]),
     ]
@@ -1040,10 +1104,16 @@ def cli(argv: list[str] | None = None) -> int:
     ap.add_argument("--zip", help="install a local component ZIP (requires exactly one --component)")
     ap.add_argument("--bundle", action="append", metavar="FILE",
                     help=f"install from an offline update file ({BUNDLE_PREFIX}-<date>.zip, repeatable for split files)")
+    ap.add_argument("--app", action="store_true",
+                    help="update the program itself (Windows installer from the newest v* release); with --check: "
+                         "only show the versions")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     if args.manifest:
         os.environ["HMAPS_UPDATES_MANIFEST"] = args.manifest
+    if args.app:
+        from . import appupdate
+        return appupdate.cli(args.check, args.force)
     data = Path(args.data) if args.data else data_dir()
     if args.zip:
         if not args.component or len(args.component) != 1:
@@ -1058,6 +1128,10 @@ def cli(argv: list[str] | None = None) -> int:
     if info["error"]:
         print(f"שגיאה: {info['error']['message']}")
         return 2
+    app = info.get("app") or {}
+    if app.get("update_available"):
+        print(f"גרסה חדשה של התוכנה: {app['available']['version']} (מותקנת {app['installed']}) – "
+              "לעדכון: python -m hmaps update --app")
     print(f"גרסת הנתונים המקוונת: {info['release']}")
     for c in info["components"]:
         inst = (c["installed"] or {}).get("date") or "לא מותקן"

@@ -40,12 +40,19 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     log: list = []
     fail: dict = {}
+    redirect: dict = {}
 
     def log_message(self, *a):  # quiet
         pass
 
     def do_GET(self):  # noqa: N802
         _Handler.log.append((self.path, self.headers.get("Range")))
+        if self.path in _Handler.redirect:
+            self.send_response(302)
+            self.send_header("Location", _Handler.redirect[self.path])
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         code = _Handler.fail.get(self.path)
         if code:
             self.send_response(code)

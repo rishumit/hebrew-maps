@@ -6,6 +6,7 @@
     python tools/release.py manifest --tag data-2026-10-22 --previous prev/manifest.json   # dist/manifest.json
     python tools/release.py prepare-db --artifacts dist --previous prev/manifest.json      # maps.db for the media job
     python tools/release.py prune    --manifest dist/manifest.json --releases releases.json  # old releases to delete
+    python tools/release.py app-manifest --installer HebrewMaps-Setup-1.2.0.exe --version 1.2.0   # installer.yml
     python tools/release.py bundle   --manifest dist/manifest.json --dist dist --dist old --date 2026-10-22 --out offline
                                      # offline update file(s) HebrewMaps-Update-<date>.zip (--list-missing first:
                                      # "<release> <file>" of every component ZIP that is not in the --dist folders)
@@ -493,6 +494,36 @@ def cmd_prune(args) -> int:
     return 0
 
 
+# =========================================================================== app manifest (installer.yml)
+
+DEFAULT_APP_NOTES = "גרסה {version} של מפות בעברית. העדכון שומר את כל הנתונים שבמחשב."
+
+
+def app_manifest(installer: Path, version: str, tag: str | None = None, notes: str | None = None,
+                 min_data_version: str | None = None, repo: str = REPO) -> dict:
+    """app-manifest.json of an app release (read by hmaps/api/appupdate.py)."""
+    version = version.lstrip("vV")
+    tag = tag or f"v{version}"
+    m = {"schema": 1, "version": version, "tag": tag, "date": _israel_now().strftime("%Y-%m-%d"),
+         "file": installer.name, "size": installer.stat().st_size, "sha256": sha256(installer),
+         "url": f"https://github.com/{repo}/releases/download/{tag}/{installer.name}",
+         "notes_he": (notes or "").strip() or DEFAULT_APP_NOTES.format(version=version),
+         "commit": os.environ.get("GITHUB_SHA", "")}
+    if min_data_version:
+        m["min_data_version"] = min_data_version
+    from hmaps.api import appupdate
+    appupdate.parse_manifest(m)  # the client must accept what we publish
+    return m
+
+
+def cmd_app_manifest(args) -> int:
+    notes = Path(args.notes).read_text(encoding="utf-8") if args.notes and Path(args.notes).is_file() else None
+    m = app_manifest(Path(args.installer), args.version, args.tag, notes, args.min_data_version)
+    Path(args.out).write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(m, ensure_ascii=False, indent=1))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python tools/release.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -525,6 +556,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--manifest", required=True)
     p.add_argument("--releases", required=True, help="JSON from: gh release list --json tagName")
     p.add_argument("--keep", type=int, default=6)
+    p = sub.add_parser("app-manifest")
+    p.add_argument("--installer", required=True, help="HebrewMaps-Setup-<version>.exe")
+    p.add_argument("--version", required=True)
+    p.add_argument("--tag")
+    p.add_argument("--notes", help="file with the Hebrew release notes (Markdown/text)")
+    p.add_argument("--min-data-version")
+    p.add_argument("--out", default="app-manifest.json")
     p = sub.add_parser("bundle")
     p.add_argument("--manifest", required=True)
     p.add_argument("--dist", action="append", help="folder with component ZIPs (repeatable)")
@@ -534,7 +572,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--list-missing", action="store_true", help="only print '<release> <file>' of absent ZIPs")
     args = ap.parse_args(argv)
     return {"plan": cmd_plan, "pack": cmd_pack, "verify": cmd_verify, "manifest": cmd_manifest,
-            "prepare-db": cmd_prepare_db, "prune": cmd_prune, "bundle": cmd_bundle}[args.cmd](args)
+            "prepare-db": cmd_prepare_db, "prune": cmd_prune, "bundle": cmd_bundle,
+            "app-manifest": cmd_app_manifest}[args.cmd](args)
 
 
 if __name__ == "__main__":
