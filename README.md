@@ -3,6 +3,12 @@
 מערכת מפות אינטראקטיבית של ישראל, עברית מלאה מימין לשמאל, שרצה כולה על המחשב שלכם מנתונים פתוחים.
 המערכת כוללת חיפוש חכם בעברית, נקודות עניין, כתובות, ניווט ברכב, ברגל ובאופניים, מצב לילה, ותמיכה מלאה בנגישות ובמובייל.
 
+**מפות אופליין בעברית למחשב Windows – בחינם.** מפת ישראל מלאה שעובדת גם בלי אינטרנט: חיפוש, ניווט, תחבורה ציבורית עם כל הקווים, שבילים, טופוגרפיה ותלת־ממד.
+
+<p align="center">
+  <a href="https://rishumit.github.io/hebrew-maps/"><b>לאתר של מפות ישראל</b></a> · <a href="https://rishumit.github.io/hebrew-maps/download.html"><b>הורדה ל-Windows</b></a> · <a href="https://rishumit.github.io/hebrew-maps/changelog.html">מה חדש</a>
+</p>
+
 <p align="center"><img src="docs/images/desktop.png" alt="צילום מסך: חיפוש מסעדות בתל אביב" width="720"></p>
 
 ---
