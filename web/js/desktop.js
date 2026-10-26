@@ -30,6 +30,10 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const strip = $('#tabstrip');
 const views = $('#views');
 const tauri = window.__TAURI_INTERNALS__?.invoke ? window.__TAURI_INTERNALS__ : null;
+const motion = matchMedia('(prefers-reduced-motion: reduce)');
+const ANIM_MS = 160;
+/** The tabs in the strip, in visual order (tabs that are animating closed are left out). */
+const liveTabEls = () => [...strip.querySelectorAll('.tab:not(.closing)')];
 
 /** @type {Map<string, Tab>} */
 const tabs = new Map();
@@ -76,7 +80,7 @@ function createTab({ hash = '', title = DEFAULT_TITLE, kind = 'map' } = {}, { in
   const el = document.createElement('div');
   el.className = 'tab';
   el.dataset.id = id;
-  el.innerHTML = `<span class="foot foot-s"></span><span class="foot foot-e"></span>
+  el.innerHTML = `<span class="foot foot-l"></span><span class="foot foot-r"></span>
     <div class="tab-main" role="tab" id="tab-${id}" aria-selected="false" aria-controls="view-${id}" tabindex="-1">
       <span class="tab-icon"></span><span class="tab-title"></span></div>
     <button type="button" class="tab-close" tabindex="-1"><svg aria-hidden="true" focusable="false" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>`;
@@ -89,16 +93,65 @@ function createTab({ hash = '', title = DEFAULT_TITLE, kind = 'map' } = {}, { in
   const tab = { id, hash: cleanHash(hash), title: title || DEFAULT_TITLE, kind, el, view, frame: null, loading: false, used: 0, focusOnLoad: false };
   tabs.set(id, tab);
   order.splice(index, 0, id);
-  strip.insertBefore(el, strip.children[index] || null);
+  strip.insertBefore(el, liveTabEls()[index] || null);
   renderTab(tab);
+  animateOpen(el);
   return tab;
 }
+
+/** Chrome-like open: the tab grows from nothing to its width. */
+function animateOpen(el) {
+  if (motion.matches || !el.isConnected || document.readyState === 'loading') return;
+  const w = el.getBoundingClientRect().width;
+  el.animate([{ maxWidth: '0px', minWidth: '0px', opacity: 0 }, { maxWidth: `${w}px`, minWidth: '0px', opacity: 1 }],
+    { duration: ANIM_MS, easing: 'cubic-bezier(.2, 0, 0, 1)' });
+}
+
+/** Chrome-like close: the tab shrinks away, then its element is removed. */
+function animateClose(el) {
+  el.classList.add('closing');
+  el.setAttribute('aria-hidden', 'true');
+  el.querySelector('.tab-main').removeAttribute('role');
+  if (motion.matches) {
+    el.remove();
+    return;
+  }
+  const w = el.getBoundingClientRect().width;
+  const a = el.animate([{ maxWidth: `${w}px`, minWidth: '0px' }, { maxWidth: '0px', minWidth: '0px', opacity: 0 }],
+    { duration: ANIM_MS, easing: 'cubic-bezier(.3, 0, .8, .15)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => el.remove();
+}
+
+// Closing tabs with the mouse keeps the other tabs' widths (Chrome does this), so the next close button
+// lands under the pointer; they take the free space once the pointer leaves the tab strip.
+const tabsWrap = $('#tabs-wrap');
+function freezeWidths() {
+  for (const el of liveTabEls()) el.style.maxWidth = `${el.getBoundingClientRect().width}px`;
+  tabsWrap.classList.add('frozen');
+}
+function unfreezeWidths() {
+  if (!tabsWrap.classList.contains('frozen')) return;
+  tabsWrap.classList.remove('frozen');
+  const els = liveTabEls();
+  const before = els.map((el) => el.getBoundingClientRect().width);
+  els.forEach((el) => (el.style.maxWidth = ''));
+  if (motion.matches) return;
+  els.forEach((el, i) => {
+    const w = el.getBoundingClientRect().width;
+    if (Math.abs(w - before[i]) > .5) {
+      el.animate([{ maxWidth: `${before[i]}px`, minWidth: `${Math.min(before[i], w)}px` }, { maxWidth: `${w}px`, minWidth: `${Math.min(before[i], w)}px` }],
+        { duration: ANIM_MS, easing: 'cubic-bezier(.2, 0, 0, 1)' });
+    }
+  });
+}
+tabsWrap.addEventListener('mouseleave', unfreezeWidths);
 
 function renderTab(tab) {
   const t = tab.title || DEFAULT_TITLE;
   tab.el.querySelector('.tab-title').textContent = t;
   tab.el.querySelector('.tab-icon').innerHTML = iconSvg(tab.kind);
   tab.el.title = t;
+  tab.el.dataset.kind = KIND_ICON[tab.kind] ? tab.kind : 'map';
   tab.el.querySelector('.tab-close').setAttribute('aria-label', `סגירת הלשונית ${t}`);
   tab.el.classList.toggle('loading', tab.loading);
   tab.el.querySelector('.tab-main').setAttribute('aria-busy', String(tab.loading));
@@ -188,16 +241,17 @@ function newTab({ hash = '', title, kind, activate: act = true, after = null, fo
   return tab;
 }
 
-function closeTab(id) {
+function closeTab(id, { byMouse = false } = {}) {
   const tab = tabs.get(id);
   if (!tab) return;
+  if (byMouse && order.length > 1) freezeWidths();
   const i = order.indexOf(id);
   closed.push({ hash: tab.hash, title: tab.title, kind: tab.kind, index: i });
   if (closed.length > MAX_CLOSED) closed.shift();
   const wasActive = id === activeId;
   const hadFocus = tab.el.contains(document.activeElement);
   tab.frame?.remove();
-  tab.el.remove();
+  animateClose(tab.el);
   tab.view.remove();
   tabs.delete(id);
   order.splice(i, 1);
@@ -314,7 +368,7 @@ window.addEventListener('pagehide', saveNow);
 strip.addEventListener('click', (e) => {
   const el = e.target.closest('.tab');
   if (!el) return;
-  if (e.target.closest('.tab-close')) closeTab(el.dataset.id);
+  if (e.target.closest('.tab-close')) closeTab(el.dataset.id, { byMouse: e.detail > 0 });
   else if (!el.dataset.dragged) activate(el.dataset.id);
 });
 strip.addEventListener('mousedown', (e) => {
@@ -324,7 +378,7 @@ strip.addEventListener('auxclick', (e) => {
   const el = e.target.closest('.tab');
   if (el && e.button === 1) {
     e.preventDefault();
-    closeTab(el.dataset.id);
+    closeTab(el.dataset.id, { byMouse: true });
   }
 });
 strip.addEventListener('dblclick', (e) => {
@@ -363,10 +417,11 @@ strip.addEventListener('keydown', (e) => {
 });
 $('#btn-new-tab').addEventListener('click', () => newTab());
 
-// drag to reorder (live, like Chrome): the tab follows the pointer and swaps with the neighbour it passes
+// drag to reorder (live, like Chrome): the tab lifts and follows the pointer; the neighbours it passes slide
+// into its old place. Positions come from offsetLeft (layout, unaffected by the transforms of the animations).
 strip.addEventListener('pointerdown', (e) => {
   const el = e.target.closest('.tab');
-  if (!el || e.button !== 0 || e.target.closest('.tab-close')) return;
+  if (!el || el.classList.contains('closing') || e.button !== 0 || e.target.closest('.tab-close')) return;
   const startX = e.clientX;
   const grab = e.clientX - el.getBoundingClientRect().left;
   let dragging = false;
@@ -380,24 +435,32 @@ strip.addEventListener('pointerdown', (e) => {
     }
     const sr = strip.getBoundingClientRect();
     const w = el.offsetWidth;
-    const left = Math.min(Math.max(ev.clientX - grab, sr.left), sr.right - w);
-    const center = left + w / 2;
-    for (const other of strip.querySelectorAll('.tab')) {
-      if (other === el) continue;
-      const r = other.getBoundingClientRect();
-      const oc = r.left + r.width / 2;
-      const elR = (() => { el.style.transform = ''; return el.getBoundingClientRect(); })();
-      if (r.left < elR.left && center < oc) { // passing a tab on the left
-        const rtl = getComputedStyle(strip).direction === 'rtl';
-        if (rtl) other.after(el); else other.before(el);
-      } else if (r.left > elR.left && center > oc) { // passing a tab on the right
-        const rtl = getComputedStyle(strip).direction === 'rtl';
-        if (rtl) other.before(el); else other.after(el);
+    // where the tab should be, in the strip's layout coordinates (offsetLeft), kept inside the strip
+    const origin = sr.left + strip.clientLeft - strip.scrollLeft;
+    const first = liveTabEls().reduce((m, t) => Math.min(m, t.offsetLeft), Infinity);
+    const last = liveTabEls().reduce((m, t) => Math.max(m, t.offsetLeft + t.offsetWidth), -Infinity);
+    const x = Math.min(Math.max(ev.clientX - grab - origin, first), last - w);
+    // its slot: the number of other tabs whose centre is left of its centre
+    const others = liveTabEls().filter((t) => t !== el);
+    const center = x + w / 2;
+    const k = others.filter((t) => t.offsetLeft + t.offsetWidth / 2 < center).length;
+    const byX = [...others].sort((p, q) => p.offsetLeft - q.offsetLeft);
+    const rtl = getComputedStyle(strip).direction === 'rtl';
+    // DOM order runs right-to-left in RTL
+    const domIndex = rtl ? others.length - k : k;
+    const domOthers = rtl ? [...byX].reverse() : byX;
+    const ref = domOthers[domIndex] || null;
+    if (el.nextElementSibling !== ref || (ref === null && el !== strip.lastElementChild)) {
+      const before = new Map(others.map((t) => [t, t.offsetLeft]));
+      strip.insertBefore(el, ref);
+      if (!motion.matches) {
+        for (const t of others) {
+          const dx = before.get(t) - t.offsetLeft;
+          if (dx) t.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 150, easing: 'cubic-bezier(.2, 0, 0, 1)' });
+        }
       }
     }
-    el.style.transform = '';
-    const natural = el.getBoundingClientRect().left;
-    el.style.transform = `translateX(${left - natural}px)`;
+    el.style.transform = `translateX(${x - el.offsetLeft}px)`;
   };
   const up = () => {
     strip.removeEventListener('pointermove', move);
@@ -405,12 +468,12 @@ strip.addEventListener('pointerdown', (e) => {
     strip.removeEventListener('pointercancel', up);
     if (!dragging) return;
     el.classList.remove('dragging');
-    el.classList.add('settling');
+    const from = el.style.transform;
     el.style.transform = '';
-    setTimeout(() => el.classList.remove('settling'), 160);
+    if (from && !motion.matches) el.animate([{ transform: from }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
     el.dataset.dragged = '1'; // swallow the click that follows
     setTimeout(() => delete el.dataset.dragged, 0);
-    order = [...strip.querySelectorAll('.tab')].map((t) => t.dataset.id);
+    order = liveTabEls().map((t) => t.dataset.id);
     save();
   };
   strip.addEventListener('pointermove', move);

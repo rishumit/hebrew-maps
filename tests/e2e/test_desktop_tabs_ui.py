@@ -105,6 +105,7 @@ class DesktopTabsTest(unittest.TestCase):
         expect(f.locator(".results .result").first).to_be_visible()
         expect(page.locator(".tab.active .tab-title")).to_have_text("מסעדות בתל אביב")
         expect(page).to_have_title("מסעדות בתל אביב – מפות בעברית")
+        expect(page.locator(".tab.active")).to_have_attribute("data-kind", "search")  # favicon follows the map's state
         wait_js(page, "JSON.parse(localStorage.getItem('hmaps:desktop-tabs')).tabs[0].hash.includes('q=')")
 
         # new tab (button), select a place
@@ -117,6 +118,7 @@ class DesktopTabsTest(unittest.TestCase):
         f = self.active_frame(page)
         expect(f.locator("#panel-title")).to_have_text("דיזנגוף סנטר")
         expect(page.locator(".tab.active .tab-title")).to_have_text("דיזנגוף סנטר")
+        expect(page.locator(".tab.active")).to_have_attribute("data-kind", "place")
 
         # directions -> "A ← B"
         f.locator('#panel [data-act="route"]').click()
@@ -126,6 +128,7 @@ class DesktopTabsTest(unittest.TestCase):
         f.locator("#dir-from-list [role=option]").first.click()
         expect(f.locator(".steps .step").first).to_be_visible()
         expect(page.locator(".tab.active .tab-title")).to_contain_text("← דיזנגוף סנטר")
+        expect(page.locator(".tab.active")).to_have_attribute("data-kind", "directions")
         page.screenshot(path=str(SHOTS / "desktop-01-tabs.png"))
 
         # only the active map is visible; the other keeps its state
@@ -177,8 +180,10 @@ class DesktopTabsTest(unittest.TestCase):
         page.reload()
         page.wait_for_selector(".tab.active")
         self.wait_map(page)
-        self.assertEqual(self.titles(page), ["מסעדות בתל אביב", "דיזנגוף סנטר"])
+        # (retrying: while it loads, the restored map may report a default title for a moment)
+        expect(page.locator(".tab .tab-title")).to_have_text(["מסעדות בתל אביב", "דיזנגוף סנטר"])
         expect(page.locator(".tab").nth(1)).to_have_class("tab active")
+        self.assertEqual(page.evaluate("[...document.querySelectorAll('.tab')].map(t => t.dataset.kind)"), ["search", "place"])
         expect(self.active_frame(page).locator("#panel-title")).to_have_text("דיזנגוף סנטר")
         # the background tab loads lazily, on first activation
         self.assertEqual(page.locator("iframe").count(), 1)
@@ -206,6 +211,74 @@ class DesktopTabsTest(unittest.TestCase):
         page2 = self.open("/desktop.html#map=12.00/32.07000/34.78000")
         wait_js(page2, "document.querySelector('.view.active iframe').contentWindow.location.hash.includes('32.07')")
         self.assertEqual(page2.evaluate("location.hash"), "")
+        self.assert_clean()
+
+    def test_chrome_style_strip_states(self):
+        page = self.open()
+        for _ in range(3):
+            page.locator("#btn-new-tab").click()
+        expect(page.locator(".tab")).to_have_count(4)
+        self.wait_map(page)
+        page.locator(".tab").nth(1).click()
+        expect(page.locator(".tab").nth(1)).to_have_class("tab active")
+        page.mouse.move(5, 300)  # nothing hovered
+        page.wait_for_timeout(200)
+        sep = "[...document.querySelectorAll('.tab')].map(t => getComputedStyle(t, '::before'))"
+        # separators: none before the first tab, hidden on both sides of the active tab, shown elsewhere
+        ops = page.evaluate(f"{sep}.map(s => s.content === 'none' ? null : +s.opacity)")
+        self.assertEqual(ops, [None, 0, 0, 1])
+        # the active tab is the content colour, has the concave feet, and its close button is always shown;
+        # background tabs are transparent and show their close button on hover only
+        st = page.evaluate("""() => {
+          const [a, b] = [document.querySelector('.tab.active'), document.querySelectorAll('.tab')[3]];
+          const cs = (e, p) => getComputedStyle(e, p);
+          return {
+            activeBg: cs(a).backgroundColor, inactiveBg: cs(b).backgroundColor,
+            body: cs(document.body).backgroundColor,
+            feet: [...a.querySelectorAll('.foot')].map(f => cs(f).display),
+            bFeet: [...b.querySelectorAll('.foot')].map(f => cs(f).display),
+            aClose: cs(a.querySelector('.tab-close')).opacity, bClose: cs(b.querySelector('.tab-close')).opacity,
+            radius: cs(a).borderTopLeftRadius,
+          };
+        }""")
+        self.assertEqual(st["activeBg"], "rgb(255, 255, 255)")
+        self.assertEqual(st["activeBg"], st["body"])
+        self.assertEqual(st["inactiveBg"], "rgba(0, 0, 0, 0)")
+        self.assertEqual(st["feet"], ["block", "block"])
+        self.assertEqual(st["bFeet"], ["none", "none"])
+        self.assertEqual((st["aClose"], st["bClose"]), ("1", "0"))
+        self.assertEqual(st["radius"], "8px")
+        # hover on a background tab: the pill shows, its close button appears, the separators around it hide
+        page.locator(".tab").nth(3).hover()
+        page.wait_for_timeout(250)
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelectorAll('.tab')[3], '::after').opacity"), "1")
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelectorAll('.tab')[3].querySelector('.tab-close')).opacity"), "1")
+        self.assertEqual(page.evaluate(f"{sep}[3].opacity"), "0")
+        # the active tab's bottom meets the map: no gap between the bar and the content
+        geo = page.evaluate("""() => ({tab: document.querySelector('.tab.active').getBoundingClientRect().bottom,
+            view: document.querySelector('.view.active').getBoundingClientRect().top})""")
+        self.assertEqual(geo["tab"], geo["view"])
+        # narrow tabs: titles go, background tabs keep only the favicon, the active one keeps its close button
+        for _ in range(12):
+            page.locator("#btn-new-tab").click()
+        expect(page.locator(".tab")).to_have_count(16)
+        page.set_viewport_size({"width": 900, "height": 760})
+        page.mouse.move(5, 300)
+        page.wait_for_timeout(300)
+        nar = page.evaluate("""() => {
+          const tabs = [...document.querySelectorAll('.tab')];
+          const a = document.querySelector('.tab.active'), b = tabs.find(t => t !== a);
+          const d = (e) => getComputedStyle(e).display;
+          return {w: Math.max(...tabs.map(t => t.getBoundingClientRect().width)),
+            title: d(b.querySelector('.tab-title')), close: d(b.querySelector('.tab-close')),
+            icon: d(b.querySelector('.tab-icon')), aClose: d(a.querySelector('.tab-close'))};
+        }""")
+        self.assertLessEqual(nar["w"], 72)
+        self.assertEqual((nar["title"], nar["close"], nar["icon"], nar["aClose"]), ("none", "none", "grid", "grid"))
+        # a close animation leaves no stray elements behind
+        page.locator(".tab.active .tab-close").click()
+        expect(page.locator(".tab")).to_have_count(15)
+        self.assertEqual(page.locator('[role="tab"]').count(), 15)
         self.assert_clean()
 
     def test_overflow_reorder_keyboard_and_dark(self):
