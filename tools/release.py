@@ -659,6 +659,15 @@ def app_manifest(installer: Path, version: str, tag: str | None = None, notes: s
 
 def cmd_app_manifest(args) -> int:
     notes = Path(args.notes).read_text(encoding="utf-8-sig") if args.notes and Path(args.notes).is_file() else None
+    if notes and args.notes.endswith(".md"):
+        # docs/release-notes/vX.md (also rendered on the site): "# title", "date: …", "- item"
+        lines = []
+        for raw in notes.splitlines():
+            t = raw.strip()
+            if not t or t.lower().startswith("date:"):
+                continue
+            lines.append(t.lstrip("#").strip() if t.startswith("#") else ("• " + t[2:].strip() if t[:2] in ("- ", "* ") else t))
+        notes = "\n".join(lines)
     m = app_manifest(Path(args.installer), args.version, args.tag, notes, args.min_data_version)
     Path(args.out).write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(m, ensure_ascii=False, indent=1))

@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "docs/release-notes/**"
+      - "tools/build_changelog.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -31,6 +33,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: "\"מה חדש\" from docs/release-notes"
+        run: python3 tools/build_changelog.py
 
       - name: Check internal links
         run: python3 tools/check_site.py site

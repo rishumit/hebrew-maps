@@ -219,8 +219,13 @@ docs/        מסמכי הפרויקט + מימוש, החלטות, תפעול, A
 המאגר צריך להיות ציבורי, כדי שהאתר וקובצי ההתקנה יהיו נגישים לכולם.
 
 **פרסום גרסת אפליקציה** (בונה את המתקין ויוצר Release שמסומן "Latest", עם `HebrewMaps-Setup-X.Y.Z.exe` ועם עותק בשם הקבוע `HebrewMaps-Setup.exe`):
+1. כותבים את "מה חדש" של הגרסה ב-`docs/release-notes/v1.2.0.md` – שורת `# כותרת`, שורת `date: 2026-11-05` ונקודות `- …`.
+   הקובץ הזה מוצג גם בעמוד "מה חדש" באתר (`tools/build_changelog.py`, רץ אוטומטית בפרסום האתר) וגם בעדכון התוכנה מתוך התוכנה.
+2. מעדכנים את העמוד, דוחפים ומתייגים:
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+python tools/build_changelog.py
+git add docs/release-notes site/changelog.html && git commit -m "release notes v1.2.0" && git push
+git tag -a v1.2.0 -m "גרסה 1.2.0" && git push origin v1.2.0
 ```
 או: Actions ← **Windows Installer** ← Run workflow, עם מספר גרסה ו-`release` מסומן.
 חבילות הנתונים השבועיות (`data-*`) נוצרות עם `--latest=false`, כך שהן אף פעם לא תופסות את מקום "הגרסה האחרונה" של האפליקציה.
