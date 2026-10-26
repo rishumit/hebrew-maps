@@ -272,7 +272,9 @@ UpdComponent = {"type": "object", "properties": {
     "name_he": {"type": "string", "examples": ["מפת בסיס"]}, "description_he": {"type": "string"},
     "installed": {"type": ["object", "null"], "description": "version (YYYYMMDD), date, release, sha256, source: online | local | file"},
     "available": {"type": ["object", "null"], "description": "מתוך manifest.json: version, date, file, size, sha256, "
-                                                            "status (full | unchanged | unavailable), min_app_version, release"},
+                                                            "status (full | unchanged | unavailable), min_app_version, release, "
+                                                            "delta ({size, steps} – עדכון חלקי מהגרסה המותקנת, או null), "
+                                                            "download_size (מה שיורד בפועל)"},
     "update_available": {"type": "boolean"}, "compatible": {"type": "boolean", "description": "גרסת התוכנה ≥ min_app_version"},
     "job": {"type": ["object", "null"], "description": "משימת עדכון אחרונה (ראו /api/updates/status)"}}}
 UpdJob = {"type": "object", "properties": {
@@ -281,19 +283,46 @@ UpdJob = {"type": "object", "properties": {
     "downloaded": {"type": "integer"}, "total": {"type": "integer"}, "percent": {"type": ["number", "null"]},
     "version": {"type": ["string", "null"]}, "error": {"type": ["string", "null"], "description": "הודעה בעברית"},
     "code": {"type": ["string", "null"], "examples": ["checksum", "offline", "rate_limited", "busy"]},
-    "started": {"type": "string"}, "finished": {"type": ["string", "null"]}}}
+    "started": {"type": "string"}, "finished": {"type": ["string", "null"]},
+    "source": {"type": "string", "enum": ["online", "file"]},
+    "delta": {"type": "boolean", "description": "עדכון חלקי: total הוא גודל ה-delta, full_size גודל החבילה המלאה"},
+    "full_size": {"type": "integer"}}}
+AppInfo = {"type": "object", "description": "גרסת התוכנה עצמה (hmaps/api/appupdate.py)", "properties": {
+    "installed": {"type": "string", "examples": ["1.1.0"]},
+    "available": {"type": ["object", "null"], "description": "מתוך app-manifest.json של הגרסה האחרונה (v*): version, tag, date, "
+                                                            "file, size, notes_he, min_data_version"},
+    "update_available": {"type": "boolean"},
+    "can_install": {"type": "boolean", "description": "רק התוכנה המותקנת ב-Windows מעדכנת את עצמה"},
+    "reason": {"type": ["string", "null"], "description": "למה אי אפשר לעדכן כאן (בעברית)"},
+    "download_page": {"type": "string"}, "error": {"type": ["object", "null"]},
+    "job": {"type": ["object", "null"], "description": "state: queued | downloading | verifying | launching | launched | error, "
+                                                       "downloaded, total, percent, version, error"}}}
 spec["paths"].update({
     "/api/updates": {"get": {"summary": "עדכוני נתונים: הגרסה המותקנת והגרסה הזמינה של כל רכיב", "parameters": [
         q("refresh", "1 = לקרוא שוב את manifest.json מ-GitHub (אחרת נשמר בזיכרון 15 דקות)")],
         "responses": ok("מצב העדכונים (גם כשאין חיבור: online=false ו-error עם הודעה בעברית)", {"type": "object", "properties": {
-            "app_version": {"type": "string"}, "online": {"type": "boolean"}, "error": {"type": ["object", "null"]},
+            "app_version": {"type": "string"}, "app": AppInfo, "online": {"type": "boolean"}, "error": {"type": ["object", "null"]},
             "release": {"type": ["string", "null"], "examples": ["data-2026-10-22"]}, "generated": {"type": ["string", "null"]},
             "checked_at": {"type": ["string", "null"]}, "updates_available": {"type": "integer"},
-            "total_size": {"type": "integer", "description": "בתים להורדה"}, "busy": {"type": "boolean"},
+            "total_size": {"type": "integer", "description": "בתים להורדה (עם עדכונים חלקיים כשיש)"}, "busy": {"type": "boolean"},
             "components": {"type": "array", "items": UpdComponent}}})}},
     "/api/updates/status": {"get": {"summary": "התקדמות משימות העדכון שרצות ברקע", "responses": ok("משימות", {
         "type": "object", "properties": {"busy": {"type": "boolean"},
-                                         "jobs": {"type": "object", "additionalProperties": UpdJob}}})}},
+                                         "jobs": {"type": "object", "additionalProperties": UpdJob},
+                                         "app": {"type": ["object", "null"], "description": "משימת עדכון התוכנה"}}})}},
+    "/api/updates/app": {
+        "get": {"summary": "גרסת התוכנה: המותקנת והחדשה ביותר (גם חלק מ-/api/updates)",
+                "parameters": [q("refresh", "1 = לקרוא שוב את app-manifest.json")], "responses": ok("גרסת התוכנה", AppInfo)},
+        "post": {"summary": "עדכון התוכנה: הורדת קובץ ההתקנה, בדיקת SHA-256 והפעלה שקטה (התוכנה נסגרת ונפתחת מחדש)",
+                 "description": "רק מ-github.com / *.githubusercontent.com. מותר רק מהמחשב המקומי ודורש כותרת X-HMaps-Update: 1. "
+                                "זמין רק בתוכנה המותקנת ב-Windows.",
+                 "parameters": [q("force", "1 = התקנה מחדש גם אם הגרסה עדכנית"),
+                                {"name": "X-HMaps-Update", "in": "header", "required": True, "schema": {"type": "string", "enum": ["1"]}}],
+                 "responses": {"202": {"description": "ההורדה התחילה (job)"}, "200": {"description": "התוכנה כבר עדכנית"},
+                               "400": {"description": "חסרה הכותרת / לא זמין כאן (unsupported)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                               "403": {"description": "לא מהמחשב המקומי", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                               "409": {"description": "עדכון נתונים עדיין רץ", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                               "502": {"description": "שרת העדכונים לא זמין", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}}}},
     "/api/updates/offline": {"post": {
         "summary": "התקנה מקובץ עדכון (HebrewMaps-Update-….zip) – למחשב בלי אינטרנט",
         "description": "גוף הבקשה הוא קובץ העדכון עצמו. כל רכיב שבו נבדק מול SHA-256 של ה-manifest שבקובץ ומותקן ברקע "

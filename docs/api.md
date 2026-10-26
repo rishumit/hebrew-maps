@@ -239,13 +239,19 @@ POST /api/search
 הגרסה המותקנת והגרסה הזמינה של כל רכיב. המניפסט נשמר בזיכרון ל-15 דקות, ו-`refresh=1` קורא אותו מחדש. גם כשאין חיבור התשובה היא 200, עם `online: false`, הודעה בעברית ב-`error` ורשימת הרכיבים המותקנים.
 ```json
 {"online": true, "error": null, "release": "data-2026-10-22", "checked_at": "2026-10-23T06:10:02+00:00",
- "app_version": "1.0.0", "updates_available": 2, "total_size": 412000000, "busy": false,
- "components": [{"id": "transit", "name_he": "תחבורה ציבורית", "description_he": "…",
-   "installed": {"version": "20261015", "date": "2026-10-15", "source": "online", "sha256": "…"},
-   "available": {"version": "20261022", "date": "2026-10-22", "file": "hmaps-transit-20261022.zip", "size": 38000000,
-                 "sha256": "…", "status": "full", "min_app_version": "1.0.0", "release": "data-2026-10-22"},
+ "app_version": "1.1.0", "updates_available": 2, "total_size": 41300000, "busy": false,
+ "app": {"installed": "1.1.0", "update_available": true, "can_install": true, "reason": null, "error": null, "job": null,
+         "available": {"version": "1.2.0", "tag": "v1.2.0", "date": "2026-11-02", "file": "HebrewMaps-Setup-1.2.0.exe",
+                       "size": 98000000, "notes_he": "…", "min_data_version": null},
+         "download_page": "https://rishumit.github.io/hebrew-maps/download.html"},
+ "components": [{"id": "maps", "name_he": "מפה ונקודות עניין", "description_he": "…",
+   "installed": {"version": "20261015", "date": "2026-10-15", "source": "online", "via": "full", "sha256": "…"},
+   "available": {"version": "20261022", "date": "2026-10-22", "file": "hmaps-maps-20261022.zip", "size": 60000000,
+                 "sha256": "…", "status": "full", "min_app_version": "1.0.0", "release": "data-2026-10-22",
+                 "delta": {"size": 1300000, "steps": 1}, "download_size": 1300000},
    "update_available": true, "compatible": true, "job": null}]}
 ```
+‏`available.delta` – עדכון חלקי (רק מה שהשתנה מהגרסה המותקנת, ראו [12-operations.md](12-operations.md#עדכונים-חלקיים-delta)); ‏`download_size` הוא מה שיורד בפועל, ו-`total_size` מסכם אותו. ‏`app` – גרסת התוכנה עצמה (כמו `GET /api/updates/app`).
 קודי `error.code`: ‏`offline`, ‏`timeout`, ‏`rate_limited` (מגבלת הקצב של GitHub, עם השעה שבה אפשר לנסות שוב), ‏`not_found` (עוד אין גרסה מקוונת), ‏`blocked`, ‏`bad_manifest`.
 
 ### `POST /api/updates/{component}` ‏(`component` = שם רכיב או `all`)
@@ -256,7 +262,13 @@ POST /api/search
 {"busy": true, "jobs": {"transit": {"component": "transit", "state": "downloading", "downloaded": 12582912, "total": 38000000,
   "percent": 33.1, "version": "20261022", "error": null, "code": null, "started": "…", "finished": null}}}
 ```
-‏`state`: ‏`queued` → ‏`downloading` → ‏`verifying` (גודל + SHA-256) → ‏`installing` → ‏`done`, או `error` עם הודעה בעברית ב-`error` (למשל `checksum`, ‏`size_mismatch`, ‏`download_failed`, ‏`busy`, ‏`disk_full`, ‏`app_too_old`).
+‏`state`: ‏`queued` → ‏`downloading` → ‏`verifying` (גודל + SHA-256) → ‏`installing` → ‏`done`, או `error` עם הודעה בעברית ב-`error` (למשל `checksum`, ‏`size_mismatch`, ‏`download_failed`, ‏`busy`, ‏`disk_full`, ‏`app_too_old`). בעדכון חלקי `delta: true`, ‏`total` הוא גודל העדכון החלקי ו-`full_size` גודל החבילה המלאה. ‏`app` – משימת עדכון התוכנה (או `null`).
+
+### `GET /api/updates/app[?refresh=1]`
+גרסת התוכנה המותקנת (`installed` = ‏`hmaps.__version__`, זהה ל-`/api/meta`) מול הגרסה האחרונה (`v*`) ב-GitHub Releases, מתוך `app-manifest.json` שלה (`releases/latest/download/app-manifest.json`; אם הוא לא נגיש – דרך GitHub API). ‏`can_install` הוא `true` רק בתוכנה המותקנת ב-Windows; אחרת `reason` מסביר בעברית ו-`download_page` מפנה לאתר.
+
+### `POST /api/updates/app`
+מוריד את `HebrewMaps-Setup-<גרסה>.exe` ל-`%TEMP%\HebrewMaps-update\` (עם המשך הורדה), בודק גודל ו-SHA-256 מול `app-manifest.json` ומפעיל אותו בשקט (`/VERYSILENT … /AUTOUPDATE=1`). תוכנת ההתקנה סוגרת את התוכנה, מחליפה את קובצי התוכנה (לא את `data\`) ופותחת אותה מחדש. הורדה רק מ-`github.com`, ‏`objects.githubusercontent.com` ו-`release-assets.githubusercontent.com` (נבדק גם בכל הפניה). אותן הגנות כמו בעדכון נתונים: רק מהמחשב המקומי ועם `X-HMaps-Update: 1`. ‏202 עם `job` (‏`state`: ‏`queued` → ‏`downloading` → ‏`verifying` → ‏`launching` → ‏`launched`, או `error`); ‏200 כשהתוכנה כבר עדכנית; ‏400 ‏`unsupported` מחוץ לתוכנה המותקנת ב-Windows; ‏409 כשעדכון נתונים רץ.
 
 ## מערכת
 `/api/health`, ‏`/api/meta`, ‏`/metrics` (Prometheus), ‏`/reports` (דוח איכות נתונים).
