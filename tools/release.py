@@ -658,7 +658,7 @@ def app_manifest(installer: Path, version: str, tag: str | None = None, notes: s
 
 
 def cmd_app_manifest(args) -> int:
-    notes = Path(args.notes).read_text(encoding="utf-8") if args.notes and Path(args.notes).is_file() else None
+    notes = Path(args.notes).read_text(encoding="utf-8-sig") if args.notes and Path(args.notes).is_file() else None
     m = app_manifest(Path(args.installer), args.version, args.tag, notes, args.min_data_version)
     Path(args.out).write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
     print(json.dumps(m, ensure_ascii=False, indent=1))
@@ -666,6 +666,10 @@ def cmd_app_manifest(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows runners default to cp1252: Hebrew in our output would crash print()
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(prog="python tools/release.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")

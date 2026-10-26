@@ -33,6 +33,11 @@ on:
         required: false
         default: false
 
+env:
+  # Hebrew text in Python output on Windows runners (default console code page is cp1252)
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
 jobs:
   build-installer:
     name: Build Windows Installer
@@ -198,6 +203,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.value }}
         run: |
+          # read git's UTF-8 output (Hebrew tag message) as UTF-8, not the console code page
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           $tag = "v$env:VERSION"
           $notes = "docs\release-notes\$tag.md"
           if (-not (Test-Path $notes)) {
