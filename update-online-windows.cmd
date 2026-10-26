@@ -5,7 +5,10 @@ rem checks every file (SHA-256) and swaps it in while the map keeps running.
 rem The same as the "Updates" page in the map menu.
 rem
 rem   update-online-windows.cmd            install every available update
-rem   update-online-windows.cmd /check     only show what is new
+rem   update-online-windows.cmd /check     only show what is new (data and program version)
+rem   update-online-windows.cmd /app       update the program itself: downloads the newest installer,
+rem                                        checks its SHA-256 and installs it silently (the map closes
+rem                                        and opens again; the data is kept)
 rem   update-online-windows.cmd /quiet     no pause at the end, output to data\reports\update-log.txt
 rem   update-online-windows.cmd /schedule  run it automatically every Friday at 06:10 (Windows Task Scheduler)
 rem
@@ -34,8 +37,15 @@ if not defined HM (
 
 if /i "%~1"=="/check" (
   %HM% update --check
+  %HM% update --app --check
   pause
   exit /b 0
+)
+
+if /i "%~1"=="/app" (
+  %HM% update --app
+  if errorlevel 1 pause
+  exit /b %ERRORLEVEL%
 )
 
 if /i "%~1"=="/quiet" (

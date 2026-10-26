@@ -40,12 +40,19 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     log: list = []
     fail: dict = {}
+    redirect: dict = {}
 
     def log_message(self, *a):  # quiet
         pass
 
     def do_GET(self):  # noqa: N802
         _Handler.log.append((self.path, self.headers.get("Range")))
+        if self.path in _Handler.redirect:
+            self.send_response(302)
+            self.send_header("Location", _Handler.redirect[self.path])
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         code = _Handler.fail.get(self.path)
         if code:
             self.send_response(code)
@@ -76,6 +83,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/octet-stream")
         self.end_headers()
         self.wfile.write(body)
+
+
+def _age(path: Path) -> None:
+    """Local data from before the release (its version is taken from the file time)."""
+    t = datetime(2026, 1, 1).timestamp()
+    os.utime(path, (t, t))
 
 
 def serve(root: Path) -> tuple[http.server.ThreadingHTTPServer, str]:
@@ -300,6 +313,7 @@ class UpdaterTest(unittest.TestCase):
     # ------------------------------------------------------------------ install
     def test_install_maps_swaps_atomically_and_keeps_prayer_times(self):
         shutil.copy(sample_db(), self.data / "maps.db")  # legacy un-versioned file, as old installs have
+        _age(self.data / "maps.db")
         snap = self.data / "sources" / "zmanim" / "zmanim.json"
         snap.parent.mkdir(parents=True)
         snap.write_text(json.dumps(SNAPSHOT, ensure_ascii=False), encoding="utf-8")
@@ -335,6 +349,7 @@ class UpdaterTest(unittest.TestCase):
         self.assertTrue(list((self.data / "tiles").glob("terrain-*.mbtiles")))
         (self.data / "media").mkdir()
         (self.data / "media" / "own.jpg").write_bytes(b"x")
+        _age(self.data / "media")
         updates.install("media", self.data)
         self.assertTrue((self.data / "media" / "ab" / "abc.jpg").exists())
         self.assertTrue((self.data / "media" / "own.jpg").exists(), "images are merged, not replaced")

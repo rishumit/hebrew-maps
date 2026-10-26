@@ -8,6 +8,17 @@
 ; Saved as UTF-8 *with BOM* – Inno Setup reads a file without BOM as ANSI and would
 ; garble the Hebrew strings.
 ;
+; Version: installer.yml passes the tag's version (/DMyAppVersion=1.2.0) after writing it into
+; hmaps/__init__.py, tauri.conf.json and Cargo.toml (tools/set_version.py) – one version everywhere.
+;
+; Unattended update from inside the program (hmaps/api/appupdate.py):
+;   HebrewMaps-Setup-x.y.z.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
+;     /FORCECLOSEAPPLICATIONS /NOCANCEL /LOG=<file> /AUTOUPDATE=1
+; PrepareToInstall closes the window and the server (gracefully, then forcibly) so no file is
+; locked, the program files are replaced, and /AUTOUPDATE=1 starts the program again at the end.
+; The data in {app}\data (downloaded packages, components.json, the aerial-photo cache) is never
+; touched: data files that ship with a local build are only copied when they do not exist yet.
+;
 ; Desktop app: if build.ps1 / CI put the Tauri exe (hebrew-maps-desktop.exe) into
 ; dist\hebrew-maps\, the shortcuts start it (native window; it starts hebrew-maps.exe
 ; itself, with --no-browser). Without it – or on a PC without the WebView2 runtime –
@@ -15,9 +26,9 @@
 
 #define MyAppName      "מפות בעברית"
 #define MyAppNameEn    "HebrewMaps"
-; build.ps1 passes /DMyAppVersion=x.y.z; default to 1.0.0 otherwise
+; build.ps1 / installer.yml pass /DMyAppVersion=x.y.z (= hmaps.__version__)
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 #define MyAppPublisher "Hebrew Maps"
 #define MyAppURL       "http://localhost:8080"
@@ -47,6 +58,11 @@ WizardStyle=modern
 Uninstallable=yes
 ShowLanguageDialog=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; Upgrades: files of the running program are closed (Restart Manager), never a reboot; the
+; program is started again by the [Run] entries below when /AUTOUPDATE=1 is given.
+CloseApplications=force
+CloseApplicationsFilter=*.exe,*.dll,*.pyd
+RestartApplications=no
 #if FileExists(AddBackslash(SourcePath) + "icon.ico")
 SetupIconFile=icon.ico
 #endif
@@ -67,26 +83,30 @@ Source: "dist\hebrew-maps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubd
 ; Web assets (HTML, JS, CSS, fonts, icons)
 Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
+; Data shipped with a local build (CI builds ship none: data\ is not in git). Upgrades must
+; never replace what the user downloaded since (maps.current would point back to an old
+; database) – onlyifdoesntexist everywhere below, except the sample database of the app.
+
 ; Data — current map pointer file
-Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
 
 ; Data — map databases (wildcard matches any dated build)
-Source: "..\data\maps-*.db"; DestDir: "{app}\data"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\data\maps-*.db"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
 
 ; Data — routing graph
-Source: "..\data\routing\*"; DestDir: "{app}\data\routing"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\data\routing\*"; DestDir: "{app}\data\routing"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — map tiles
-Source: "..\data\tiles\*"; DestDir: "{app}\data\tiles"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\data\tiles\*"; DestDir: "{app}\data\tiles"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — DEM / terrain elevation
-Source: "..\data\dem\*"; DestDir: "{app}\data\dem"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\data\dem\*"; DestDir: "{app}\data\dem"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — public transit (GTFS)
-Source: "..\data\transit\*"; DestDir: "{app}\data\transit"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\data\transit\*"; DestDir: "{app}\data\transit"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — media / images
-Source: "..\data\media\*"; DestDir: "{app}\data\media"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\data\media\*"; DestDir: "{app}\data\media"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — sample database (always present)
 Source: "..\data\sample\*"; DestDir: "{app}\data\sample"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -111,8 +131,12 @@ Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Tasks
 #ifdef HasDesktop
 Filename: "{app}\{#MyDesktopExe}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: HasWebView2
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; Check: not HasWebView2
+; in-app update (/AUTOUPDATE=1, always silent): open the program again
+Filename: "{app}\{#MyDesktopExe}"; Flags: nowait; Check: IsAutoUpdate and HasWebView2
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: IsAutoUpdate and not HasWebView2
 #else
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: IsAutoUpdate
 #endif
 
 [UninstallRun]
@@ -141,14 +165,28 @@ begin
     or WebView2VersionOk(HKCU, 'Software' + WebView2Key);
 end;
 
+{ /AUTOUPDATE=1 on the command line: started by the program's own updater (appupdate.py). }
+function IsAutoUpdate(): Boolean;
+begin
+  Result := ExpandConstant('{param:AUTOUPDATE|0}') = '1';
+end;
+
 { Upgrades: running copies (the desktop app and its server, or an older browser-mode
-  server) lock their files – stop them before copying. }
+  server) lock their files – stop them before copying. First a normal close (the window
+  closes and stops its server), then by force whatever is left; the installer itself was
+  started outside the window's Job Object, so it survives this. No /T: an installer started
+  by the server is its child and must not be killed with the tree. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Code: Integer;
 begin
+  Exec('taskkill.exe', '/IM {#MyDesktopExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  if Code = 0 then
+    Sleep(2000);
   Exec('taskkill.exe', '/F /IM {#MyDesktopExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  { give Windows a moment to release the file handles }
+  Sleep(500);
   Result := '';
 end;
 

@@ -102,6 +102,21 @@ iscc installer\hebrew-maps.iss
 installer\build.ps1 -Version 1.2.0 -IsccPath "C:\Tools\InnoSetup\ISCC.exe"
 ```
 
+בלי `-Version` נלקחת הגרסה מ-`hmaps\__init__.py`; עם `-Version` היא נכתבת קודם (`tools\set_version.py`) גם ל-`src-tauri\tauri.conf.json` ול-`Cargo.toml`, כך שהשרת, החלון והמתקין מציגים אותה גרסה.
+Without `-Version` the version comes from `hmaps\__init__.py`; a given version is first written into it,
+`tauri.conf.json` and `Cargo.toml` (`tools\set_version.py`) – one version everywhere.
+
+### עדכון אוטומטי / Silent self-update
+התוכנה המותקנת מעדכנת את עצמה (עדכונים ← "עדכון התוכנה", `hmaps/api/appupdate.py`): היא מורידה את המתקין של הגרסה האחרונה, בודקת SHA-256 מול `app-manifest.json` ומריצה:
+The installed program updates itself: it downloads the newest installer, checks it against `app-manifest.json` and runs
+
+```
+HebrewMaps-Setup-1.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /NOCANCEL /LOG=<file> /AUTOUPDATE=1
+```
+
+‏`PrepareToInstall` סוגר את החלון ואת השרת, ו-`/AUTOUPDATE=1` (`{param:AUTOUPDATE}`) פותח את התוכנה מחדש בסוף. `data\` לא נדרס: קובצי נתונים מבנייה מקומית מסומנים `onlyifdoesntexist`.
+`PrepareToInstall` closes the window and the server; `/AUTOUPDATE=1` starts the program again at the end. `data\` is never overwritten.
+
 ---
 
 ## מה כלול במתקין / What is included in the installer

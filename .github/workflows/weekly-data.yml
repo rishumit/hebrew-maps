@@ -12,12 +12,21 @@ name: Weekly data release
 #
 # Release layout (see hmaps/core/components.py and docs/12-operations.md):
 #   data-YYYY-MM-DD   hmaps-<component>-<YYYYMMDD>.zip for every component built in this run + manifest.json
+#                     + hmaps-<component>-<YYYYMMDD>.files.json: {path: [size, sha256]} of the package
+#                       (the base of next week's image delta – the old 1 GB package is never re-downloaded)
+#                     + hmaps-<component>-<to>-from-<from>.delta.zip: delta packages from up to 6 earlier
+#                       versions (hmaps/core/delta.py: changed images only / zstd binary patch of maps.db,
+#                       tiles, transit.npz); skipped – with a notice – when not worth it (≥ 60 % of the full
+#                       package), the old release is gone, the runner disk is short or the time budget is used
 #                     + HebrewMaps-Update-YYYY-MM-DD.zip: the offline update file (every component, also the
-#                     unchanged ones, in one ZIP for a USB stick; split into -partN files above ~2 GB)
+#                     unchanged ones, in one ZIP for a USB stick; split into -partN files above ~2 GB; full
+#                     packages only, no deltas)
 #   data-latest       rolling pointer release: the newest manifest.json + the offline update file under
 #                     a stable name (HebrewMaps-Update.zip) for the download site
 # manifest.json always lists all components; one that was not rebuilt (terrain most weeks, or a
 # job that failed) keeps pointing at the asset of an earlier dated release ("status": "unchanged").
+# Per component it also lists "deltas" (this run's + earlier ones still within the 6-week retention,
+# so a client can chain them) and "history" (the earlier versions deltas are built from).
 #
 # Carried over from the former data.yml / data-modular.yml / build-*.yml workflows:
 #   * the OSM PBF is downloaded once per run with wget retries (5 tries, 120 s timeout), checked
@@ -445,7 +454,7 @@ jobs:
     # publish whatever was built, even if some component failed (it keeps its previous version)
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.any == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     permissions:
       contents: write
     env:
@@ -475,6 +484,19 @@ jobs:
       - name: Verify data packages
         run: python tools/release.py verify dist/*.zip --allow-empty --min-pois 10000
 
+      # file lists + delta packages from the previous versions (an optimisation: on any failure the
+      # clients simply download the full packages, so this step may fail without failing the run).
+      # Binary deltas download the old package one at a time (deleted right after); ~1.8 GB RAM and
+      # ~80 s per maps.db delta at zstd level 19.
+      - name: Delta packages
+        continue-on-error: true
+        timeout-minutes: 70
+        run: |
+          df -h .
+          python tools/release.py deltas --dist dist --previous prev/manifest.json \
+            --version "$VERSION" --date "$DATE" --keep 6 --max-minutes 50
+          ls -la dist
+
       - name: Write manifest.json + release notes
         id: manifest
         run: |
@@ -485,7 +507,7 @@ jobs:
         if: steps.manifest.outputs.new != 'none'
         run: |
           shopt -s nullglob
-          files=(dist/*.zip dist/manifest.json)
+          files=(dist/*.zip dist/*.files.json dist/manifest.json)
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
             gh release edit "$TAG" --notes-file notes.md

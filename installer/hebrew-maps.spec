@@ -88,6 +88,9 @@ a = Analysis(
         *collect_submodules('numpy._core', filter=lambda m: '.tests' not in m),
         # sqlite3 is stdlib but occasionally missed on Windows builds
         '_sqlite3',
+        # delta updates (hmaps/core/delta.py imports it lazily): binary patches of maps.db / tiles
+        'zstandard',
+        'zstandard.backend_c',
         # Pillow
         'PIL._imaging',
         'PIL.Image',

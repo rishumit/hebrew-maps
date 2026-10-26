@@ -8,7 +8,9 @@ newest manifest (see :mod:`hmaps.core.components` for the layout).
     GET  /api/updates[?refresh=1]     installed vs. available version of every component
     POST /api/updates/{component}     download + verify + install in the background
                                       ({component} = maps | basemap | … | all)
-    GET  /api/updates/status          progress of the background jobs
+    GET  /api/updates/status          progress of the background jobs (+ "app": the program update)
+    GET  /api/updates/app             installed vs. newest program version (appupdate.py)
+    POST /api/updates/app             download + verify + start the program installer
 
 and the command line (also for a weekly Windows scheduled task, see
 ``update-online-windows.cmd``)::
@@ -17,6 +19,7 @@ and the command line (also for a weekly Windows scheduled task, see
     python -m hmaps update                       # install every available update
     python -m hmaps update --component transit   # only one component (repeatable)
     python -m hmaps update --bundle E:\\HebrewMaps-Update-2026-10-22.zip   # offline update file
+    python -m hmaps update --app [--check]       # the program itself (see appupdate.py)
 
 Offline update file (for computers without internet): every weekly release also
 carries ``HebrewMaps-Update-<date>.zip`` – manifest.json plus the component ZIPs
@@ -24,6 +27,15 @@ carries ``HebrewMaps-Update-<date>.zip`` – manifest.json plus the component ZI
 from the "עדכונים" page ("עדכון מקובץ", ``POST /api/updates/offline`` with the
 file as the request body) or with ``--bundle``; every component inside is
 verified against the SHA-256 of that manifest exactly like an online download.
+The offline file always holds full packages (no deltas).
+
+Delta packages: a manifest entry may list ``deltas`` (``{from, to, file, size, sha256,
+kind}``) – small packages that turn an installed version into a newer one (changed images
+only, or a zstd binary patch of maps.db / the tile sets, see :mod:`hmaps.core.delta`). The
+cheapest chain from the installed version is downloaded when it is under 60 % of the full
+package; the result is verified file by file and swapped exactly like a full package. Any
+problem (another base, a corrupt or missing delta) falls back to the full package.
+``HMAPS_UPDATES_DELTA=0`` / ``--no-delta`` turns deltas off.
 
 Robustness: the manifest is read from a plain release download URL (no GitHub
 API rate limit), with the REST API as a fallback; downloads resume with HTTP
@@ -62,7 +74,7 @@ from pathlib import Path, PurePosixPath
 
 from .. import __version__
 from ..core import components as catalog
-from ..core import db
+from ..core import db, delta
 
 log = logging.getLogger("hmaps.updates")
 
@@ -123,29 +135,55 @@ def _local_path(url: str) -> Path | None:
     return None
 
 
-def _open(url: str, headers: dict | None = None, timeout: float = 30):
-    """urlopen with a User-Agent, falling back to an unverified TLS context behind content filters."""
+class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows redirects only to URLs that *allow* accepts (the app installer: GitHub hosts only)."""
+
+    def __init__(self, allow):
+        self.allow = allow
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not self.allow(newurl):
+            raise UpdateError("bad_url", "שרת העדכונים הפנה לכתובת לא מורשית – ההורדה בוטלה.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _urlopen(req, timeout: float, context: ssl.SSLContext | None, allow):
+    if allow is None:
+        return urllib.request.urlopen(req, timeout=timeout, context=context) if context else \
+            urllib.request.urlopen(req, timeout=timeout)
+    handlers = [_CheckedRedirects(allow)]
+    if context is not None:
+        handlers.append(urllib.request.HTTPSHandler(context=context))
+    return urllib.request.build_opener(*handlers).open(req, timeout=timeout)
+
+
+def _open(url: str, headers: dict | None = None, timeout: float = 30, allow=None):
+    """urlopen with a User-Agent, falling back to an unverified TLS context behind content filters.
+
+    *allow*: optional ``url -> bool`` checked for the URL and every redirect."""
     global _insecure
+    if allow is not None and not allow(url):
+        raise UpdateError("bad_url", "כתובת ההורדה אינה מורשית – ההורדה בוטלה.")
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     if _insecure and url.startswith("https:"):
-        return urllib.request.urlopen(req, timeout=timeout, context=_insecure_ctx())
+        return _urlopen(req, timeout, _insecure_ctx(), allow)
     try:
-        return urllib.request.urlopen(req, timeout=timeout)
+        return _urlopen(req, timeout, None, allow)
     except urllib.error.URLError as e:
         if not (url.startswith("https:") and _is_cert_error(e)):
             raise
         log.warning("TLS certificate rejected (%s) – probably a filtering proxy; continuing without "
                     "certificate verification, downloads are verified by SHA-256", getattr(e, "reason", e))
         _insecure = True
-        return urllib.request.urlopen(req, timeout=timeout, context=_insecure_ctx())
+        return _urlopen(req, timeout, _insecure_ctx(), allow)
 
 
-def _read_json(url: str, timeout: float = 20) -> dict | list:
+def _read_json(url: str, timeout: float = 20, allow=None, headers: dict | None = None) -> dict | list:
     local = _local_path(url)
     if local is not None:
         return json.loads(local.read_text(encoding="utf-8"))
-    with _open(url, {"Accept": "application/json"}, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    with _open(url, {"Accept": "application/json", **(headers or {})}, timeout=timeout, allow=allow) as r:
+        return json.loads(r.read(4 * 1024 * 1024).decode("utf-8"))
 
 
 def _http_error(e: Exception) -> UpdateError:
@@ -370,17 +408,24 @@ def check(force: bool = False, data: Path | None = None) -> dict:
                                                "release", "description_he")}
         upd = needs_update(inst[comp.id], avail)
         ok = compatible(avail) if avail else True
+        chain = delta_plan(comp.id, inst[comp.id], (manifest or {}).get("components", {}).get(comp.id)) \
+            if upd and ok else None
+        if avail is not None:
+            avail["delta"] = {"size": sum(int(d["size"]) for d in chain), "steps": len(chain)} if chain else None
+            avail["download_size"] = avail["delta"]["size"] if chain else avail.get("size")
         if upd and ok:
             n += 1
-            total += int((avail or {}).get("size") or 0)
+            total += int((avail or {}).get("download_size") or 0)
         items.append({
             "id": comp.id, "name_he": comp.name_he,
             "description_he": (avail or {}).get("description_he") or comp.description_he,
             "installed": inst[comp.id], "available": avail,
             "update_available": upd and ok, "compatible": ok, "job": jobs.get(comp.id),
         })
+    from . import appupdate
     return {
-        "app_version": __version__, "online": manifest is not None, "error": error,
+        "app_version": __version__, "app": appupdate.check_app(force=force),
+        "online": manifest is not None, "error": error,
         "release": (manifest or {}).get("release") or st.get("release"),
         "generated": (manifest or {}).get("generated"),
         "checked_at": now if manifest is not None else st.get("last_check"),
@@ -406,6 +451,9 @@ class Job:
     started: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"))
     finished: str | None = None
     source: str = "online"  # online | file (an offline update file)
+    #: a delta (chain) is downloaded instead of the full package of full_size bytes
+    delta: bool = False
+    full_size: int = 0
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -421,10 +469,14 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def download(url: str, dest: Path, size: int | None = None, progress=None) -> Path:
-    """Download *url* to *dest*, resuming ``dest.part`` with HTTP Range; retried with back-off."""
+def download(url: str, dest: Path, size: int | None = None, progress=None, allow=None) -> Path:
+    """Download *url* to *dest*, resuming ``dest.part`` with HTTP Range; retried with back-off.
+
+    *allow*: optional ``url -> bool`` every URL and redirect must pass (the app installer)."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
+    if allow is not None and not allow(url):
+        raise UpdateError("bad_url", "כתובת ההורדה אינה מורשית – ההורדה בוטלה.")
     local = _local_path(url)
     if local is not None:  # a local file (tests, CI, a copied release folder)
         if not local.exists():
@@ -443,7 +495,7 @@ def download(url: str, dest: Path, size: int | None = None, progress=None) -> Pa
         if size and have == size:
             break
         try:
-            with _open(url, {"Range": f"bytes={have}-"} if have else None, timeout=60) as r:
+            with _open(url, {"Range": f"bytes={have}-"} if have else None, timeout=60, allow=allow) as r:
                 status = getattr(r, "status", None) or 200
                 if have and status != 206:  # server ignored the range: start over
                     have = 0
@@ -660,19 +712,11 @@ class _Lock:
             pass
 
 
-def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | None = None,
-                source: str | None = None) -> dict:
-    """Extract + swap a component ZIP into *data* and record it in components.json."""
-    work = data / "updates"
-    staging = extract(component_id, zip_path, work / "staging" / component_id)
-    try:
-        _swap(component_id, staging, data)
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-    entry = entry or {}
+def _record(component_id: str, data: Path, entry: dict, source: str, fallback_file: str,
+            via: str = "full") -> dict:
     rec = {"version": entry.get("version"), "date": entry.get("date"), "release": entry.get("release"),
-           "file": entry.get("file") or zip_path.name, "sha256": entry.get("sha256"), "size": entry.get("size"),
-           "source": source or ("online" if entry else "file"),
+           "file": entry.get("file") or fallback_file, "sha256": entry.get("sha256"), "size": entry.get("size"),
+           "source": source, "via": via,
            "installed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if not rec["version"]:
         rec.update({k: v for k, v in _stamp(time.time()).items() if k != "source"})
@@ -681,13 +725,160 @@ def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | Non
         st["components"][component_id] = rec
         save_state(data, st)
     notify_server(component_id)
-    log.info("installed %s %s", component_id, rec["version"])
+    log.info("installed %s %s (%s)", component_id, rec["version"], via)
     return rec
+
+
+def install_zip(component_id: str, zip_path: Path, data: Path, entry: dict | None = None,
+                source: str | None = None) -> dict:
+    """Extract + swap a component ZIP into *data* and record it in components.json."""
+    work = data / "updates"
+    staging = extract(component_id, zip_path, work / "staging" / component_id)
+    try:
+        _keep_base(component_id, staging, data)
+        _swap(component_id, staging, data)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return _record(component_id, data, entry or {}, source or ("online" if entry else "file"), zip_path.name)
+
+
+# --------------------------------------------------------------------------- delta packages
+
+def base_dir(data: Path) -> Path:
+    """Pristine copies of installed files that the app modifies afterwards (the base of binary deltas)."""
+    return data / "updates" / "base"
+
+
+def _keep_base(component_id: str, staging: Path, data: Path) -> None:
+    """maps.db gets the local prayer times written into it after install – keep the file as released,
+    so the next week's binary delta has its base (~180 MB; skipped when the disk is nearly full)."""
+    if component_id != "maps":
+        return
+    src = staging / "maps.db"
+    dst = base_dir(data) / "maps" / "maps.db"
+    try:
+        if not src.is_file():
+            return
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if shutil.disk_usage(dst.parent).free < src.stat().st_size * 3:
+            dst.unlink(missing_ok=True)
+            return
+        tmp = dst.with_name("maps.db.tmp")
+        shutil.copyfile(src, tmp)
+        os.replace(tmp, dst)
+    except OSError:
+        log.warning("could not keep the base copy of maps.db – the next update downloads the full package")
+        try:
+            dst.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def base_file(component_id: str, data: Path, path: str) -> Path | None:
+    """The installed file that a package member *path* replaced (the base of a delta)."""
+    p = PurePosixPath(path)
+    if component_id == "maps":
+        if path == "maps.db":
+            pristine = base_dir(data) / "maps" / "maps.db"
+            return pristine if pristine.is_file() else db.resolve(data / "maps.db")
+        return data.joinpath(*p.parts)  # routing/…, reports/…
+    if component_id in ("basemap", "terrain") and path.endswith(".mbtiles") and len(p.parts) == 1:
+        return _newest(data / "tiles", p.stem)
+    if component_id == "transit":
+        return db.resolve(data / "transit" / "transit.npz") if path == "transit.npz" else data / "transit" / path
+    if component_id == "zmanim":
+        from ..etl import zmanim
+        return zmanim.snapshot_path(data)
+    return None
+
+
+def delta_plan(component_id: str, inst: dict | None, entry: dict | None) -> list[dict] | None:
+    """The deltas to download instead of the full package (None: full package)."""
+    if os.environ.get("HMAPS_UPDATES_DELTA", "1") == "0" or not inst or not entry:
+        return None
+    if not inst.get("version") or inst.get("source") == "local" or not entry.get("deltas"):
+        return None
+    return delta.plan(str(inst["version"]), str(entry.get("version")), entry["deltas"],
+                      int(entry.get("size") or 0) or None)
+
+
+def _install_delta(component_id: str, chain: list[dict], manifest: dict, entry: dict, data: Path, job: Job,
+                   on_progress=None) -> dict:
+    """Download + verify + apply a chain of deltas, then swap like a full package. Raises DeltaError
+    (or UpdateError of a download) – the caller then falls back to the full package."""
+    comp = catalog.get(component_id)
+    work = data / "updates"
+    is_dir = component_id in delta.DIR_COMPONENTS
+    total = sum(int(d["size"]) for d in chain)
+    job.delta, job.full_size, job.total, job.downloaded = True, int(entry.get("size") or 0), total, 0
+    files: list[Path] = []
+    stagings: list[Path] = []
+    try:
+        offset = 0
+        for d in chain:  # download (and verify) every step first: no work is wasted on a missing one
+            dest = work / "downloads" / d["file"]
+            job.state = "downloading"
+
+            def progress(got: int, _t: int, _o=offset) -> None:
+                job.downloaded = _o + got
+                if on_progress:
+                    on_progress(job.downloaded, total)
+
+            download(_asset_url(manifest, d), dest, int(d["size"]), progress)
+            files.append(dest)
+            job.state = "verifying"
+            if dest.stat().st_size != int(d["size"]) or (d.get("sha256") and sha256_file(dest) != d["sha256"].lower()):
+                dest.unlink(missing_ok=True)
+                raise delta.DeltaError("checksum", f"{d['file']}: size / SHA-256 mismatch")
+            offset += int(d["size"])
+        job.state = "installing"
+        deleted: set[str] = set()
+        staging = work / "staging" / f"{component_id}-delta"
+        shutil.rmtree(staging, ignore_errors=True)
+        stagings.append(staging)
+        prev: Path | None = None
+        for i, (d, f) in enumerate(zip(chain, files)):
+            if not is_dir and i:
+                prev, staging = staging, work / "staging" / f"{component_id}-delta{i}"
+                shutil.rmtree(staging, ignore_errors=True)
+                stagings.append(staging)
+            base = (lambda path, _p=prev: _p.joinpath(*PurePosixPath(path).parts)) if prev is not None else \
+                (lambda path: base_file(component_id, data, path))
+            desc = delta.apply(component_id, f, staging, base, expect_from=d.get("from"), expect_to=d.get("to"))
+            for op in desc.get("files") or []:
+                if not catalog.member_allowed(comp, op["path"]):
+                    raise delta.DeltaError("bad_delta", f"{op['path']}: not part of the component")
+                deleted.discard(op["path"])
+            deleted |= {p for p in desc.get("deleted") or [] if catalog.member_allowed(comp, p)}
+            if prev is not None:
+                shutil.rmtree(prev, ignore_errors=True)
+        if not is_dir:
+            missing = [r for r in comp.required if not (staging / r).is_file()]
+            if missing:
+                raise delta.DeltaError("bad_delta", "missing after applying: " + ", ".join(missing))
+        _keep_base(component_id, staging, data)
+        _swap(component_id, staging, data)
+        if is_dir:  # images removed from the release (never the user's own files: only listed paths)
+            for p in sorted(deleted):
+                try:
+                    data.joinpath(*PurePosixPath(p).parts).unlink(missing_ok=True)
+                except OSError:
+                    pass
+    finally:
+        for st in stagings:
+            shutil.rmtree(st, ignore_errors=True)
+        for f in files:
+            f.unlink(missing_ok=True)
+    return _record(component_id, data, {**entry, "release": entry.get("release") or manifest.get("release")},
+                   "online", entry.get("file") or "", via="delta")
 
 
 def install(component_id: str, data: Path | None = None, job: Job | None = None, force: bool = False,
             manifest: dict | None = None, on_progress=None) -> dict:
-    """Download, verify (size + SHA-256) and install one component from the newest manifest."""
+    """Download, verify (size + SHA-256) and install one component from the newest manifest.
+
+    Takes a delta chain when one leads from the installed version and is much smaller (see
+    :mod:`hmaps.core.delta`); any problem with it falls back to the full package."""
     data = data or data_dir()
     job = job or Job(component_id)
     catalog.get(component_id)
@@ -698,7 +889,8 @@ def install(component_id: str, data: Path | None = None, job: Job | None = None,
     if not compatible(entry):
         raise UpdateError("app_too_old", f"העדכון דורש גרסה {entry.get('min_app_version')} של התוכנה או חדשה יותר. "
                                          "התקינו קודם את הגרסה החדשה של מפות בעברית.")
-    if not force and not needs_update(installed(data).get(component_id), entry):
+    inst = installed(data).get(component_id)
+    if not force and not needs_update(inst, entry):
         job.state = "done"
         return load_state(data)["components"].get(component_id) or {}
     job.version = entry.get("version")
@@ -707,6 +899,14 @@ def install(component_id: str, data: Path | None = None, job: Job | None = None,
         free = shutil.disk_usage(data if data.exists() else data.parent).free
         if job.total and free < job.total * 3:
             raise UpdateError("disk_full", "אין מספיק מקום פנוי בדיסק להורדה ולהתקנה של העדכון.")
+        chain = None if force else delta_plan(component_id, inst, entry)
+        if chain:
+            try:
+                return _install_delta(component_id, chain, manifest, entry, data, job, on_progress)
+            except (delta.DeltaError, UpdateError) as e:
+                log.warning("delta update of %s failed (%s: %s) – downloading the full package", component_id,
+                            getattr(e, "code", ""), getattr(e, "message", e))
+            job.delta, job.downloaded, job.total = False, 0, int(entry.get("size") or 0)
         dest = data / "updates" / "downloads" / entry["file"]
         job.state = "downloading"
 
@@ -851,9 +1051,10 @@ _worker: threading.Thread | None = None
 
 
 def status() -> dict:
+    from . import appupdate
     with _jobs_lock:
         jobs = {cid: j.as_dict() for cid, j in _jobs.items()}
-    return {"busy": any(j["state"] in ACTIVE for j in jobs.values()), "jobs": jobs}
+    return {"busy": any(j["state"] in ACTIVE for j in jobs.values()), "jobs": jobs, "app": appupdate.job_status()}
 
 
 def _run_queue(data: Path) -> None:
@@ -1005,9 +1206,37 @@ def _routes():
             return err(404, "unknown_component", "רכיב עדכון לא מוכר.")
         return JSONResponse({"jobs": start(ids, force=force)}, status_code=202)
 
+    async def app_check(req: Request):
+        from . import appupdate
+        force = req.query_params.get("refresh") in ("1", "true")
+        return JSONResponse(await run_in_threadpool(appupdate.check_app, force), headers={"Cache-Control": "no-store"})
+
+    async def app_install(req: Request):
+        """The program itself: download + verify + start the installer (appupdate.py)."""
+        from . import appupdate
+        if not _allowed(req):
+            return err(403, "forbidden", "עדכון התוכנה אפשרי רק מהמחשב שעליו היא רצה.")
+        if req.headers.get("x-hmaps-update") != "1":
+            return err(400, "missing_header", "בקשה לא תקינה.")
+        ok, why = appupdate.can_self_update()
+        if not ok:
+            return err(400, "unsupported", why or "עדכון אוטומטי אינו זמין כאן.")
+        if status()["busy"]:
+            return err(409, "busy", "עדכון נתונים עדיין רץ. המתינו שיסתיים ונסו שוב.")
+        info = await run_in_threadpool(appupdate.check_app, True)
+        if info["error"]:
+            return err(502, info["error"]["code"], info["error"]["message"])
+        force = req.query_params.get("force") in ("1", "true")
+        if not info["update_available"] and not force:
+            return JSONResponse({"job": None, "message": "התוכנה כבר בגרסה העדכנית."})
+        return JSONResponse({"job": appupdate.start(force=force), "version": info["available"]["version"]},
+                            status_code=202)
+
     return [
         Route("/api/updates", updates_check),
         Route("/api/updates/status", updates_status),
+        Route("/api/updates/app", app_check),  # before /api/updates/{component}
+        Route("/api/updates/app", app_install, methods=["POST"]),
         Route("/api/updates/offline", updates_offline, methods=["POST"]),
         Route("/api/updates/{component}", updates_install, methods=["POST"]),
     ]
@@ -1040,10 +1269,19 @@ def cli(argv: list[str] | None = None) -> int:
     ap.add_argument("--zip", help="install a local component ZIP (requires exactly one --component)")
     ap.add_argument("--bundle", action="append", metavar="FILE",
                     help=f"install from an offline update file ({BUNDLE_PREFIX}-<date>.zip, repeatable for split files)")
+    ap.add_argument("--app", action="store_true",
+                    help="update the program itself (Windows installer from the newest v* release); with --check: "
+                         "only show the versions")
+    ap.add_argument("--no-delta", action="store_true", help="always download full packages, never deltas")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     if args.manifest:
         os.environ["HMAPS_UPDATES_MANIFEST"] = args.manifest
+    if args.no_delta:
+        os.environ["HMAPS_UPDATES_DELTA"] = "0"
+    if args.app:
+        from . import appupdate
+        return appupdate.cli(args.check, args.force)
     data = Path(args.data) if args.data else data_dir()
     if args.zip:
         if not args.component or len(args.component) != 1:
@@ -1058,6 +1296,10 @@ def cli(argv: list[str] | None = None) -> int:
     if info["error"]:
         print(f"שגיאה: {info['error']['message']}")
         return 2
+    app = info.get("app") or {}
+    if app.get("update_available"):
+        print(f"גרסה חדשה של התוכנה: {app['available']['version']} (מותקנת {app['installed']}) – "
+              "לעדכון: python -m hmaps update --app")
     print(f"גרסת הנתונים המקוונת: {info['release']}")
     for c in info["components"]:
         inst = (c["installed"] or {}).get("date") or "לא מותקן"
@@ -1068,8 +1310,11 @@ def cli(argv: list[str] | None = None) -> int:
             mark = "דורש גרסה חדשה של התוכנה"
         else:
             mark = "עדכון זמין" if c["update_available"] else "מעודכן"
+        size = _fmt_size(av.get('size'))
+        if c["update_available"] and av.get("delta"):
+            mark += f" (עדכון חלקי: {_fmt_size(av['delta']['size'])} במקום {size})"
         print(f"  {c['id']:8} {c['name_he']:24} מותקן: {inst:10}  זמין: {av.get('date') or '—':10} "
-              f"{_fmt_size(av.get('size')):>9}  {mark}")
+              f"{size:>9}  {mark}")
     if args.check:
         return 0
     wanted = args.component or [c["id"] for c in info["components"] if c["update_available"]]
@@ -1090,7 +1335,8 @@ def cli(argv: list[str] | None = None) -> int:
         try:
             print(f"מעדכן {catalog.get(cid).name_he} …", flush=True)
             rec = install(cid, data, job, force=args.force, on_progress=progress)
-            print(f"  ✓ {catalog.get(cid).name_he}: {rec.get('date') or rec.get('version') or 'מעודכן'}")
+            how = " (עדכון חלקי)" if rec.get("via") == "delta" else ""
+            print(f"  ✓ {catalog.get(cid).name_he}: {rec.get('date') or rec.get('version') or 'מעודכן'}{how}")
         except UpdateError as e:
             failed += 1
             print(f"  ✗ {catalog.get(cid).name_he}: {e.message}")

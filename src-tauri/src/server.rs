@@ -202,6 +202,9 @@ mod win {
     //! Windows Job Object: the server is assigned to a job with KILL_ON_JOB_CLOSE. The job
     //! handle is owned by this process only, so when this process exits – normally, by crash
     //! or by Task Manager – Windows closes the handle and kills the server and its children.
+    //! BREAKAWAY_OK lets exactly one kind of child leave the job: the installer of an in-app
+    //! update, which the server starts with CREATE_BREAKAWAY_FROM_JOB (hmaps/api/appupdate.py)
+    //! and which closes this window – it must not die with it. Ordinary children stay in the job.
 
     use std::os::windows::io::AsRawHandle;
     use std::process::Child;
@@ -210,7 +213,7 @@ mod win {
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
         SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
 
     pub struct Job(HANDLE);
@@ -228,7 +231,8 @@ mod win {
                 }
                 let job = Job(h);
                 let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                info.BasicLimitInformation.LimitFlags =
+                    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
                 let ok = SetInformationJobObject(
                     job.0,
                     JobObjectExtendedLimitInformation,

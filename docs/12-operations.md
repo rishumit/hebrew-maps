@@ -48,8 +48,8 @@ docker run --rm -v hebrew-maps_hmaps-data:/data -v "%cd%":/backup alpine tar xzf
 | איפה | איך |
 |------|-----|
 | בממשק | תפריט ← **עדכונים** ("עדכן" לחבילה / "עדכן הכול"; בדיקה שבועית אוטומטית עם הודעה קטנה – אפשר לכבות בדף) |
-| Windows | `update-online-windows.cmd` (‏`/check` – רק בדיקה, ‏`/quiet` – ליומן `data\reports\update-log.txt`) |
-| כל מערכת | `python -m hmaps update [--check] [--component maps] [--force]`, או קובץ ZIP מקומי: `--component transit --zip hmaps-transit-20261022.zip` |
+| Windows | `update-online-windows.cmd` (‏`/check` – רק בדיקה, ‏`/quiet` – ליומן `data\reports\update-log.txt`, ‏`/app` – עדכון התוכנה עצמה) |
+| כל מערכת | `python -m hmaps update [--check] [--component maps] [--force] [--no-delta]`, או קובץ ZIP מקומי: `--component transit --zip hmaps-transit-20261022.zip`; התוכנה: `python -m hmaps update --app [--check]` |
 | Docker | `docker compose exec api python -m hmaps update` (בבקשות מהדפדפן ה-API ב-Docker לא מזהה את המחשב כמקומי; ‏`HMAPS_UPDATES=any` מתיר, רק כשהשרת לא חשוף לרשת) |
 | API | ‏`GET /api/updates`, ‏`POST /api/updates/{component|all}` (רק מ-localhost, עם הכותרת `X-HMaps-Update: 1`), ‏`GET /api/updates/status` – ראו [api.md](api.md#עדכוני-נתונים) |
 
@@ -63,14 +63,62 @@ schtasks /Create /F /SC WEEKLY /D FRI /ST 06:10 /TN "HebrewMaps online update" /
 **איך זה עובד** (`hmaps/api/updates.py`):
 1. קריאת `manifest.json` מ-`https://github.com/rishumit/hebrew-maps/releases/download/data-latest/manifest.json` (הורדה רגילה – בלי מגבלת הקצב של ה-API). אם הקובץ לא נמצא, נעשה ניסיון דרך GitHub REST API; כשהמגבלה של 60 בקשות בשעה מתמלאת מוצגת הודעה עם השעה שבה אפשר לנסות שוב.
 2. השוואה לגרסאות המותקנות ב-`data/components.json`. נתונים שנבנו מקומית (בלי רשומה) מזוהים לפי תאריך הבנייה, וגרסה מקומית חדשה יותר לא מוחלפת בישנה. רכיב עם `min_app_version` גבוה מגרסת התוכנה מסומן "דורש גרסה חדשה".
-3. הורדה ל-`data/updates/downloads/` עם המשך הורדה (HTTP Range), ‏4 ניסיונות והמתנה הולכת וגדלה, ובדיקת גודל ו-SHA-256. קובץ שלא עבר את הבדיקה נמחק ולא מותקן.
+3. הורדה ל-`data/updates/downloads/` עם המשך הורדה (HTTP Range), ‏4 ניסיונות והמתנה הולכת וגדלה, ובדיקת גודל ו-SHA-256. קובץ שלא עבר את הבדיקה נמחק ולא מותקן. כשיש **עדכון חלקי** (delta) מהגרסה המותקנת שקטן מ-60% מהחבילה המלאה, יורד הוא במקום החבילה (ראו [עדכונים חלקיים](#עדכונים-חלקיים-delta)).
 4. חילוץ ל-`data/updates/staging/<component>/` (רק קבצים שמתאימים למבנה הרכיב, בלי נתיבים חשודים), ואז החלפה אטומית:
    `maps.db` דרך `db.publish` ‏(`maps-<time>.db` + `maps.current`, וזמני התפילות המקומיים מוחלים מחדש על המאגר החדש), אריחים כ-`data/tiles/<name>-<time>.mbtiles` חדש (השרת מגיש את החדש ביותר), `transit.npz` דרך `transit.current`, תמונות מתווספות ל-`data/media/`, וזמני התפילות נשמרים ומוחלים על המאגר החי. לבסוף השרת טוען מחדש מיד (`reload()`), בלי הפעלה מחדש.
 5. נעילה (`data/updates/.lock`) מונעת מהשרת ומהמשימה המתוזמנת להתקין בו-זמנית.
 
 ברשת מסוננת (נטפרי וכו') Python לפעמים דוחה את תעודת האבטחה של הסינון. במקרה כזה, כמו ב-`tools/terrain.py`, הבקשה נשלחת שוב בלי אימות תעודה. זה בטוח, כי כל קובץ נבדק מול ה-SHA-256 שבמניפסט. אם הסינון חוסם את ההורדה, צריך לבקש לפתוח את `github.com` ואת `release-assets.githubusercontent.com` / `objects.githubusercontent.com`.
 
-משתני סביבה: `HMAPS_UPDATES_REPO` (ברירת מחדל `rishumit/hebrew-maps`), ‏`HMAPS_UPDATES_MANIFEST` (כתובת או נתיב מקומי, למשל למראה פנימית), ‏`HMAPS_UPDATES=local|any|off` (מי רשאי להתקין דרך ה-API; ברירת המחדל: רק המחשב המקומי).
+משתני סביבה: `HMAPS_UPDATES_REPO` (ברירת מחדל `rishumit/hebrew-maps`), ‏`HMAPS_UPDATES_MANIFEST` (כתובת או נתיב מקומי, למשל למראה פנימית), ‏`HMAPS_UPDATES=local|any|off` (מי רשאי להתקין דרך ה-API; ברירת המחדל: רק המחשב המקומי), ‏`HMAPS_UPDATES_DELTA=0` (בלי עדכונים חלקיים), ‏`HMAPS_APP_UPDATE=off` (בלי בדיקה ועדכון של התוכנה), ‏`HMAPS_APP_MANIFEST` (כתובת או נתיב של `app-manifest.json`).
+
+### עדכונים חלקיים (delta)
+כשמעט השתנה (למשל עשרות תמונות חדשות בחבילת תמונות של יותר מ-1GB, או אחוז מהמקומות ב-maps.db) לא מורידים את כל החבילה. מימוש: `hmaps/core/delta.py`, משותף ל-CI ולתוכנה.
+
+| סוג רכיב | איך נבנה העדכון החלקי | מה צריך הפרסום |
+|----------|------------------------|-----------------|
+| תיקייה (`media`) | רק תמונות שנוספו או השתנו + רשימת נתיבים שנמחקו (`kind: files`) | רק רשימת הקבצים של הגרסה הקודמת (`hmaps-media-<v>.files.json`: ‏`{path: [size, sha256]}`) – החבילה הישנה לא מורדת |
+| קבצים בודדים גדולים (`maps.db`, ‏`*.mbtiles`, ‏`transit.npz`, ‏`graph.npz`) | zstd "patch-from": הקובץ החדש נדחס כשהקובץ הישן משמש מילון (long-distance matching, חלון שמכסה את שני הקבצים) (`kind: zstd`); קבצים שלא השתנו – `keep`; קבצים קטנים – שלמים | החבילה הישנה מורדת בזמן הפרסום, אחת בכל פעם, ונמחקת מיד |
+| `zmanim` | אין (החבילה זעירה) | – |
+
+**למה zstd ולא השוואת בלוקים** (נמדד על הנתונים האמיתיים, ‏`maps-20261019.db` ‏177MB ו-`israel.mbtiles` ‏102MB):
+
+| שינוי | חבילה מלאה | zstd רמה 9 | zstd רמה 19 | בלוקים של 4KB (גיבוב) |
+|-------|-----------|------------|-------------|----------------------|
+| ‏maps.db: ‏1% מהמקומות שונו + 0.5% נוספו + VACUUM | 59.6MB | 1.25MB (6 שנ') | **0.13MB** (84 שנ', 1.8GB זיכרון) | 1.6MB |
+| ‏maps.db: ‏5% מהמקומות | 59.6MB | 1.45MB | **0.33MB** (82 שנ') | 4.2MB |
+| מפת בסיס של Planetiler: ‏3% מהאריחים שונו וכל מזהי האריחים זזו באחד | 95.5MB | 2.61MB | **2.57MB** (23 שנ', 1.5GB) | 71.6MB |
+
+השוואת בלוקים טובה רק כשהדפים לא זזים; ב-mbtiles המזהים זזים וכל דף משתנה מעט, ו-zstd מוצא את ההתאמות בכל מקרה. ההחלה אצל המשתמש מהירה וזולה: ‏0.8 שנ' ו-540MB זיכרון ל-maps.db (כולל SHA-256 של הבסיס ושל התוצאה), ‏0.4 שנ' ו-320MB למפת הבסיס. ברירת המחדל בפרסום: רמה 19 לקבצים עד 256MB, רמה 12 לגדולים יותר, ובלי delta בינארי לקבצים מעל 1.5GB. תלות חדשה: `zstandard` (ב-requirements.txt, ובחבילת ההתקנה). בלעדיה התוכנה פשוט מורידה חבילות מלאות.
+
+**אצל המשתמש** (`updates.install`):
+1. הגרסה המותקנת נלקחת מ-`components.json`. נתונים שנבנו מקומית (`source: local`) תמיד מקבלים חבילה מלאה.
+2. מבין ה-`deltas` במניפסט נבחרת השרשרת הזולה ביותר (Dijkstra לפי גודל, עד 4 צעדים) מהגרסה המותקנת לגרסה החדשה – ישירה או דרך גרסאות ביניים (‏v1→v2→v3) – ורק אם היא קטנה מ-60% מהחבילה המלאה. בממשק: "עדכון חלקי: X MB במקום Y MB".
+3. כל delta מורד (המשך הורדה, SHA-256 מול המניפסט), ומוחל לתיקיית staging: לכל קובץ בסיס נבדק קודם ה-SHA-256 שלו מול `base_sha256`, וכל קובץ שנוצר נבדק מול הגודל וה-SHA-256 שב-`delta.json`. ברכיב "שלם" ה-staging מכיל את כל הקבצים של הגרסה החדשה – בדיוק כמו אחרי חילוץ חבילה מלאה – וההחלפה האטומית זהה. בתמונות נמחקים רק נתיבים שהוסרו מהפרסום (לא קבצים של המשתמש).
+4. כל תקלה – בסיס אחר (נבנה מקומית/השתנה), delta פגום או שנמחק (404), חוסר זיכרון – מובילה להורדת החבילה המלאה, בלי לגעת בנתונים המותקנים.
+5. ‏`maps.db` משתנה אחרי ההתקנה (זמני התפילות נכתבים לתוכו), ולכן נשמר עותק כפי שפורסם ב-`data/updates/base/maps/maps.db` (‏~180MB; לא נשמר כשהדיסק כמעט מלא) – הוא הבסיס של העדכון החלקי הבא.
+
+קובץ העדכון ללא אינטרנט מכיל תמיד חבילות מלאות בלבד.
+
+### עדכון התוכנה עצמה
+גרסת התוכנה אחת בכל מקום: `hmaps/__init__.py` (‏`/api/meta`, ‏`/api/health`), ‏`src-tauri/tauri.conf.json` ו-`Cargo.toml` (קובץ ה-exe של החלון) ו-`MyAppVersion` של Inno Setup. ‏`tools/set_version.py 1.2.0` כותב אותה לכולם (`--check` בודק שהם תואמים), ו-`installer.yml` מריץ אותו עם הגרסה של התג לפני הבנייה.
+
+**פרסום גרסה:** ‏`git tag -a v1.2.0 -m "<הערות בעברית>" && git push origin v1.2.0` (או קובץ `docs/release-notes/v1.2.0.md`). ‏`installer.yml` בונה ומפרסם בגרסה `v1.2.0` (מסומנת Latest):
+
+| קובץ | תוכן |
+|------|------|
+| `HebrewMaps-Setup-1.2.0.exe` | תוכנת ההתקנה |
+| `HebrewMaps-Setup.exe` | אותו קובץ בשם קבוע (הקישור באתר) |
+| `app-manifest.json` | ‏`{"version", "tag", "date", "file", "size", "sha256", "url", "notes_he", "min_data_version"?}` – ‏`tools/release.py app-manifest` |
+
+**בתוכנה** (`hmaps/api/appupdate.py`): עדכונים ← כרטיס "גרסת התוכנה" (גם ההודעה השבועית מזכירה גרסה חדשה), או `update-online-windows.cmd /app` / ‏`python -m hmaps update --app`:
+1. קריאת `https://github.com/rishumit/hebrew-maps/releases/latest/download/app-manifest.json` (הורדה רגילה, בלי מגבלת הקצב של ה-API), ואם נכשל – ‏`https://api.github.com/repos/rishumit/hebrew-maps/releases/latest` (ה-`app-manifest.json` שבו, או ה-`digest` ש-GitHub מפרסם לקובץ ההתקנה). בלי SHA-256 – אין התקנה. השוואת גרסאות לפי semver.
+2. הורדה ל-`%TEMP%\HebrewMaps-update\` עם המשך הורדה, רק מ-`github.com` / ‏`objects.githubusercontent.com` / ‏`release-assets.githubusercontent.com` (נבדק בכל הפניה), ובדיקת גודל ו-SHA-256.
+3. הפעלה מנותקת – מחוץ ל-Job Object של החלון (`CREATE_BREAKAWAY_FROM_JOB`, שהחלון מתיר עם `JOB_OBJECT_LIMIT_BREAKAWAY_OK`; ואם לא – דרך מתזמן המשימות):
+   `HebrewMaps-Setup-1.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS /NOCANCEL /LOG=%TEMP%\HebrewMaps-update\install-1.2.0.log /AUTOUPDATE=1`
+4. תוכנת ההתקנה סוגרת את החלון (קודם בבקשה, אחר כך בכוח) ואת השרת, מחליפה את קובצי התוכנה ופותחת את התוכנה מחדש (רשומות `[Run]` עם `Check: IsAutoUpdate`). ‏`{app}\data` לא נמחק ולא נדרס: קובצי נתונים שמגיעים עם בנייה מקומית מועתקים רק אם אינם קיימים (`onlyifdoesntexist`). אין `[InstallDelete]`.
+
+עדכון אוטומטי של התוכנה זמין רק בתוכנה המותקנת ב-Windows; בהרצה מקוד המקור הדף מפנה לאתר ההורדה. היומן של ההתקנה: `%TEMP%\HebrewMaps-update\install-<גרסה>.log`.
 
 ### עדכון במחשב בלי אינטרנט (קובץ עדכון)
 כל ריצה שבועית מפרסמת גם **קובץ עדכון** אחד עם כל הרכיבים: ‏`HebrewMaps-Update-YYYY-MM-DD.zip` בגרסה המתוארכת, ואותו קובץ בשם קבוע `HebrewMaps-Update.zip` ב-`data-latest` (הקישור באתר: `download.html#offline`). מעל כ-2GB (מגבלת GitHub לקובץ) הוא מתחלק ל-`-part1`, ‏`-part2`… וכל חלק עומד בפני עצמו.
@@ -100,7 +148,7 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 | transit | ‏`hmaps.etl gtfs --force` | – |
 | zmanim | מתחיל מהתמונה הקודמת (שמות בתי כנסת), ‏`hmaps.etl zmanim --fetch` | – |
 | media | ‏`tools/media.py` על ה-maps.db של הריצה (או של הגרסה הקודמת אם לא נבנה) | התמונות שכבר הורדו |
-| publish | אימות, ‏`manifest.json`, יצירת הגרסה המתוארכת, עדכון `data-latest`, קובץ העדכון ללא אינטרנט, ומחיקת גרסאות ישנות | – |
+| publish | אימות, רשימות קבצים ועדכונים חלקיים (`tools/release.py deltas`), ‏`manifest.json`, יצירת הגרסה המתוארכת, עדכון `data-latest`, קובץ העדכון ללא אינטרנט, ומחיקת גרסאות ישנות | – |
 
 כל משימת רכיב מסיימת ב-`tools/release.py pack` (ZIP במבנה הקבוע) וב-`tools/release.py verify` (מבנה, ‏`PRAGMA quick_check`, מספר שורות – למשל לפחות 10,000 נקודות עניין). כשרכיב נכשל, ה-publish ממשיך עם השאר, והרכיב שנכשל נשאר בגרסה הקודמת שלו.
 
@@ -108,7 +156,8 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 
 | גרסה (tag) | תוכן |
 |------------|------|
-| `data-YYYY-MM-DD` | ‏`hmaps-<component>-<YYYYMMDD>.zip` לכל רכיב שנבנה בריצה + ‏`manifest.json` + קובץ העדכון ללא אינטרנט `HebrewMaps-Update-YYYY-MM-DD.zip`. לא מסומנת "Latest", כדי שגרסת התוכנה (`v*`, ‏installer.yml) תישאר האחרונה |
+| `data-YYYY-MM-DD` | ‏`hmaps-<component>-<YYYYMMDD>.zip` לכל רכיב שנבנה בריצה + ‏`hmaps-<component>-<YYYYMMDD>.files.json` (רשימת הקבצים: גודל ו-SHA-256) + עדכונים חלקיים `hmaps-<component>-<to>-from-<from>.delta.zip` מעד 6 גרסאות קודמות + ‏`manifest.json` + קובץ העדכון ללא אינטרנט `HebrewMaps-Update-YYYY-MM-DD.zip`. לא מסומנת "Latest", כדי שגרסת התוכנה (`v*`, ‏installer.yml) תישאר האחרונה |
+| `vX.Y.Z` | גרסת התוכנה (Latest): ‏`HebrewMaps-Setup-X.Y.Z.exe`, ‏`HebrewMaps-Setup.exe`, ‏`app-manifest.json` – ראו [עדכון התוכנה עצמה](#עדכון-התוכנה-עצמה) |
 | `data-latest` | ‏pre-release שמכיל את `manifest.json` העדכני (מצביע) ואת `HebrewMaps-Update.zip` (קובץ העדכון ללא אינטרנט בשם קבוע) |
 
 ‏`manifest.json` מפרט תמיד את כל הרכיבים. רכיב שלא נבנה מחדש מקבל `"status": "unchanged"` ומצביע על הקובץ מגרסה קודמת, ורכיב שעוד לא פורסם מקבל `"unavailable"`:
@@ -119,6 +168,16 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
    "name_he": "נתוני גובה וטופוגרפיה", "description_he": "…", "min_app_version": "1.0.0"}, "…": {}}}
 ```
 בכל ZIP יש `component.json` (רכיב, גרסה, commit). מבנה הקבצים בכל רכיב מוגדר ב-`hmaps/core/components.py` ומשותף ל-CI ולתוכנה. הגרסאות המתוארכות נשמרות 6 שבועות, וגרסה שה-manifest עדיין מפנה אליה לא נמחקת.
+
+לכל רכיב יש במניפסט גם:
+```json
+"files": "hmaps-media-20261022.files.json",
+"deltas": [{"from": "20261015", "to": "20261022", "kind": "files", "file": "hmaps-media-20261022-from-20261015.delta.zip",
+            "size": 3100000, "sha256": "…", "release": "data-2026-10-22", "date": "2026-10-22", "url": "https://github.com/…"}],
+"history": [{"version": "20261015", "release": "data-2026-10-15", "file": "hmaps-media-20261015.zip", "size": 1300000000,
+             "sha256": "…", "files": "hmaps-media-20261015.files.json"}]
+```
+‏`deltas` – העדכונים החלקיים של הריצה הזו, ועוד אלה של שבועות קודמים שהגרסה שלהם עדיין נשמרת (42 ימים, כמו מחיקת הגרסאות הישנות) – כך שאפשר לשרשר אותם. ‏`history` – עד 6 גרסאות קודמות שמהן נבנים העדכונים החלקיים בשבוע הבא. ‏`tools/release.py deltas` (שלב "Delta packages" ב-publish) מדלג – עם הודעה ב-summary – על בסיס שהגרסה שלו נמחקה, כשאין מספיק מקום בדיסק של ה-runner (‏~14GB פנויים; נדרש פי 4 מהחבילה הישנה והחדשה), כשתקציב הזמן (50 דקות) נגמר, או כש-delta לא חוסך (60% ומעלה מהחבילה המלאה). השלב רשאי להיכשל: הלקוחות פשוט מורידים חבילות מלאות.
 
 ### תצלומי אוויר לכל הארץ: ‏`.github/workflows/satellite.yml`
 הרצה ידנית בלבד (Actions ← Aerial photos (offline package) ← Run workflow). מורידה את תצלומי govmap לכל הארץ עד הזום שנבחר (ברירת מחדל 16: כ-158,000 אריחים, כ-4GB, כ-9 שעות) ל-`satellite.mbtiles`.

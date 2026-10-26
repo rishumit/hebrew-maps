@@ -9,8 +9,10 @@ Release layout (GitHub Releases of the repository)::
 
     data-YYYY-MM-DD/                 one dated release per weekly run
         hmaps-<component>-<YYYYMMDD>.zip
+        hmaps-<component>-<YYYYMMDD>.files.json              {path: [size, sha256]} of the ZIP
+        hmaps-<component>-<to>-from-<from>.delta.zip         delta packages (hmaps/core/delta.py)
         manifest.json
-    data-latest/                     rolling pointer: only manifest.json
+    data-latest/                     rolling pointer: manifest.json (+ the offline update file)
 
 ``manifest.json`` always lists every component; components that were not
 rebuilt in a run point at the asset of an earlier dated release

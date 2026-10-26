@@ -6,6 +6,9 @@
     python tools/release.py manifest --tag data-2026-10-22 --previous prev/manifest.json   # dist/manifest.json
     python tools/release.py prepare-db --artifacts dist --previous prev/manifest.json      # maps.db for the media job
     python tools/release.py prune    --manifest dist/manifest.json --releases releases.json  # old releases to delete
+    python tools/release.py deltas   --dist dist --previous prev/manifest.json --version 20261022 --date 2026-10-22
+                                     # *.files.json + hmaps-<c>-<to>-from-<from>.delta.zip (hmaps/core/delta.py)
+    python tools/release.py app-manifest --installer HebrewMaps-Setup-1.2.0.exe --version 1.2.0   # installer.yml
     python tools/release.py bundle   --manifest dist/manifest.json --dist dist --dist old --date 2026-10-22 --out offline
                                      # offline update file(s) HebrewMaps-Update-<date>.zip (--list-missing first:
                                      # "<release> <file>" of every component ZIP that is not in the --dist folders)
@@ -33,9 +36,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from hmaps.core import components as catalog  # noqa: E402
-from hmaps.core import db  # noqa: E402
+from hmaps.core import db, delta  # noqa: E402
 
 REPO = os.environ.get("GITHUB_REPOSITORY", "rishumit/hebrew-maps")
+#: deltas are built from this many earlier versions of a component …
+DELTA_BASES = 6
+#: … and kept (also for chains) while their release is: prune keeps 6 weekly releases
+DELTA_DAYS = 42
 #: GitHub refuses release assets of 2 GiB and more
 MAX_ASSET = 2 * 1024 ** 3 - 1
 DATED = re.compile(r"^data-\d{4}-\d{2}-\d{2}(?:-\d+)?$")
@@ -260,7 +267,7 @@ def verify(zip_path: Path, min_pois: int = 1) -> dict:
 
 
 def cmd_verify(args) -> int:
-    zips = [Path(z) for z in args.zips if Path(z).is_file()]
+    zips = [Path(z) for z in args.zips if Path(z).is_file() and not z.endswith(".delta.zip")]
     if not zips:
         print("no component ZIPs to verify")
         return 0 if args.allow_empty else 1
@@ -272,19 +279,64 @@ def cmd_verify(args) -> int:
 
 # =========================================================================== manifest
 
+def _tag_date(tag: str | None) -> datetime | None:
+    m = re.match(r"^data-(\d{4}-\d{2}-\d{2})", tag or "")
+    return datetime.strptime(m.group(1), "%Y-%m-%d") if m else None
+
+
+def _recent(tag: str | None, date: str, days: int = DELTA_DAYS) -> bool:
+    """Whether the release *tag* is still kept (prune keeps ~6 weekly releases)."""
+    t, now = _tag_date(tag), datetime.strptime(date, "%Y-%m-%d")
+    return t is not None and (now - t).days <= days
+
+
+def _history(p: dict, date: str, keep: int = DELTA_BASES) -> list[dict]:
+    """The versions before *p* (newest first) that a delta can start from: *p* itself + its history."""
+    out, seen = [], set()
+    for h in [p] + list(p.get("history") or []):
+        v = h.get("version")
+        if not v or v in seen or not h.get("file") or not _recent(h.get("release"), date):
+            continue
+        seen.add(v)
+        out.append({k: h.get(k) for k in ("version", "date", "release", "file", "size", "sha256", "files")})
+    return out[:keep]
+
+
+def _delta_entries(dist: Path, cid: str, version: str, tag: str, date: str, repo: str) -> list[dict]:
+    out = []
+    for f in sorted(dist.glob(f"hmaps-{cid}-{version}-from-*.delta.zip")):
+        d = delta.describe(f)
+        if d.get("component") != cid or str(d.get("to")) != version:
+            continue
+        out.append({"from": str(d["from"]), "to": version, "kind": d.get("kind"), "file": f.name,
+                    "size": f.stat().st_size, "sha256": sha256(f), "release": tag, "date": date,
+                    "url": f"https://github.com/{repo}/releases/download/{tag}/{f.name}"})
+    return out
+
+
 def build_manifest(dist: Path, tag: str, version: str, date: str, previous: dict | None, repo: str = REPO) -> dict:
     comps = {}
     prev = (previous or {}).get("components") or {}
     for comp in catalog.COMPONENTS:
         zp = dist / catalog.asset_name(comp.id, version)
         base = {"name_he": comp.name_he, "description_he": comp.description_he, "min_app_version": comp.min_app_version}
+        p = prev.get(comp.id) or {}
         if zp.is_file():
+            files = dist / delta.files_asset_name(zp.name)
+            # deltas of earlier weeks stay usable for chains while their release is kept
+            carried = [d for d in p.get("deltas") or [] if _recent(d.get("release"), date)
+                       and str(d.get("to")) != version]
             comps[comp.id] = {**base, "status": "full", "version": version, "date": date, "release": tag,
                               "file": zp.name, "size": zp.stat().st_size, "sha256": sha256(zp),
-                              "url": f"https://github.com/{repo}/releases/download/{tag}/{zp.name}"}
-        elif prev.get(comp.id, {}).get("file") and prev[comp.id].get("status") != "unavailable":
-            p = prev[comp.id]
-            comps[comp.id] = {**base, **{k: p.get(k) for k in ("version", "date", "release", "file", "size", "sha256", "url")},
+                              "url": f"https://github.com/{repo}/releases/download/{tag}/{zp.name}",
+                              "files": files.name if files.is_file() else None,
+                              "deltas": _delta_entries(dist, comp.id, version, tag, date, repo) + carried,
+                              "history": _history(p, date) if p.get("file") and p.get("version") != version else []}
+        elif p.get("file") and p.get("status") != "unavailable":
+            comps[comp.id] = {**base, **{k: p.get(k) for k in ("version", "date", "release", "file", "size", "sha256", "url",
+                                                                "files")},
+                              "deltas": [d for d in p.get("deltas") or [] if _recent(d.get("release"), date)],
+                              "history": [h for h in p.get("history") or [] if _recent(h.get("release"), date)],
                               "min_app_version": p.get("min_app_version") or comp.min_app_version, "status": "unchanged"}
         else:
             comps[comp.id] = {**base, "status": "unavailable", "version": None, "date": None, "file": None,
@@ -296,18 +348,21 @@ def build_manifest(dist: Path, tag: str, version: str, date: str, previous: dict
 
 def notes(m: dict) -> str:
     status_he = {"full": "חדש בגרסה זו", "unchanged": "ללא שינוי", "unavailable": "לא זמין"}
-    rows = ["| רכיב | תאריך | גודל | מצב | קובץ |", "|---|---|---|---|---|"]
+    rows = ["| רכיב | תאריך | גודל | מצב | קובץ | עדכון חלקי |", "|---|---|---|---|---|---|"]
     for cid, e in m["components"].items():
         size = f"{e['size'] / 1e6:.0f} MB" if e.get("size") else "—"
+        new = [d for d in e.get("deltas") or [] if d.get("release") == m.get("release")]
+        part = ", ".join(f"מ-{d['from']}: {d['size'] / 1e6:.1f} MB" for d in new) or "—"
         rows.append(f"| {e['name_he']} (`{cid}`) | {e.get('date') or '—'} | {size} | {status_he[e['status']]} | "
-                    f"{e.get('file') or '—'} |")
+                    f"{e.get('file') or '—'} | {part} |")
     return (f"## עדכון נתונים שבועי – {m['date']}\n\n"
             "חבילות הנתונים של מפות בעברית. התוכנה מעדכנת אותן בעצמה: תפריט ← **עדכונים**, "
             "או `update-online-windows.cmd` / `python -m hmaps update`.\n\n"
             "**מחשב בלי אינטרנט?** הורידו את `HebrewMaps-Update-<תאריך>.zip` (כל החבילות בקובץ אחד), העבירו "
             "בדיסק-און-קי, ובתוכנה: עדכונים ← **עדכון מקובץ**.\n\n" + "\n".join(rows) +
             "\n\n`manifest.json` מפרט לכל רכיב גרסה, גודל ו-SHA-256. רכיבים שלא נבנו מחדש מצביעים על הקובץ "
-            "מגרסה קודמת.\n\nנתונים: © תורמי OpenStreetMap (ODbL), Copernicus DEM © DLR/Airbus/ESA, "
+            "מגרסה קודמת. קובצי `*.delta.zip` הם עדכונים חלקיים (רק מה שהשתנה מגרסה קודמת) – התוכנה בוחרת "
+            "בהם לבד כשהם קטנים בהרבה מהחבילה המלאה.\n\nנתונים: © תורמי OpenStreetMap (ODbL), Copernicus DEM © DLR/Airbus/ESA, "
             "משרד התחבורה (GTFS), ויקיפדיה/ויקינתונים/ויקישיתוף, נדרים פלוס.\n")
 
 
@@ -325,6 +380,93 @@ def cmd_manifest(args) -> int:
     print(text)
     new = [c for c, e in m["components"].items() if e["status"] == "full"]
     _output(new=",".join(new) or "none", complete=str(all(e["status"] != "unavailable" for e in m["components"].values())).lower())
+    return 0
+
+
+# =========================================================================== deltas
+
+def _gh_fetch(release: str, name: str, folder: Path) -> Path:
+    import subprocess
+    subprocess.run(["gh", "release", "download", release, "-R", REPO, "-p", name, "-D", str(folder), "--clobber"],
+                   check=True)
+    return folder / name
+
+
+def build_deltas(dist: Path, previous: dict | None, version: str, date: str, fetch=_gh_fetch,
+                 keep: int = DELTA_BASES, max_minutes: float = 60, log=print) -> list[str]:
+    """File lists (``*.files.json``) of this run's packages + delta packages from up to *keep*
+    earlier versions of every rebuilt component. Returns one summary line per component.
+
+    Binary deltas need the old package: it is downloaded (one at a time, deleted right after);
+    the image deltas only need the old file list. Skipped – and said so – when the disk is too
+    full, the old release is gone, the time budget is used up or the delta is not worth it."""
+    import shutil
+    import time as _time
+
+    start = _time.monotonic()
+    prev = (previous or {}).get("components") or {}
+    lines = []
+    for comp in catalog.COMPONENTS:
+        zp = dist / catalog.asset_name(comp.id, version)
+        if not zp.is_file():
+            continue
+        index = delta.zip_index(zp)
+        (dist / delta.files_asset_name(zp.name)).write_text(json.dumps(index, separators=(",", ":")), encoding="utf-8")
+        if comp.id in delta.NO_DELTA:
+            continue
+        p = prev.get(comp.id) or {}
+        bases = _history(p, date, keep) if p.get("file") and p.get("version") != version else []
+        made, skipped = [], []
+        for b in bases:
+            if (_time.monotonic() - start) / 60 > max_minutes:
+                skipped.append(f"{b['version']}: time budget used up")
+                continue
+            is_dir = comp.id in delta.DIR_COMPONENTS
+            with tempfile.TemporaryDirectory(prefix="hmaps-base-", dir=dist) as tmp:
+                try:
+                    if is_dir:
+                        if not b.get("files"):
+                            skipped.append(f"{b['version']}: no file list published")
+                            continue
+                        base_index = json.loads(fetch(b["release"], b["files"], Path(tmp)).read_text(encoding="utf-8"))
+                        kw = {"base_index": base_index}
+                    else:
+                        need = 4 * (int(b.get("size") or 0) + zp.stat().st_size)
+                        if shutil.disk_usage(dist).free < need:
+                            skipped.append(f"{b['version']}: not enough disk space ({need / 1e9:.1f} GB needed)")
+                            continue
+                        base_zip = fetch(b["release"], b["file"], Path(tmp))
+                        if b.get("sha256") and sha256(base_zip) != b["sha256"]:
+                            skipped.append(f"{b['version']}: old package does not match its SHA-256")
+                            continue
+                        kw = {"base_zip": base_zip}
+                    out = delta.build(comp.id, zp, dist, b["version"], version, log=log, **kw)
+                except Exception as e:  # noqa: BLE001 – a delta is an optimisation only
+                    skipped.append(f"{b['version']}: {e.__class__.__name__}: {e}")
+                    continue
+            if out.stat().st_size >= delta.RATIO * zp.stat().st_size:
+                skipped.append(f"{b['version']}: {out.stat().st_size / 1e6:.1f} MB – not worth it")
+                out.unlink()
+                continue
+            made.append(f"{b['version']} → {out.stat().st_size / 1e6:.1f} MB")
+        if bases or made:
+            line = f"{comp.id} ({zp.stat().st_size / 1e6:.0f} MB): " + (", ".join(made) or "no deltas")
+            if skipped:
+                line += "; skipped " + "; ".join(skipped)
+            lines.append(line)
+            log(line)
+    return lines
+
+
+def cmd_deltas(args) -> int:
+    lines = build_deltas(Path(args.dist), _load(args.previous), args.version, args.date,
+                         keep=args.keep, max_minutes=args.max_minutes)
+    for line in lines:
+        if "skipped" in line:
+            print(f"::notice::deltas {line}")
+    if os.environ.get("GITHUB_STEP_SUMMARY") and lines:
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write("### Delta packages\n\n" + "\n".join(f"- {line}" for line in lines) + "\n\n")
     return 0
 
 
@@ -493,6 +635,36 @@ def cmd_prune(args) -> int:
     return 0
 
 
+# =========================================================================== app manifest (installer.yml)
+
+DEFAULT_APP_NOTES = "גרסה {version} של מפות בעברית. העדכון שומר את כל הנתונים שבמחשב."
+
+
+def app_manifest(installer: Path, version: str, tag: str | None = None, notes: str | None = None,
+                 min_data_version: str | None = None, repo: str = REPO) -> dict:
+    """app-manifest.json of an app release (read by hmaps/api/appupdate.py)."""
+    version = version.lstrip("vV")
+    tag = tag or f"v{version}"
+    m = {"schema": 1, "version": version, "tag": tag, "date": _israel_now().strftime("%Y-%m-%d"),
+         "file": installer.name, "size": installer.stat().st_size, "sha256": sha256(installer),
+         "url": f"https://github.com/{repo}/releases/download/{tag}/{installer.name}",
+         "notes_he": (notes or "").strip() or DEFAULT_APP_NOTES.format(version=version),
+         "commit": os.environ.get("GITHUB_SHA", "")}
+    if min_data_version:
+        m["min_data_version"] = min_data_version
+    from hmaps.api import appupdate
+    appupdate.parse_manifest(m)  # the client must accept what we publish
+    return m
+
+
+def cmd_app_manifest(args) -> int:
+    notes = Path(args.notes).read_text(encoding="utf-8") if args.notes and Path(args.notes).is_file() else None
+    m = app_manifest(Path(args.installer), args.version, args.tag, notes, args.min_data_version)
+    Path(args.out).write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps(m, ensure_ascii=False, indent=1))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python tools/release.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -525,6 +697,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--manifest", required=True)
     p.add_argument("--releases", required=True, help="JSON from: gh release list --json tagName")
     p.add_argument("--keep", type=int, default=6)
+    p = sub.add_parser("deltas")
+    p.add_argument("--dist", default="dist")
+    p.add_argument("--previous")
+    p.add_argument("--version", required=True)
+    p.add_argument("--date", required=True)
+    p.add_argument("--keep", type=int, default=DELTA_BASES)
+    p.add_argument("--max-minutes", type=float, default=60)
+    p = sub.add_parser("app-manifest")
+    p.add_argument("--installer", required=True, help="HebrewMaps-Setup-<version>.exe")
+    p.add_argument("--version", required=True)
+    p.add_argument("--tag")
+    p.add_argument("--notes", help="file with the Hebrew release notes (Markdown/text)")
+    p.add_argument("--min-data-version")
+    p.add_argument("--out", default="app-manifest.json")
     p = sub.add_parser("bundle")
     p.add_argument("--manifest", required=True)
     p.add_argument("--dist", action="append", help="folder with component ZIPs (repeatable)")
@@ -534,7 +720,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--list-missing", action="store_true", help="only print '<release> <file>' of absent ZIPs")
     args = ap.parse_args(argv)
     return {"plan": cmd_plan, "pack": cmd_pack, "verify": cmd_verify, "manifest": cmd_manifest,
-            "prepare-db": cmd_prepare_db, "prune": cmd_prune, "bundle": cmd_bundle}[args.cmd](args)
+            "prepare-db": cmd_prepare_db, "prune": cmd_prune, "bundle": cmd_bundle, "deltas": cmd_deltas,
+            "app-manifest": cmd_app_manifest}[args.cmd](args)
 
 
 if __name__ == "__main__":

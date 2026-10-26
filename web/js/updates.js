@@ -4,6 +4,9 @@
 // and an optional automatic weekly check that shows a small, dismissible notice.
 // "עדכון מקובץ" installs an offline update file (HebrewMaps-Update-<date>.zip, copied with a USB
 // stick from the download site) on a computer without internet: POST /api/updates/offline.
+// "גרסת התוכנה" (top card): the program itself – POST /api/updates/app downloads the installer of the
+// newest v* release, checks its SHA-256 and runs it silently; the program closes and opens again
+// (hmaps/api/appupdate.py). Data packages may come as deltas ("עדכון חלקי": only what changed).
 
 import { svg } from './icons.js';
 import { $, announce, bus, esc, store, toast } from './util.js';
@@ -18,6 +21,7 @@ let info = null; // last /api/updates answer
 let pollTimer = null;
 let appRef = null;
 let uploading = false;
+let appTimer = null;
 const watched = new Set(); // components installed since the panel started polling
 
 // ------------------------------------------------------------------ data
@@ -65,12 +69,18 @@ function fmtTime(s) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// "עדכון חלקי: 3 MB במקום 60 MB" – a delta instead of the full package
+function partialText(size, full) {
+  return `עדכון חלקי: ${fmtSize(size)} במקום ${fmtSize(full)}`;
+}
+
 function jobText(job) {
   if (!job) return '';
   switch (job.state) {
     case 'queued': return 'ממתין לתורו…';
     case 'downloading': {
-      const verb = job.source === 'file' ? 'מעתיק מקובץ העדכון…' : 'מוריד…';
+      const verb = job.source === 'file' ? 'מעתיק מקובץ העדכון…'
+        : job.delta && job.full_size ? `${partialText(job.total, job.full_size)} · מוריד…` : 'מוריד…';
       return job.percent != null ? `${verb} ${Math.floor(job.percent)}%` : verb;
     }
     case 'verifying': return 'בודק את שלמות הקובץ…';
@@ -104,6 +114,8 @@ function itemHtml(c) {
   const inst = c.installed ? fmtDate(c.installed.date) || c.installed.version : 'לא מותקן';
   const av = c.available && c.available.file
     ? `${esc(fmtDate(c.available.date))}${c.available.size ? ` · ${sizeHtml(c.available.size)}` : ''}` : '—';
+  const part = c.update_available && c.available?.delta
+    ? `<div><dt>להורדה</dt><dd class="upd-part">${esc(partialText(c.available.delta.size, c.available.size))}</dd></div>` : '';
   const pct = job && job.percent != null ? Math.floor(job.percent) : null;
   return `<li class="upd-item" data-id="${esc(c.id)}">
     <div class="upd-top">
@@ -113,7 +125,7 @@ function itemHtml(c) {
     <p class="upd-desc">${esc(c.description_he || '')}</p>
     <dl class="upd-meta">
       <div><dt>מותקן</dt><dd>${esc(inst)}</dd></div>
-      <div><dt>זמין</dt><dd>${av}</dd></div>
+      <div><dt>זמין</dt><dd>${av}</dd></div>${part}
     </dl>
     <div class="upd-progress" data-role="progress" ${active ? '' : 'hidden'}>
       <progress max="100" ${pct != null && job.state === 'downloading' ? `value="${pct}"` : ''}
@@ -125,6 +137,126 @@ function itemHtml(c) {
   </li>`;
 }
 
+// ------------------------------------------------------------------ the program itself
+
+const APP_ACTIVE = ['queued', 'downloading', 'verifying', 'launching'];
+
+function appJobText(job) {
+  switch (job?.state) {
+    case 'queued': return 'מתחיל…';
+    case 'downloading': return `מוריד את קובץ ההתקנה…${job.percent != null ? ` ${Math.floor(job.percent)}%` : ''}`;
+    case 'verifying': return 'בודק את שלמות קובץ ההתקנה…';
+    case 'launching': case 'launched': return 'מתקין… התוכנה תיסגר ותיפתח מחדש בגרסה החדשה.';
+    case 'error': return job.error || 'עדכון התוכנה נכשל';
+    default: return '';
+  }
+}
+
+function appHtml() {
+  const a = info?.app;
+  if (!a) return '';
+  const av = a.available;
+  const job = a.job;
+  const active = job && (APP_ACTIVE.includes(job.state) || job.state === 'launched');
+  let badge;
+  if (active) badge = { cls: 'busy', text: appJobText(job) };
+  else if (job?.state === 'error') badge = { cls: 'error', text: job.error || 'עדכון התוכנה נכשל' };
+  else if (a.update_available) badge = { cls: 'new', text: 'גרסה חדשה זמינה' };
+  else if (av) badge = { cls: 'ok', text: 'מעודכנת' };
+  else badge = { cls: 'na', text: a.error ? 'לא ניתן לבדוק כרגע' : '' };
+  const pct = job?.state === 'downloading' && job.percent != null ? Math.floor(job.percent) : null;
+  const notes = a.update_available && av?.notes_he ? `<p class="upd-notes" id="upd-app-notes">${esc(av.notes_he)}</p>` : '';
+  let action = '';
+  if (a.update_available && a.can_install) {
+    action = `<button type="button" class="btn btn-primary btn-sm" data-act="app" aria-describedby="upd-app-h"
+      ${active || info?.busy ? 'disabled' : ''}>${svg('download', { size: 16 })}עדכון התוכנה</button>`;
+  } else if (a.update_available) {
+    action = `<p class="upd-desc">${esc(a.reason || '')}</p>
+      <a class="btn btn-secondary btn-sm" href="${esc(a.download_page)}" target="_blank" rel="noopener">להורדה מאתר התוכנה</a>`;
+  }
+  return `<section class="upd-app" aria-labelledby="upd-app-h">
+    <div class="upd-top">
+      <h3 class="upd-name" id="upd-app-h">גרסת התוכנה</h3>
+      ${badge.text ? `<span class="upd-badge upd-${badge.cls}" data-role="badge">${esc(badge.text)}</span>` : ''}
+    </div>
+    <dl class="upd-meta">
+      <div><dt>מותקנת</dt><dd><bdi dir="ltr">${esc(a.installed)}</bdi></dd></div>
+      <div><dt>חדשה ביותר</dt><dd>${av ? `<bdi dir="ltr">${esc(av.version)}</bdi>${av.date ? ` · ${esc(fmtDate(av.date))}` : ''}${
+        a.update_available && av.size ? ` · ${sizeHtml(av.size)}` : ''}` : '—'}</dd></div>
+    </dl>
+    ${notes}
+    <div class="upd-progress" data-role="progress" ${active ? '' : 'hidden'}>
+      <progress max="100" ${pct != null ? `value="${pct}"` : ''} aria-labelledby="upd-app-h" aria-describedby="upd-app-p"></progress>
+      <span class="upd-ptext" id="upd-app-p">${esc(active ? appJobText(job) : '')}</span>
+    </div>
+    ${action}
+  </section>`;
+}
+
+function patchApp(app, job) {
+  const box = app.panel.body.querySelector('.upd-app');
+  if (!box || !job) return;
+  const prog = box.querySelector('[data-role="progress"]');
+  prog.hidden = false;
+  const bar = prog.querySelector('progress');
+  if (job.state === 'downloading' && job.percent != null) bar.value = Math.floor(job.percent);
+  else bar.removeAttribute('value');
+  prog.querySelector('.upd-ptext').textContent = appJobText(job);
+  const badge = box.querySelector('[data-role="badge"]');
+  if (badge) badge.textContent = appJobText(job);
+  const btn = box.querySelector('[data-act="app"]');
+  if (btn) btn.disabled = true;
+}
+
+function pollApp(app) {
+  clearTimeout(appTimer);
+  let lost = 0;
+  const tick = async () => {
+    let st;
+    try {
+      st = await call('/api/updates/status');
+      lost = 0;
+    } catch {
+      // the installer closes the program: the server goes away – that is the expected end
+      if (++lost >= 3) {
+        announce('ההתקנה רצה. התוכנה תיפתח מחדש בעוד רגע.');
+        return;
+      }
+      appTimer = setTimeout(tick, 2000);
+      return;
+    }
+    const job = st.app;
+    if (info?.app) info.app.job = job;
+    if (isOpen(app)) patchApp(app, job);
+    if (job?.state === 'error') {
+      announce(job.error || 'עדכון התוכנה נכשל', true);
+      rerender(app);
+      return;
+    }
+    if (job?.state === 'launched') announce('מתקין את הגרסה החדשה… התוכנה תיסגר ותיפתח מחדש.');
+    appTimer = setTimeout(tick, job?.state === 'launched' ? 3000 : 1000);
+  };
+  appTimer = setTimeout(tick, 500);
+}
+
+async function installApp(app) {
+  try {
+    const res = await call('/api/updates/app', { method: 'POST' });
+    if (!res.job) {
+      announce(res.message || 'התוכנה כבר בגרסה העדכנית.');
+      return;
+    }
+    announce(`מוריד את גרסה ${res.version || ''} של התוכנה`);
+    if (info?.app) info.app.job = res.job;
+    rerender(app);
+    pollApp(app);
+  } catch (e) {
+    announce(e.message, true);
+    if (info?.app) info.app.job = { state: 'error', error: e.message };
+    rerender(app);
+  }
+}
+
 function render(body, app) {
   const n = info?.updates_available || 0;
   const busy = !!info?.busy;
@@ -133,7 +265,7 @@ function render(body, app) {
   body.innerHTML = `${head(app, 'עדכונים')}
     <div class="p-section upd-intro">
       <p>חבילות הנתונים של המפה מתעדכנות פעם בשבוע ומורדות מ-GitHub. כל חבילה נבדקת (SHA-256) לפני ההתקנה,
-        והמפה ממשיכה לעבוד ועוברת לנתונים החדשים בלי הפעלה מחדש.</p>
+        והמפה ממשיכה לעבוד ועוברת לנתונים החדשים בלי הפעלה מחדש. כשמעט השתנה מורד רק השינוי (עדכון חלקי).</p>
       ${err ? `<div class="alert upd-alert" role="alert">${svg('alert')}<div>${esc(err.message)}${['offline', 'timeout', 'blocked'].includes(err.code)
         ? '<br>בלי אינטרנט? אפשר לעדכן מקובץ עדכון – ראו "מחשב בלי אינטרנט?" למטה.' : ''}</div></div>` : ''}
       <p class="upd-checked" data-role="checked">${info?.checked_at ? `נבדק לאחרונה: ${esc(fmtTime(info.checked_at))}` : 'עדיין לא נבדק'}
@@ -146,6 +278,7 @@ function render(body, app) {
       <label class="switch upd-auto"><input type="checkbox" data-act="auto" ${auto ? 'checked' : ''}>
         <span>לבדוק אוטומטית פעם בשבוע ולהודיע כשיש עדכון</span></label>
     </div>
+    ${appHtml()}
     <section class="p-section upd-offline" aria-labelledby="upd-off-h">
       <h3 id="upd-off-h">מחשב בלי אינטרנט?</h3>
       <p>במחשב עם אינטרנט מורידים את <b>קובץ העדכון</b> מאתר ההורדה
@@ -160,10 +293,12 @@ function render(body, app) {
       </div>
     </section>
     <ul class="upd-list" aria-label="חבילות נתונים">${(info?.components || []).map(itemHtml).join('')}</ul>
-    <p class="upd-foot">אפשר לעדכן גם בלי לפתוח את המפה: <code>update-online-windows.cmd</code> או <code>python -m hmaps update</code>.</p>`;
+    <p class="upd-foot">אפשר לעדכן גם בלי לפתוח את המפה: <code>update-online-windows.cmd</code> או <code>python -m hmaps update</code>
+      (התוכנה עצמה: <code>update-online-windows.cmd /app</code>).</p>`;
   wireHead(body, app);
   body.querySelector('[data-act="refresh"]').addEventListener('click', () => refresh(app, true));
   body.querySelector('[data-act="all"]').addEventListener('click', () => install(app, 'all'));
+  body.querySelector('[data-act="app"]')?.addEventListener('click', () => installApp(app));
   const file = body.querySelector('[data-act="file"]');
   body.querySelector('[data-act="pick"]').addEventListener('click', () => file.click());
   file.addEventListener('change', () => {
@@ -389,25 +524,38 @@ export async function openUpdates(app) {
   app.panel.update(view(app));
   app.panel.body.querySelector('h2')?.focus({ preventScroll: true });
   if (info.busy) startPolling(app);
+  if (info.app?.job && APP_ACTIVE.includes(info.app.job.state)) pollApp(app);
 }
 
 function hideNotice() {
   $('#upd-notice')?.remove();
 }
 
+function noticeKey(data) {
+  return `${data.release || ''}|${data.app?.update_available ? data.app.available.version : ''}`;
+}
+
+function noticeText(data) {
+  const n = data.updates_available;
+  const appNew = data.app?.update_available ? data.app.available.version : null;
+  const dataText = n === 1 ? 'עדכון נתונים חדש למפה' : `${n} עדכוני נתונים חדשים למפה`;
+  if (appNew && n) return `יש גרסה חדשה של התוכנה (${appNew}) ו${n === 1 ? '' : '-'}${dataText}`;
+  if (appNew) return `יש גרסה חדשה של התוכנה (${appNew})`;
+  return `יש ${dataText}`;
+}
+
 function showNotice(app, data) {
   if ($('#upd-notice')) return;
-  const n = data.updates_available;
   const el = document.createElement('div');
   el.id = 'upd-notice';
   el.className = 'upd-notice';
   el.setAttribute('role', 'status');
-  el.innerHTML = `<span>${svg('info', { size: 18 })}${n === 1 ? 'יש עדכון נתונים חדש למפה' : `יש ${n} עדכוני נתונים חדשים למפה`}</span>
+  el.innerHTML = `<span>${svg('info', { size: 18 })}${esc(noticeText(data))}</span>
     <button type="button" class="btn btn-secondary btn-sm" data-act="open">לפרטים</button>
     <button type="button" class="icon-btn" data-act="dismiss" aria-label="סגירת ההודעה">${svg('x', { size: 18 })}</button>`;
   el.querySelector('[data-act="open"]').addEventListener('click', () => openUpdates(app));
   el.querySelector('[data-act="dismiss"]').addEventListener('click', () => {
-    store.set('updates:dismissed', data.release || '');
+    store.set('updates:dismissed', noticeKey(data));
     hideNotice();
   });
   document.body.appendChild(el);
@@ -428,7 +576,8 @@ export function initUpdates(app) {
     try {
       const data = await checkUpdates(false);
       if (data.online) store.set('updates:lastCheck', Date.now());
-      if (data.updates_available > 0 && store.get('updates:dismissed', null) !== (data.release || '')) showNotice(appRef, data);
+      const any = data.updates_available > 0 || data.app?.update_available;
+      if (any && store.get('updates:dismissed', null) !== noticeKey(data)) showNotice(appRef, data);
     } catch {
       /* offline / server busy – try again next time */
     }

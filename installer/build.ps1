@@ -5,7 +5,8 @@
 #   powershell -ExecutionPolicy Bypass installer\build.ps1
 #
 # Optional parameters:
-#   -Version      "1.0.0"  (default)
+#   -Version      "1.2.0"  (default: the version in hmaps\__init__.py; a given version is first
+#                 written into hmaps\__init__.py, tauri.conf.json and Cargo.toml – tools\set_version.py)
 #   -IsccPath     path to ISCC.exe (default: standard Inno Setup 6 location)
 #   -SkipDesktop  do not build the Tauri desktop app (the installer then opens the browser)
 #
@@ -13,7 +14,7 @@
 #        (cargo, copied next to the server exe) -> Inno Setup.
 
 param(
-    [string]$Version  = "1.0.0",
+    [string]$Version  = "",
     [string]$IsccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     [switch]$SkipDesktop
 )
@@ -33,9 +34,17 @@ if (-not (Test-Path $py)) {
     exit 1
 }
 
+# One version everywhere: the server (/api/meta, in-app updater), the desktop exe and the installer
+if ($Version) {
+    & $py tools\set_version.py $Version
+    if ($LASTEXITCODE -ne 0) { Write-Error "tools\set_version.py $Version failed"; exit 1 }
+} else {
+    $Version = (& $py tools\set_version.py).Trim()
+}
+
 Write-Host ""
 Write-Host "======================================================" -ForegroundColor Cyan
-Write-Host "  Hebrew Maps — Windows Installer Build" -ForegroundColor Cyan
+Write-Host "  Hebrew Maps — Windows Installer Build ($Version)" -ForegroundColor Cyan
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
 

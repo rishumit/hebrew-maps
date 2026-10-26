@@ -4,6 +4,17 @@ name: Windows Installer
 #   - Every push/PR to main — builds and uploads the installer as an artifact
 #   - Every version tag (v*.*.*) — also creates a GitHub Release with the installer EXE
 #   - Manual dispatch — lets you pick version and whether to release
+#
+# Version: one source of truth – the tag (v1.2.0 → 1.2.0), else the manual input, else
+# hmaps/__init__.py. tools/set_version.py writes it into hmaps/__init__.py (/api/meta, the
+# in-app updater), src-tauri/tauri.conf.json + Cargo.toml/.lock (the desktop exe) before
+# anything is built, and Inno Setup gets it as /DMyAppVersion.
+#
+# Release assets: HebrewMaps-Setup-<v>.exe, HebrewMaps-Setup.exe (stable name for the site) and
+# app-manifest.json {version, tag, date, file, size, sha256, url, notes_he} – the in-app updater
+# (hmaps/api/appupdate.py) reads it from releases/latest/download/app-manifest.json, verifies the
+# installer's SHA-256 and runs it silently. Release notes in Hebrew: docs/release-notes/v<v>.md,
+# else the message of an annotated tag (git tag -a v1.2.0 -m "…"), else a default sentence.
 on:
   push:
     branches: [main]
@@ -13,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version (e.g. 1.2.0) — defaults to tag or 1.0.0"
+        description: "Version (e.g. 1.2.0) — defaults to the tag, else hmaps/__init__.py"
         required: false
         default: ""
       release:
@@ -39,22 +50,24 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 2. Resolve version string
-      #    Priority: manual input → git tag → fallback to 1.0.0
+      #    Priority: manual input → git tag → hmaps/__init__.py
       # -----------------------------------------------------------------------
       - name: Resolve version
         id: version
         shell: pwsh
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          $v = "${{ github.event.inputs.version }}"
+          $v = "$env:INPUT_VERSION".Trim().TrimStart('v')
           if (-not $v) {
             # Extract from tag like "refs/tags/v1.2.3"
-            $ref = "${{ github.ref }}"
-            if ($ref -match '^refs/tags/v(.+)$') {
+            if ("$env:GITHUB_REF" -match '^refs/tags/v(.+)$') {
               $v = $Matches[1]
             } else {
-              $v = "1.0.0"
+              $v = (python tools/set_version.py).Trim()
             }
           }
+          if ($v -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { Write-Error "not a version: $v"; exit 1 }
           Write-Host "Building version: $v"
           echo "value=$v" >> $env:GITHUB_OUTPUT
 
@@ -65,6 +78,15 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      # 3a. One version everywhere (server, desktop exe, installer)
+      - name: Set the version in the sources
+        shell: pwsh
+        run: |
+          python tools/set_version.py ${{ steps.version.outputs.value }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/set_version.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # -----------------------------------------------------------------------
       # 4. Install runtime dependencies + PyInstaller into a plain venv.
@@ -169,13 +191,36 @@ jobs:
           if ($exit -ne 0) { exit $exit }
 
       # -----------------------------------------------------------------------
+      # 9a. app-manifest.json for the in-app updater (size + SHA-256 + Hebrew notes)
+      # -----------------------------------------------------------------------
+      - name: App manifest
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $tag = "v$env:VERSION"
+          $notes = "docs\release-notes\$tag.md"
+          if (-not (Test-Path $notes)) {
+            git fetch --force --depth=1 origin "refs/tags/${tag}:refs/tags/${tag}" 2>$null
+            if ((git cat-file -t "refs/tags/$tag" 2>$null) -eq "tag") {
+              git tag -l --format='%(contents)' $tag | Out-File -Encoding utf8 installer\notes.md
+              $notes = "installer\notes.md"
+            }
+          }
+          .venv\Scripts\python.exe tools\release.py app-manifest --installer "installer\HebrewMaps-Setup-$env:VERSION.exe" `
+            --version $env:VERSION --tag $tag --notes $notes --out installer\app-manifest.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # -----------------------------------------------------------------------
       # 9. Upload installer as a workflow artifact (available on every run)
       # -----------------------------------------------------------------------
       - name: Upload installer artifact
         uses: actions/upload-artifact@v6
         with:
           name: HebrewMaps-Setup-${{ steps.version.outputs.value }}
-          path: installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+          path: |
+            installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+            installer/app-manifest.json
           retention-days: 30
 
       # -----------------------------------------------------------------------
@@ -209,6 +254,9 @@ jobs:
 
             אתר ההורדה / Download page: https://rishumit.github.io/hebrew-maps/
 
+            **עדכון:** תוכנה מותקנת מתעדכנת לבד – תפריט ← עדכונים ← "עדכון התוכנה" (הנתונים במחשב נשמרים).
+            The installed program updates itself (Updates → "עדכון התוכנה"; `app-manifest.json` holds size and SHA-256).
+
             **דרישות מערכת / System requirements:** Windows 10/11 x64
 
             ---
@@ -216,6 +264,7 @@ jobs:
           files: |
             installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
             installer/HebrewMaps-Setup.exe
+            installer/app-manifest.json
           draft: false
           prerelease: false
           make_latest: "true"

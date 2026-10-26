@@ -1,10 +1,12 @@
 """Browser test of the "עדכונים" panel: list, "עדכן הכול", progress → installed, weekly notice,
-"עדכון מקובץ" (offline update file) without internet.
+"עדכון מקובץ" (offline update file) without internet, the "גרסת התוכנה" card (program update).
 
     python -m unittest tests.e2e.test_updates_ui
 """
 
+import hashlib
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -33,12 +35,18 @@ class UpdatesUiTest(unittest.TestCase):
             if e.get("file"):
                 e["url"] = f"{base}/{e['file']}"
         (rel / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+        (rel / "HebrewMaps-Setup-9.1.0.exe").write_bytes(b"MZ")
+        (rel / "app-manifest.json").write_text(json.dumps({
+            "version": "9.1.0", "date": "2026-11-02", "file": "HebrewMaps-Setup-9.1.0.exe", "size": 2,
+            "sha256": hashlib.sha256(b"MZ").hexdigest(), "url": f"{base}/HebrewMaps-Setup-9.1.0.exe",
+            "notes_he": "ניווט מהיר יותר\nעדכון חלקי של הנתונים"}, ensure_ascii=False), encoding="utf-8")
+        cls.app_env = {"HMAPS_APP_MANIFEST": f"{base}/app-manifest.json", "HMAPS_APP_TEST_HOSTS": base.split("//", 1)[1]}
         cls.bundle = release.bundle(release.build_manifest(rel, tu.TAG, tu.VERSION, tu.DATE, None, repo="o/r"),
                                     [rel], cls.root / "offline", tu.DATE)[0]
         data = cls.root / "data"
         data.mkdir()
         shutil.copy(sample_db(), data / "maps.db")
-        cls.api = ApiServer(data, extra_env={"HMAPS_UPDATES_MANIFEST": f"{base}/manifest.json"})
+        cls.api = ApiServer(data, extra_env={"HMAPS_UPDATES_MANIFEST": f"{base}/manifest.json", **cls.app_env})
         cls.pw = sync_playwright().start()
         cls.browser = cls.pw.chromium.launch()
 
@@ -99,7 +107,7 @@ class UpdatesUiTest(unittest.TestCase):
         # a week since the last automatic check: a small notice, "לפרטים" opens the panel
         page = self.page(mobile=True, dark=True, init_script="localStorage.setItem('hmaps:updates:lastCheck', '0')")
         notice = page.locator("#upd-notice")
-        expect(notice).to_contain_text("יש 2 עדכוני נתונים חדשים", timeout=15000)
+        expect(notice).to_contain_text("יש גרסה חדשה של התוכנה (9.1.0) ו-2 עדכוני נתונים חדשים", timeout=15000)
         self.assertGreater(page.evaluate("JSON.parse(localStorage.getItem('hmaps:updates:lastCheck'))"), 0)
         page.screenshot(path=str(SHOTS / "updates-notice-mobile.png"))
         notice.get_by_role("button", name="לפרטים").click()
@@ -135,6 +143,38 @@ class UpdatesUiTest(unittest.TestCase):
             self.assertEqual(self.errors, [])
         finally:
             api.stop()
+
+    def test_3_program_update_card(self):
+        page = self.page()
+        page.click("#btn-menu")
+        page.click('[data-menu="updates"]')
+        card = page.locator(".upd-app")
+        expect(card.locator("h3")).to_have_text("גרסת התוכנה")
+        expect(card.locator(".upd-badge")).to_have_text("גרסה חדשה זמינה")
+        expect(card).to_contain_text("9.1.0")
+        expect(card.locator(".upd-notes")).to_contain_text("ניווט מהיר יותר")
+        # not the installed Windows program (the test server): a link to the download site instead
+        expect(card.get_by_role("link", name="להורדה מאתר התוכנה")).to_be_visible()
+        self.assertEqual(page.evaluate(AUDIT_JS), [])
+
+        # the installed program: the button downloads, verifies and starts the installer
+        info = json.loads(page.evaluate("fetch('/api/updates').then(r => r.text())"))
+        info["app"]["can_install"] = True
+        states = iter([{"state": "downloading", "percent": 40, "downloaded": 4, "total": 10},
+                       {"state": "verifying"}, {"state": "launched"}])
+        page.route(re.compile(r".*/api/updates(\?.*)?$"), lambda r: r.fulfill(json=info))
+        page.route("**/api/updates/app", lambda r: r.fulfill(status=202, json={"job": {"state": "queued"}, "version": "9.1.0"})
+                   if r.request.method == "POST" else r.continue_())
+        page.route("**/api/updates/status", lambda r: r.fulfill(json={"busy": False, "jobs": {}, "app": next(states, {"state": "launched"})}))
+        page.click('[data-act="refresh"]')
+        btn = card.get_by_role("button", name="עדכון התוכנה")
+        expect(btn).to_be_enabled()
+        page.screenshot(path=str(SHOTS / "updates-app-card.png"))
+        btn.click()
+        expect(card.locator(".upd-ptext")).to_have_text("מתקין… התוכנה תיסגר ותיפתח מחדש בגרסה החדשה.", timeout=10000)
+        expect(card.get_by_role("button", name="עדכון התוכנה")).to_be_disabled()
+        self.assertEqual(self.errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()
