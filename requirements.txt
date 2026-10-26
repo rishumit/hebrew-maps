@@ -5,3 +5,5 @@ numpy>=1.26
 tzdata>=2024.1
 # aerial photos: govmap's ITM tiles are re-rendered as WebMercator tiles (hmaps/api/satellite.py)
 pillow>=10
+# delta updates: binary patches of maps.db / tile sets (hmaps/core/delta.py); wheels for Windows, Linux, macOS
+zstandard>=0.22

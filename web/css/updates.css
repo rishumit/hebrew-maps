@@ -56,10 +56,11 @@
 .upd-offline p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-muted); line-height: var(--leading-normal); }
 .upd-offline .upd-progress { margin-top: var(--space-2); }
 
-/* the program itself (top card) */
+/* the program itself (top card) and partial (delta) downloads */
 .upd-app { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   display: grid; gap: var(--space-1); background: var(--surface-2); }
 .upd-app .btn { justify-self: start; margin-top: var(--space-1); }
 .upd-app .btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 .upd-notes { margin: 0; font-size: var(--text-sm); color: var(--text); line-height: var(--leading-normal); white-space: pre-line;
   max-height: 9em; overflow: auto; }
+.upd-part { color: var(--success) !important; }

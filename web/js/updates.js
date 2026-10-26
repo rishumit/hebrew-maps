@@ -6,7 +6,7 @@
 // stick from the download site) on a computer without internet: POST /api/updates/offline.
 // "גרסת התוכנה" (top card): the program itself – POST /api/updates/app downloads the installer of the
 // newest v* release, checks its SHA-256 and runs it silently; the program closes and opens again
-// (hmaps/api/appupdate.py).
+// (hmaps/api/appupdate.py). Data packages may come as deltas ("עדכון חלקי": only what changed).
 
 import { svg } from './icons.js';
 import { $, announce, bus, esc, store, toast } from './util.js';
@@ -69,12 +69,18 @@ function fmtTime(s) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// "עדכון חלקי: 3 MB במקום 60 MB" – a delta instead of the full package
+function partialText(size, full) {
+  return `עדכון חלקי: ${fmtSize(size)} במקום ${fmtSize(full)}`;
+}
+
 function jobText(job) {
   if (!job) return '';
   switch (job.state) {
     case 'queued': return 'ממתין לתורו…';
     case 'downloading': {
-      const verb = job.source === 'file' ? 'מעתיק מקובץ העדכון…' : 'מוריד…';
+      const verb = job.source === 'file' ? 'מעתיק מקובץ העדכון…'
+        : job.delta && job.full_size ? `${partialText(job.total, job.full_size)} · מוריד…` : 'מוריד…';
       return job.percent != null ? `${verb} ${Math.floor(job.percent)}%` : verb;
     }
     case 'verifying': return 'בודק את שלמות הקובץ…';
@@ -108,6 +114,8 @@ function itemHtml(c) {
   const inst = c.installed ? fmtDate(c.installed.date) || c.installed.version : 'לא מותקן';
   const av = c.available && c.available.file
     ? `${esc(fmtDate(c.available.date))}${c.available.size ? ` · ${sizeHtml(c.available.size)}` : ''}` : '—';
+  const part = c.update_available && c.available?.delta
+    ? `<div><dt>להורדה</dt><dd class="upd-part">${esc(partialText(c.available.delta.size, c.available.size))}</dd></div>` : '';
   const pct = job && job.percent != null ? Math.floor(job.percent) : null;
   return `<li class="upd-item" data-id="${esc(c.id)}">
     <div class="upd-top">
@@ -117,7 +125,7 @@ function itemHtml(c) {
     <p class="upd-desc">${esc(c.description_he || '')}</p>
     <dl class="upd-meta">
       <div><dt>מותקן</dt><dd>${esc(inst)}</dd></div>
-      <div><dt>זמין</dt><dd>${av}</dd></div>
+      <div><dt>זמין</dt><dd>${av}</dd></div>${part}
     </dl>
     <div class="upd-progress" data-role="progress" ${active ? '' : 'hidden'}>
       <progress max="100" ${pct != null && job.state === 'downloading' ? `value="${pct}"` : ''}
@@ -257,7 +265,7 @@ function render(body, app) {
   body.innerHTML = `${head(app, 'עדכונים')}
     <div class="p-section upd-intro">
       <p>חבילות הנתונים של המפה מתעדכנות פעם בשבוע ומורדות מ-GitHub. כל חבילה נבדקת (SHA-256) לפני ההתקנה,
-        והמפה ממשיכה לעבוד ועוברת לנתונים החדשים בלי הפעלה מחדש.</p>
+        והמפה ממשיכה לעבוד ועוברת לנתונים החדשים בלי הפעלה מחדש. כשמעט השתנה מורד רק השינוי (עדכון חלקי).</p>
       ${err ? `<div class="alert upd-alert" role="alert">${svg('alert')}<div>${esc(err.message)}${['offline', 'timeout', 'blocked'].includes(err.code)
         ? '<br>בלי אינטרנט? אפשר לעדכן מקובץ עדכון – ראו "מחשב בלי אינטרנט?" למטה.' : ''}</div></div>` : ''}
       <p class="upd-checked" data-role="checked">${info?.checked_at ? `נבדק לאחרונה: ${esc(fmtTime(info.checked_at))}` : 'עדיין לא נבדק'}
