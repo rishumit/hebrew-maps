@@ -78,6 +78,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def _age(path: Path) -> None:
+    """Local data from before the release (its version is taken from the file time)."""
+    t = datetime(2026, 1, 1).timestamp()
+    os.utime(path, (t, t))
+
+
 def serve(root: Path) -> tuple[http.server.ThreadingHTTPServer, str]:
     handler = lambda *a, **kw: _Handler(*a, directory=str(root), **kw)  # noqa: E731
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -300,6 +306,7 @@ class UpdaterTest(unittest.TestCase):
     # ------------------------------------------------------------------ install
     def test_install_maps_swaps_atomically_and_keeps_prayer_times(self):
         shutil.copy(sample_db(), self.data / "maps.db")  # legacy un-versioned file, as old installs have
+        _age(self.data / "maps.db")
         snap = self.data / "sources" / "zmanim" / "zmanim.json"
         snap.parent.mkdir(parents=True)
         snap.write_text(json.dumps(SNAPSHOT, ensure_ascii=False), encoding="utf-8")
@@ -335,6 +342,7 @@ class UpdaterTest(unittest.TestCase):
         self.assertTrue(list((self.data / "tiles").glob("terrain-*.mbtiles")))
         (self.data / "media").mkdir()
         (self.data / "media" / "own.jpg").write_bytes(b"x")
+        _age(self.data / "media")
         updates.install("media", self.data)
         self.assertTrue((self.data / "media" / "ab" / "abc.jpg").exists())
         self.assertTrue((self.data / "media" / "own.jpg").exists(), "images are merged, not replaced")
