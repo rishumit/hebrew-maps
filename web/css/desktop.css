@@ -1,4 +1,5 @@
-/* מפות בעברית – desktop shell: RTL title bar (brand · tabs · window buttons) over one map per tab. */
+/* מפות בעברית – desktop shell: RTL title bar (brand · tabs · window buttons) over one map per tab.
+   The tab strip follows Chrome's tabs (Chrome Refresh 2023 on Windows 11), mirrored for RTL. */
 
 @font-face {
   font-family: 'Heebo';
@@ -8,72 +9,84 @@
 }
 
 :root {
-  --tb-h: 40px;
-  --tab-h: 32px;
-  --tab-r: 8px;
-  --tab-max: 232px;
-  --tab-min: 48px;
+  /* Chrome Refresh 2023 tab strip geometry (Windows 11), in CSS px */
+  --tb-h: 42px;          /* title bar = tab strip */
+  --tab-h: 34px;         /* tab height; the rest of the bar is the drag margin above the tabs */
+  --tab-r: 8px;          /* active tab: top corner radius = radius of the concave "feet" */
+  --tab-max: 240px;
+  --tab-min: 40px;       /* background tabs: favicon only */
+  --tab-min-active: 48px;/* active tab: close button only */
   --font: 'Heebo', 'Segoe UI Variable Text', 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
 
-  /* light (matches the map's light UI: --bg #fff, gray-800 text) */
-  --tb-bg: #E7EBF0;
-  --tb-bg-inactive: #F0F2F5;
-  --tb-fg: #1F2937;
-  --tb-muted: #4B5563;
-  --tab-active: #FFFFFF;
-  --tab-hover: rgba(255, 255, 255, .55);
-  --tab-sep: #B9C1CC;
-  --btn-hover: rgba(0, 0, 0, .065);
+  /* light – Chrome's default light theme */
+  --frame: #DFE3E7;
+  --frame-inactive: #EBEEF1;     /* window not focused: the frame fades, like Chrome on Windows */
+  --tb-fg: #1F1F1F;
+  --tab-fg: #474747;             /* background tab text */
+  --tab-fg-inactive: #6E7175;    /* background tab text while the window is not focused */
+  --tab-active: #FFFFFF;         /* = toolbar / content surface */
+  --tab-hover: rgba(0, 0, 0, .06);
+  --tab-sep: rgba(31, 31, 31, .32); /* ≈ #A8ABAF on the frame */
+  --btn-hover: rgba(0, 0, 0, .06);
   --btn-press: rgba(0, 0, 0, .1);
-  --focus: #2563EB;
-  --accent: #2563EB;
-  --line: #D3D9E1;
+  --close-btn-hover: rgba(0, 0, 0, .08);
+  --close-btn-press: rgba(0, 0, 0, .14);
+  --focus: #0B57D0;
+  --accent: #2563EB;             /* app primary: map favicon, loading throbber */
+  --fav-map: #2563EB; --fav-search: #2563EB; --fav-place: #D93025; --fav-directions: #1A73E8; --fav-hike: #047857; --fav-panel: #2563EB;
   --close-hover: #C42B1C;
   --close-press: #B3271A;
-  --view-bg: #FFFFFF;
   color-scheme: light;
 }
 
+/* dark – Chrome's dark frame / tab, nudged a hair toward the map's cool dark UI (#0F141B / #161C25) */
 :root[data-theme="dark"] {
-  --tb-bg: #0A0D12;
-  --tb-bg-inactive: #10151C;
-  --tb-fg: #E5E7EB;
-  --tb-muted: #A3ADBB;
-  --tab-active: #1E2632;
-  --tab-hover: rgba(255, 255, 255, .06);
-  --tab-sep: #2E3746;
-  --btn-hover: rgba(255, 255, 255, .075);
-  --btn-press: rgba(255, 255, 255, .045);
-  --focus: #60A5FA;
-  --accent: #60A5FA;
-  --line: #1F2733;
-  --view-bg: #0F141B;
+  --frame: #1D1F23;
+  --frame-inactive: #2A2C30;
+  --tb-fg: #E3E3E3;
+  --tab-fg: #C4C7C5;
+  --tab-fg-inactive: #8E9196;
+  --tab-active: #383B40;
+  --tab-hover: rgba(255, 255, 255, .07);
+  --tab-sep: rgba(255, 255, 255, .2);
+  --btn-hover: rgba(255, 255, 255, .08);
+  --btn-press: rgba(255, 255, 255, .05);
+  --close-btn-hover: rgba(255, 255, 255, .1);
+  --close-btn-press: rgba(255, 255, 255, .16);
+  --focus: #A8C7FA;
+  --accent: #7CACF8;
+  --fav-map: #7CACF8; --fav-search: #7CACF8; --fav-place: #F28B82; --fav-directions: #8AB4F8; --fav-hike: #6DD58C; --fav-panel: #7CACF8;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-theme="auto"] {
-    --tb-bg: #0A0D12;
-    --tb-bg-inactive: #10151C;
-    --tb-fg: #E5E7EB;
-    --tb-muted: #A3ADBB;
-    --tab-active: #1E2632;
-    --tab-hover: rgba(255, 255, 255, .06);
-    --tab-sep: #2E3746;
-    --btn-hover: rgba(255, 255, 255, .075);
-    --btn-press: rgba(255, 255, 255, .045);
-    --focus: #60A5FA;
-    --accent: #60A5FA;
-    --line: #1F2733;
-    --view-bg: #0F141B;
+    --frame: #1D1F23;
+    --frame-inactive: #2A2C30;
+    --tb-fg: #E3E3E3;
+    --tab-fg: #C4C7C5;
+    --tab-fg-inactive: #8E9196;
+    --tab-active: #383B40;
+    --tab-hover: rgba(255, 255, 255, .07);
+    --tab-sep: rgba(255, 255, 255, .2);
+    --btn-hover: rgba(255, 255, 255, .08);
+    --btn-press: rgba(255, 255, 255, .05);
+    --close-btn-hover: rgba(255, 255, 255, .1);
+    --close-btn-press: rgba(255, 255, 255, .16);
+    --focus: #A8C7FA;
+    --accent: #7CACF8;
+    --fav-map: #7CACF8; --fav-search: #7CACF8; --fav-place: #F28B82; --fav-directions: #8AB4F8; --fav-hike: #6DD58C; --fav-panel: #7CACF8;
     color-scheme: dark;
   }
 }
+/* maximized: no drag margin above the tabs (Chrome does the same) */
+html.maximized { --tb-h: 36px; }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
-  font-family: var(--font); font-size: 12px; color: var(--tb-fg); background: var(--view-bg);
+  /* the page behind the bar and the map = the active tab's colour, so a sub-pixel seam between them never shows */
+  font-family: var(--font); font-size: 12px; color: var(--tb-fg); background: var(--tab-active);
   -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none;
 }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -83,19 +96,16 @@ button { font: inherit; color: inherit; }
 /* ------------------------------------------------------------------ title bar */
 .titlebar {
   position: fixed; inset: 0 0 auto 0; height: var(--tb-h); z-index: 10;
-  display: flex; align-items: stretch; background: var(--tb-bg);
-  transition: background-color .15s;
+  display: flex; align-items: stretch; background: var(--frame);
+  transition: background-color .2s;
 }
-/* hairline under the bar; the active tab covers it so it "merges" with the map below */
-.titlebar::after {
-  content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--line); pointer-events: none;
-}
-html.blurred .titlebar { background: var(--tb-bg-inactive); }
-html.blurred .tb-title, html.blurred .wc-btn, html.blurred .tb-new { color: var(--tb-muted); }
+html.blurred .titlebar { background: var(--frame-inactive); }
+html.blurred .tb-brand, html.blurred .wc-btn, html.blurred .tb-new { color: var(--tab-fg-inactive); }
 
 .tb-brand {
+  /* centred on the tabs' line, not on the whole bar */
   flex: none; display: flex; align-items: center; gap: 8px;
-  padding-inline: 14px 10px; color: var(--tb-fg);
+  padding: calc(var(--tb-h) - var(--tab-h)) 14px 0 6px; color: var(--tb-fg);
 }
 .tb-logo { width: 18px; height: 18px; display: block; flex: none; -webkit-user-drag: none; }
 .tb-title { font-size: 12px; font-weight: 500; letter-spacing: .1px; white-space: nowrap; }
@@ -103,104 +113,125 @@ html.blurred .tb-title, html.blurred .wc-btn, html.blurred .tb-new { color: var(
 
 .tb-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; }
 .tabstrip {
-  flex: 0 1 auto; min-width: 0; height: 100%; display: flex; align-items: flex-end;
+  /* the side padding leaves room for the active tab's feet at both ends (the strip clips its overflow) */
+  position: relative; flex: 0 1 auto; min-width: 0; height: 100%; display: flex; align-items: flex-end;
   overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior: contain;
-  padding-inline: 8px; scroll-behavior: smooth;
+  padding-inline: calc(var(--tab-r) + 2px); scroll-behavior: smooth;
 }
 .tabstrip::-webkit-scrollbar { display: none; }
 .tb-drag { flex: 1 0 40px; align-self: stretch; }
 
 /* ------------------------------------------------------------------ tabs */
 .tab {
-  --bg: transparent;
   /* explicit width: the container query (inline-size containment) gives the tab no intrinsic width */
   position: relative; flex: 0 1 auto; width: var(--tab-max); min-width: var(--tab-min); height: var(--tab-h);
-  display: flex; align-items: center; margin-inline-end: 1px;
-  border-radius: var(--tab-r) var(--tab-r) 0 0; background: var(--bg); color: var(--tb-muted);
-  container-type: inline-size; transition: background-color .12s;
+  display: flex; align-items: center; isolation: isolate;
+  border-radius: var(--tab-r) var(--tab-r) 0 0; color: var(--tab-fg);
+  container-type: inline-size; transition: color .12s;
 }
+/* separator between background tabs; hidden next to the active and the hovered tab */
 .tab + .tab::before {
-  /* separator on the right edge (RTL: between this tab and the previous one) */
-  content: ''; position: absolute; inset-inline-start: -1px; top: 9px; width: 1px; height: 14px; background: var(--tab-sep);
-  transition: opacity .12s;
+  content: ''; position: absolute; inset-inline-start: -.5px; top: calc((var(--tab-h) - 16px) / 2); width: 1px; height: 16px;
+  border-radius: 1px; background: var(--tab-sep); transition: opacity .12s; pointer-events: none;
 }
-.tab:hover:not(.active) { --bg: var(--tab-hover); color: var(--tb-fg); }
-.tab.active, .tab.active + .tab, .tab:hover, .tab:hover + .tab { --sep: 0; }
-.tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before { opacity: 0; }
-.tab.active {
-  --bg: var(--tab-active); color: var(--tb-fg); z-index: 2;
-  height: calc(var(--tab-h) + 1px); margin-bottom: -1px; /* covers the bar's hairline */
-  box-shadow: 0 0 0 .5px rgba(0, 0, 0, .06), 0 -1px 2px rgba(0, 0, 0, .04);
+.tab.active::before, .tab.active + .tab::before, .tab:hover::before, .tab:hover + .tab::before,
+.tab.dragging::before, .tab.dragging + .tab::before, .tab.closing::before, .tab.closing + .tab::before { opacity: 0; }
+/* hover: a floating rounded "pill" (Chrome Refresh 2023) */
+.tab::after {
+  content: ''; position: absolute; inset: 3px 5px; z-index: -1; border-radius: var(--tab-r);
+  background: var(--tab-hover); opacity: 0; transition: opacity .12s; pointer-events: none;
 }
-:root[data-theme="dark"] .tab.active { box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05); }
-@media (prefers-color-scheme: dark) { :root[data-theme="auto"] .tab.active { box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05); } }
-/* the concave "feet" that join the active tab to the content (Chrome / Edge shape) */
-.tab.active .foot {
-  position: absolute; bottom: 0; width: var(--tab-r); height: var(--tab-r); pointer-events: none;
-  background: radial-gradient(circle at var(--fx) 0, transparent calc(var(--tab-r) - .5px), var(--tab-active) var(--tab-r));
+.tab:not(.active):hover::after { opacity: 1; }
+.tab:not(.active):hover { color: var(--tb-fg); }
+html.blurred .tab:not(.active):not(:hover) { color: var(--tab-fg-inactive); }
+
+.tab.active { background: var(--tab-active); color: var(--tb-fg); z-index: 2; min-width: var(--tab-min-active); }
+/* the concave feet that join the active tab to the surface below. Each foot box overlaps the tab by 1px
+   (no seam at fractional positions) and is filled by the box-shadow spread around a circle, so the curve is
+   anti-aliased like a border-radius. Physical left/right: the shape is symmetric, so RTL needs no mirroring. */
+.foot { display: none; position: absolute; bottom: 0; width: calc(var(--tab-r) + 1px); height: var(--tab-r); overflow: hidden; pointer-events: none; }
+.tab.active .foot { display: block; }
+.foot-l { left: calc(-1 * var(--tab-r)); }
+.foot-r { right: calc(-1 * var(--tab-r)); }
+.foot::before {
+  content: ''; position: absolute; top: calc(-1 * var(--tab-r)); width: calc(2 * var(--tab-r)); height: calc(2 * var(--tab-r));
+  border-radius: 50%; box-shadow: 0 0 0 var(--tab-r) var(--tab-active);
 }
-.tab.active .foot-s { inset-inline-start: calc(-1 * var(--tab-r)); --fx: 0; }
-.tab.active .foot-e { inset-inline-end: calc(-1 * var(--tab-r)); --fx: 100%; }
-[dir="rtl"] .tab.active .foot-s { --fx: 100%; }
-[dir="rtl"] .tab.active .foot-e { --fx: 0; }
-.tab:not(.active) .foot { display: none; }
+.foot-l::before { left: calc(-1 * var(--tab-r)); }
+.foot-r::before { right: calc(-1 * var(--tab-r)); }
 
 .tab-main {
   flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px;
   padding-inline: 12px 6px; border: 0; background: none; cursor: default; text-align: start;
   border-radius: inherit; outline-offset: -3px;
 }
-.tab-icon {
-  flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--accent);
-}
-.tab:not(.active) .tab-icon { color: inherit; opacity: .9; }
-.tab-icon svg { width: 16px; height: 16px; }
+.tab-icon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--fav-map); }
+.tab[data-kind="search"] .tab-icon { color: var(--fav-search); }
+.tab[data-kind="place"] .tab-icon { color: var(--fav-place); }
+.tab[data-kind="directions"] .tab-icon { color: var(--fav-directions); }
+.tab[data-kind="hike"] .tab-icon { color: var(--fav-hike); }
+.tab[data-kind="panel"] .tab-icon { color: var(--fav-panel); }
+.tab-icon svg { width: 16px; height: 16px; display: block; }
 .tab-title {
   flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 16px;
-  /* fade out instead of "…" (as browsers do) */
-  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
-  mask-image: linear-gradient(to left, #000 calc(100% - 18px), transparent);
+  /* fade out at the overflow edge instead of "…" (as Chrome does); in RTL the text ends on the left */
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent);
 }
-[dir="rtl"] .tab-title { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px); mask-image: linear-gradient(to right, transparent, #000 18px); }
+[dir="rtl"] .tab-title { -webkit-mask-image: linear-gradient(to right, transparent, #000 24px); mask-image: linear-gradient(to right, transparent, #000 24px); }
 .tab.loading .tab-icon svg { display: none; }
 .tab.loading .tab-icon::after {
-  content: ''; width: 12px; height: 12px; border-radius: 50%;
-  border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+  /* Chrome-like throbber: a spinning arc */
+  content: ''; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: var(--accent); border-inline-start-color: var(--accent);
   animation: tab-spin .8s linear infinite;
 }
 @keyframes tab-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .tab.loading .tab-icon::after { animation-duration: 2.4s; } }
 
 .tab-close {
-  flex: none; width: 20px; height: 20px; margin-inline-end: 6px; padding: 0; border: 0; border-radius: 50%;
-  display: grid; place-items: center; background: none; color: var(--tb-muted); cursor: default;
+  flex: none; width: 20px; height: 20px; margin-inline-end: 7px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: none; color: inherit; cursor: default;
+  transition: opacity .12s, background-color .1s;
 }
-.tab-close:hover { background: var(--btn-hover); color: var(--tb-fg); }
-.tab-close:active { background: var(--btn-press); }
-.tab-close svg { width: 10px; height: 10px; }
+.tab:not(.active):not(:hover) .tab-close { opacity: 0; }
+.tab-close:hover { background: var(--close-btn-hover); color: var(--tb-fg); }
+.tab-close:active { background: var(--close-btn-press); }
+.tab-close svg { width: 10px; height: 10px; display: block; }
 
-/* narrow tabs: drop the title, then the close button of background tabs (like Chrome) */
-@container (max-width: 92px) {
-  .tab-main { padding-inline: 10px 2px; }
+/* narrow tabs (like Chrome): the title goes first, then background tabs lose the close button and centre the
+   favicon, and the narrowest active tab shows only its close button */
+@container (max-width: 72px) {
   .tab-title { display: none; }
-}
-@container (max-width: 64px) {
   .tab:not(.active) .tab-close { display: none; }
-  .tab-main { justify-content: center; padding-inline: 0; }
-  .tab.active .tab-icon { display: none; }
+  .tab:not(.active) .tab-main { justify-content: center; padding-inline: 0; }
+  .tab.active .tab-main { padding-inline: 8px 0; }
+  .tab.active .tab-close { margin-inline-end: 4px; }
+}
+@container (max-width: 52px) {
+  .tab.active .tab-main { display: none; }
   .tab.active .tab-close { margin-inline: auto; }
 }
 
-.tab.dragging { z-index: 5; transition: none; cursor: default; }
-.tab.settling { transition: transform .15s ease-out; }
+/* drag to reorder: the tab lifts and follows the pointer */
+.tab.dragging { z-index: 5; transition: none; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .18)) drop-shadow(0 2px 6px rgba(0, 0, 0, .12)); }
+.tab.closing { pointer-events: none; }
 
 .tb-new {
-  flex: none; width: 28px; height: 28px; margin: 0 4px 2px; padding: 0; border: 0; border-radius: 6px;
-  display: grid; place-items: center; background: none; color: var(--tb-fg); cursor: default; align-self: flex-end;
-  margin-bottom: 3px;
+  /* right after the last tab (to its left in RTL), centred on the tabs' line */
+  flex: none; width: 28px; height: 28px; margin: 0 0 calc((var(--tab-h) - 28px) / 2); margin-inline-start: 4px;
+  padding: 0; border: 0; border-radius: 50%; align-self: flex-end;
+  display: grid; place-items: center; background: none; color: var(--tb-fg); cursor: default;
+  transition: background-color .1s;
 }
+.tb-new svg { display: block; }
 .tb-new:hover { background: var(--btn-hover); }
 .tb-new:active { background: var(--btn-press); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tab, .tab::before, .tab::after, .tab-close, .titlebar, .tb-new { transition: none; }
+  .tab.dragging { filter: none; }
+}
 
 /* ------------------------------------------------------------------ window buttons (left in RTL) */
 .winctl { flex: none; display: flex; align-items: stretch; }
@@ -221,9 +252,9 @@ html.maximized .wc-btn .i-max { display: none; }
 html.maximized .wc-btn .i-restore { display: block; }
 
 /* ------------------------------------------------------------------ views */
-.views { position: fixed; inset: var(--tb-h) 0 0 0; background: var(--view-bg); }
+.views { position: fixed; inset: var(--tb-h) 0 0 0; background: var(--tab-active); }
 .view { position: absolute; inset: 0; }
-.view iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--view-bg); }
+.view iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--tab-active); }
 /* background tabs stay alive (instant switching) but are not painted, focusable or announced */
 .view:not(.active) { visibility: hidden; pointer-events: none; }
 .noscript { padding: 24px; font-size: 16px; }
