@@ -3,26 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>מפות ישראל – מפה בעברית למחשב, גם בלי אינטרנט</title>
-  <meta name="description" content="מפה מלאה של ישראל בעברית ל-Windows: חיפוש חכם, ניווט ברכב, ברגל ובאופניים, תחבורה ציבורית עם כל הקווים, שבילים, טופוגרפיה ותלת־ממד. הכול רץ על המחשב, בלי אינטרנט ובלי מעקב.">
+  <title>מפות ישראל – מפות אופליין בעברית למחשב, בחינם</title>
+  <meta name="description" content="מפות ישראל: מפה מלאה של ישראל בעברית להורדה למחשב Windows, שעובדת גם בלי אינטרנט (אופליין). חיפוש, ניווט, תחבורה ציבורית, שבילים, טופוגרפיה ותלת־ממד. חינם, בלי פרסומות ובלי מעקב.">
   <link rel="canonical" href="https://rishumit.github.io/hebrew-maps/">
   <meta name="theme-color" content="#fbfaf6" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0a1512" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
-  <meta name="robots" content="index, follow">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="application-name" content="מפות ישראל">
+  <meta name="author" content="rishumit">
+  <!-- Google Search Console: הדביקו כאן את תג האימות, למשל
+       <meta name="google-site-verification" content="..."> -->
 
   <meta property="og:type" content="website">
   <meta property="og:locale" content="he_IL">
   <meta property="og:site_name" content="מפות ישראל">
-  <meta property="og:title" content="מפות ישראל – מפה בעברית למחשב, גם בלי אינטרנט">
-  <meta property="og:description" content="חיפוש בעברית, ניווט, תחבורה ציבורית, שבילים וטופוגרפיה – הכול על המחשב שלכם, בלי אינטרנט ובלי מעקב.">
+  <meta property="og:title" content="מפות ישראל – מפות אופליין בעברית למחשב, בחינם">
+  <meta property="og:description" content="מפת ישראל מלאה בעברית למחשב, שעובדת אופליין: חיפוש, ניווט, תחבורה ציבורית, שבילים וטופוגרפיה. חינם, בלי מעקב.">
   <meta property="og:url" content="https://rishumit.github.io/hebrew-maps/">
   <meta property="og:image" content="https://rishumit.github.io/hebrew-maps/assets/img/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="חלון האפליקציה מפות ישראל: העיר העתיקה בירושלים עם כרטיס מידע">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="מפות ישראל – מפה בעברית למחשב, גם בלי אינטרנט">
+  <meta name="twitter:title" content="מפות ישראל – מפות אופליין בעברית למחשב, בחינם">
   <meta name="twitter:description" content="חיפוש בעברית, ניווט, תחבורה ציבורית, שבילים וטופוגרפיה – הכול על המחשב שלכם.">
   <meta name="twitter:image" content="https://rishumit.github.io/hebrew-maps/assets/img/og.jpg">
 
@@ -36,22 +40,174 @@
   <script>if (location.hash) document.documentElement.classList.add('cv-off');</script>
 
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "מפות ישראל",
-    "alternateName": "Hebrew Maps",
-    "description": "מפה מלאה של ישראל בעברית למחשב Windows שעובדת גם בלי אינטרנט: חיפוש חכם, ניווט, תחבורה ציבורית, שבילים, טופוגרפיה ותלת־ממד.",
-    "applicationCategory": "TravelApplication",
-    "operatingSystem": "Windows 10, Windows 11",
-    "inLanguage": "he",
-    "url": "https://rishumit.github.io/hebrew-maps/",
-    "downloadUrl": "https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe",
-    "image": "https://rishumit.github.io/hebrew-maps/assets/img/og.jpg",
-    "screenshot": "https://rishumit.github.io/hebrew-maps/assets/img/hero-light-1800.jpg",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "ILS" },
-    "codeRepository": "https://github.com/rishumit/hebrew-maps"
-  }
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://rishumit.github.io/hebrew-maps/#website",
+      "url": "https://rishumit.github.io/hebrew-maps/",
+      "name": "מפות ישראל",
+      "alternateName": [
+        "Hebrew Maps",
+        "מפות אופליין למחשב",
+        "מפת ישראל למחשב"
+      ],
+      "inLanguage": "he",
+      "description": "מפות אופליין בעברית למחשב Windows – מפת ישראל מלאה שעובדת בלי אינטרנט."
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://rishumit.github.io/hebrew-maps/#app",
+      "name": "מפות ישראל",
+      "alternateName": [
+        "Hebrew Maps",
+        "מפות אופליין",
+        "מפות ישראל למחשב"
+      ],
+      "description": "מפה מלאה של ישראל בעברית למחשב Windows שעובדת גם בלי אינטרנט: חיפוש חכם, ניווט ברכב, ברגל ובאופניים, תחבורה ציבורית, שבילים, טופוגרפיה ותלת־ממד.",
+      "applicationCategory": "TravelApplication",
+      "applicationSubCategory": "מפות וניווט",
+      "operatingSystem": "Windows 10, Windows 11",
+      "inLanguage": "he",
+      "softwareVersion": "1.1.0",
+      "isAccessibleForFree": true,
+      "license": "https://github.com/rishumit/hebrew-maps",
+      "url": "https://rishumit.github.io/hebrew-maps/",
+      "downloadUrl": "https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe",
+      "installUrl": "https://rishumit.github.io/hebrew-maps/download.html",
+      "image": "https://rishumit.github.io/hebrew-maps/assets/img/og.jpg",
+      "screenshot": [
+        "https://rishumit.github.io/hebrew-maps/assets/img/hero-light-1800.jpg",
+        "https://rishumit.github.io/hebrew-maps/assets/img/tour-transitplan-1800.jpg",
+        "https://rishumit.github.io/hebrew-maps/assets/img/tour-topo-1800.jpg",
+        "https://rishumit.github.io/hebrew-maps/assets/img/tour-masada-1800.jpg"
+      ],
+      "featureList": [
+        "מפות אופליין – עובד בלי אינטרנט",
+        "חיפוש בעברית",
+        "ניווט ברכב, ברגל ובאופניים",
+        "תחבורה ציבורית עם כל הקווים והתחנות",
+        "מפה טופוגרפית ושבילים מסומנים",
+        "תצוגת תלת־ממד",
+        "מדריכי מסלול",
+        "זמני תפילות בבתי כנסת",
+        "תצלומי אוויר",
+        "עדכון שבועי"
+      ],
+      "keywords": "מפות ישראל, מפות אופליין, מפות למחשב, מפת ישראל, מפה בעברית, ניווט בלי אינטרנט, מפה טופוגרפית, תחבורה ציבורית",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "ILS"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "rishumit",
+        "url": "https://github.com/rishumit"
+      },
+      "codeRepository": "https://github.com/rishumit/hebrew-maps",
+      "isPartOf": {
+        "@id": "https://rishumit.github.io/hebrew-maps/#website"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://rishumit.github.io/hebrew-maps/#faq",
+      "inLanguage": "he",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "מה זה מפות אופליין?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "מפות אופליין הן מפות שנשמרות על המחשב ועובדות בלי חיבור לאינטרנט. מפות ישראל מורידה פעם אחת את מפת ישראל המלאה – רחובות, כתובות, נקודות עניין, שבילים, גבהים ולוחות הזמנים של התחבורה הציבורית – ומכאן החיפוש, הניווט והתצוגה רצים מהמחשב עצמו, גם ברשת איטית, מסוננת או בלי רשת בכלל."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "איך מורידים מפת ישראל למחשב?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "מורידים את קובץ ההתקנה ל-Windows ומתקינים. בפתיחה הראשונה בוחרים בתפריט \"עדכונים\" ← \"עדכן הכול\", והתוכנה מורידה את נתוני ישראל (כ-2GB). אפשר גם להעביר את הנתונים בקובץ למחשב שאין בו אינטרנט בכלל."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "במה זה שונה ממפות באתר אינטרנט?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "מפות באתר אינטרנט טוענות כל אריח וכל תוצאת חיפוש מהשרת, ולכן צריכות חיבור קבוע ושולחות לשרת מה שמחפשים. מפות ישראל היא תוכנת מפות למחשב: כל המפה שמורה אצלכם, החיפוש בעברית והניווט מחושבים מקומית, ושום חיפוש או מסלול לא יוצא מהמחשב."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "האם האפליקציה באמת עובדת בלי אינטרנט?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "כן. אחרי שמורידים את הנתונים פעם אחת, המפה, החיפוש, הניווט, התחבורה הציבורית, השבילים והטופוגרפיה עובדים מהמחשב בלבד. אינטרנט נדרש רק להורדת עדכונים, ולתצלומי אוויר באזור שעוד לא נשמר במחשב."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "מאיפה מגיעים הנתונים?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ממקורות פתוחים: OpenStreetMap (מפה, רחובות, נקודות עניין ושבילים), משרד התחבורה (לוחות הזמנים של התחבורה הציבורית, GTFS), Copernicus DEM (גבהים), נדרים פלוס (זמני תפילות), data.gov.il ו-Wikidata. תצלומי האוויר הם של מרכז מיפוי ישראל, לשימוש אישי, ותצלומי הלוויין – Sentinel-2 cloudless של EOX."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "כל כמה זמן הנתונים מתעדכנים?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "פעם בשבוע. חבילות חדשות נבנות אוטומטית ומתפרסמות ב-GitHub. באפליקציה: תפריט ← \"עדכונים\" ← \"עדכן הכול\", או הפעלה של בדיקה אוטומטית שבועית. המפה ממשיכה לעבוד בזמן העדכון."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "יש לי נטפרי (או סינון אחר). מה צריך לפתוח?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ההורדה והעדכונים מגיעים מ-GitHub. אם ההורדה נחסמת, בקשו מהסינון לפתוח את הכתובות האלה: github.com release-assets.githubusercontent.com objects.githubusercontent.com לתצלומי האוויר: cdn.govmap.gov.il, ולתצלומי הלוויין (חלופה): tiles.maps.eox.at. שלמות כל קובץ נבדקת מול טביעת SHA-256, כך שהסינון לא יכול לפגוע בנתונים."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "מה עם פרטיות?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "הכול רץ אצלכם. אין חשבון, אין מעקב, אין פרסומות, והחיפושים והמסלולים לא נשלחים לשום שרת. החיבורים היחידים לרשת הם הורדת העדכונים (מ-GitHub) ותצלומי האוויר (מ-govmap, או תצלומי לוויין מ-EOX) כשמפעילים אותם. למדיניות הפרטיות."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "מופיעה ההודעה \"Windows הגן על המחשב\". זה בסדר?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "כן. קובץ ההתקנה עדיין לא חתום בתעודה מסחרית, ולכן SmartScreen מציג אזהרה. לוחצים על \"מידע נוסף\" ואז על \"הפעל בכל זאת\". הקובץ נבנה אוטומטית מקוד המקור הפתוח ב-GitHub. הסבר מפורט."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "כמה זה עולה?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "שום דבר. אין תשלום, אין מנוי ואין רכישות בתוך האפליקציה. קוד המקור פתוח ב-GitHub."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "מה צריך כדי להריץ את האפליקציה?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Windows 10 או 11 (64 ביט), ‏4GB זיכרון לפחות, וכ-2GB מקום פנוי לנתונים. החלון של האפליקציה משתמש ב-WebView2, שמותקן מראש ב-Windows 11 וב-Windows 10 מעודכן; בלעדיו המפה נפתחת בדפדפן. כל הדרישות."
+          }
+        }
+      ]
+    }
+  ]
+}
   </script>
 </head>
 <body>
@@ -109,8 +265,8 @@
       <div class="wrap">
         <div class="hero-copy">
           <a class="badge" href="changelog.html"><span class="dot">חדש</span><span>גרסה 1.1: עדכון התוכנה מתוך התוכנה ועדכונים חלקיים</span></a>
-          <h1 id="hero-title">כל ישראל במפה אחת.<span class="soft">גם בלי אינטרנט.</span></h1>
-          <p class="lead">מפה מלאה בעברית למחשב Windows: חיפוש חכם, ניווט, תחבורה ציבורית עם כל הקווים, שבילים וטופוגרפיה. הכול רץ על המחשב שלכם, מנתונים פתוחים, ומתעדכן כל שבוע.</p>
+          <h1 id="hero-title">מפות ישראל למחשב.<span class="soft">גם בלי אינטרנט.</span></h1>
+          <p class="lead">כל ישראל במפה אחת: מפות אופליין בעברית למחשב Windows, עם חיפוש חכם, ניווט, תחבורה ציבורית עם כל הקווים, שבילים וטופוגרפיה. הכול רץ על המחשב שלכם, מנתונים פתוחים, ומתעדכן כל שבוע.</p>
           <div class="dl">
               <div class="hero-actions">
                 <a class="btn btn-primary btn-lg" href="https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe" data-dl-link>
@@ -502,6 +658,24 @@
           <h2 id="faq-title">שאלות ותשובות</h2>
         </div>
         <div class="faq">
+          <details>
+            <summary><span>מה זה מפות אופליין?</span></summary>
+            <div class="answer">
+              <p>מפות אופליין הן מפות שנשמרות על המחשב ועובדות בלי חיבור לאינטרנט. מפות ישראל מורידה פעם אחת את מפת ישראל המלאה – רחובות, כתובות, נקודות עניין, שבילים, גבהים ולוחות הזמנים של התחבורה הציבורית – ומכאן החיפוש, הניווט והתצוגה רצים מהמחשב עצמו, גם ברשת איטית, מסוננת או בלי רשת בכלל.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>איך מורידים מפת ישראל למחשב?</span></summary>
+            <div class="answer">
+              <p>מורידים את <a href="download.html">קובץ ההתקנה ל-Windows</a> ומתקינים. בפתיחה הראשונה בוחרים בתפריט "עדכונים" ← "עדכן הכול", והתוכנה מורידה את נתוני ישראל (כ-2GB). אפשר גם <a href="download.html#offline">להעביר את הנתונים בקובץ</a> למחשב שאין בו אינטרנט בכלל.</p>
+            </div>
+          </details>
+          <details>
+            <summary><span>במה זה שונה ממפות באתר אינטרנט?</span></summary>
+            <div class="answer">
+              <p>מפות באתר אינטרנט טוענות כל אריח וכל תוצאת חיפוש מהשרת, ולכן צריכות חיבור קבוע ושולחות לשרת מה שמחפשים. מפות ישראל היא תוכנת מפות למחשב: כל המפה שמורה אצלכם, החיפוש בעברית והניווט מחושבים מקומית, ושום חיפוש או מסלול לא יוצא מהמחשב.</p>
+            </div>
+          </details>
           <details>
             <summary><span>האם האפליקציה באמת עובדת בלי אינטרנט?</span></summary>
             <div class="answer">
