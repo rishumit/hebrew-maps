@@ -11,6 +11,7 @@ Exit code 1 with a list of problems, 0 when everything is fine. Standard library
 
 from __future__ import annotations
 
+import re
 import sys
 from html.parser import HTMLParser
 from pathlib import Path
@@ -67,7 +68,9 @@ def svg_ids(path: Path) -> set[str]:
 
 def main(root: Path) -> int:
     root = root.resolve()
-    pages = {p: Page() for p in sorted(root.rglob("*.html"))}
+    # google<token>.html = Search Console verification file, not a page
+    pages = {p: Page() for p in sorted(root.rglob("*.html"))
+             if not re.fullmatch(r"google[0-9a-f]+\.html", p.name)}
     for path, page in pages.items():
         page.feed(path.read_text(encoding="utf-8"))
     problems: list[str] = []
