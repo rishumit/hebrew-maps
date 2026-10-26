@@ -96,7 +96,7 @@ class DesktopTabsTest(unittest.TestCase):
         expect(page.locator("#winctl")).to_be_hidden()  # not in Tauri
         expect(page.locator(".tab")).to_have_count(1)
         self.assertEqual(self.titles(page), ["מפה"])
-        expect(page).to_have_title("מפות בעברית")
+        expect(page).to_have_title("מפות ישראל")
 
         # search -> tab title + document titles
         f = self.active_frame(page)
@@ -104,7 +104,7 @@ class DesktopTabsTest(unittest.TestCase):
         f.locator("#q").press("Enter")
         expect(f.locator(".results .result").first).to_be_visible()
         expect(page.locator(".tab.active .tab-title")).to_have_text("מסעדות בתל אביב")
-        expect(page).to_have_title("מסעדות בתל אביב – מפות בעברית")
+        expect(page).to_have_title("מסעדות בתל אביב – מפות ישראל")
         expect(page.locator(".tab.active")).to_have_attribute("data-kind", "search")  # favicon follows the map's state
         wait_js(page, "JSON.parse(localStorage.getItem('hmaps:desktop-tabs')).tabs[0].hash.includes('q=')")
 

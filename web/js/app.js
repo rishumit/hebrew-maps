@@ -1,4 +1,4 @@
-// מפות בעברית – application controller.
+// מפות ישראל – application controller.
 
 import { api, ApiError } from './api.js';
 import { Combobox } from './combobox.js';
@@ -941,7 +941,7 @@ const app = {
     const info = this._titleInfo();
     if (info) this._title = info;
     const t = this._title?.title || '';
-    document.title = t ? `${t} – מפות בעברית` : 'מפות בעברית';
+    document.title = t ? `${t} – מפות ישראל` : 'מפות ישראל';
     if (window.parent !== window) {
       // same-origin parent only (targetOrigin); X-Frame-Options keeps other sites from framing the map anyway
       try {
@@ -953,7 +953,7 @@ const app = {
   async share(item) {
     const url = new URL(location.href);
     url.hash = `map=17.00/${item.location.lat.toFixed(5)}/${item.location.lon.toFixed(5)}&item=${encodeURIComponent(item.id)}`;
-    const data = { title: item.name, text: `${item.name} – מפות בעברית`, url: url.toString() };
+    const data = { title: item.name, text: `${item.name} – מפות ישראל`, url: url.toString() };
     if (navigator.share) {
       try {
         await navigator.share(data);
@@ -1057,7 +1057,7 @@ function shortcutsDialog() {
 
 function accessibilityDialog() {
   openDialog('הצהרת נגישות', `
-    <p>המערכת "מפות בעברית" שואפת להיות נגישה לכלל האוכלוסייה, ותוכננה בהתאם לתקן <strong>WCAG 2.1 ברמה AA</strong> ולתקן הישראלי ת"י 5568.</p>
+    <p>המערכת "מפות ישראל" שואפת להיות נגישה לכלל האוכלוסייה, ותוכננה בהתאם לתקן <strong>WCAG 2.1 ברמה AA</strong> ולתקן הישראלי ת"י 5568.</p>
     <h3>מה נעשה</h3>
     <ul>
       <li>ממשק מלא בעברית מימין לשמאל, עם כותרות, אזורים (landmarks) ותוויות לכל הפקדים.</li>

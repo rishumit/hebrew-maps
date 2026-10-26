@@ -249,7 +249,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.version.outputs.value) }}
-          name: "מפות בעברית v${{ steps.version.outputs.value }}"
+          name: "מפות ישראל v${{ steps.version.outputs.value }}"
           body: |
             ## התקנה / Installation
 

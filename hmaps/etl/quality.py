@@ -190,7 +190,7 @@ main{{max-width:960px;margin:auto}}h1{{font-size:1.8rem}}table{{border-collapse:
 td,th{{padding:8px 12px;border-bottom:1px solid #E5E7EB;text-align:right}}th{{background:#F3F4F6}}.ok{{color:#047857;font-weight:600}}.bad{{color:#B91C1C;font-weight:600}}
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}}.tile{{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)}}
 .tile b{{display:block;font-size:1.6rem;color:#1E40AF}}</style></head><body><main>
-<h1>דוח איכות נתונים – מפות בעברית</h1><p>נוצר: {e(report['generated'])} · תאריך נתוני OSM: {e(str(report.get('source_date') or 'לא ידוע'))}</p>
+<h1>דוח איכות נתונים – מפות ישראל</h1><p>נוצר: {e(report['generated'])} · תאריך נתוני OSM: {e(str(report.get('source_date') or 'לא ידוע'))}</p>
 <div class="tiles"><div class="tile"><b>{tot['pois']:,}</b>נקודות עניין</div><div class="tile"><b>{tot['settlements']:,}</b>יישובים</div>
 <div class="tile"><b>{tot['streets']:,}</b>רחובות</div><div class="tile"><b>{tot['addresses']:,}</b>כתובות</div></div>
 <h2>מדדי איכות</h2><table><tr><th>מדד</th><th>ערך</th><th>יעד</th><th>סטטוס</th><th>הערה</th></tr>{kpi_rows}</table>

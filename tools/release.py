@@ -356,7 +356,7 @@ def notes(m: dict) -> str:
         rows.append(f"| {e['name_he']} (`{cid}`) | {e.get('date') or '—'} | {size} | {status_he[e['status']]} | "
                     f"{e.get('file') or '—'} | {part} |")
     return (f"## עדכון נתונים שבועי – {m['date']}\n\n"
-            "חבילות הנתונים של מפות בעברית. התוכנה מעדכנת אותן בעצמה: תפריט ← **עדכונים**, "
+            "חבילות הנתונים של מפות ישראל. התוכנה מעדכנת אותן בעצמה: תפריט ← **עדכונים**, "
             "או `update-online-windows.cmd` / `python -m hmaps update`.\n\n"
             "**מחשב בלי אינטרנט?** הורידו את `HebrewMaps-Update-<תאריך>.zip` (כל החבילות בקובץ אחד), העבירו "
             "בדיסק-און-קי, ובתוכנה: עדכונים ← **עדכון מקובץ**.\n\n" + "\n".join(rows) +
@@ -496,12 +496,12 @@ def cmd_prepare_db(args) -> int:
 #: a little under GitHub's 2 GiB asset limit (ZIP headers, manifest, README)
 BUNDLE_LIMIT = MAX_ASSET - 32 * 1024 ** 2
 BUNDLE_PREFIX = "HebrewMaps-Update"
-BUNDLE_README = """\ufeffמפות בעברית – קובץ עדכון לנתונים, למחשב בלי אינטרנט
+BUNDLE_README = """\ufeffמפות ישראל – קובץ עדכון לנתונים, למחשב בלי אינטרנט
 גרסת נתונים: {date}{part}
 
 איך מעדכנים:
 1. מעתיקים את הקובץ הזה (כמו שהוא, בלי לפתוח אותו) לדיסק-און-קי ומחברים למחשב שבו מותקנת התוכנה.
-2. פותחים את "מפות בעברית" ← תפריט (☰) ← "עדכונים" ← "עדכון מקובץ…" ובוחרים את הקובץ.
+2. פותחים את "מפות ישראל" ← תפריט (☰) ← "עדכונים" ← "עדכון מקובץ…" ובוחרים את הקובץ.
 3. התוכנה בודקת כל חבילה (SHA-256) ומתקינה רק מה שחדש יותר ממה שכבר במחשב. המפה ממשיכה לעבוד בינתיים.
 
 התוכנה עצמה עוד לא מותקנת? מעתיקים גם את HebrewMaps-Setup.exe מדף ההורדה, מתקינים, ואז מעדכנים מהקובץ.
@@ -637,7 +637,7 @@ def cmd_prune(args) -> int:
 
 # =========================================================================== app manifest (installer.yml)
 
-DEFAULT_APP_NOTES = "גרסה {version} של מפות בעברית. העדכון שומר את כל הנתונים שבמחשב."
+DEFAULT_APP_NOTES = "גרסה {version} של מפות ישראל. העדכון שומר את כל הנתונים שבמחשב."
 
 
 def app_manifest(installer: Path, version: str, tag: str | None = None, notes: str | None = None,

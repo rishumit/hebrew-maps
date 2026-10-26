@@ -1,5 +1,5 @@
 ﻿; installer\hebrew-maps.iss
-; Inno Setup 6 script for Hebrew Maps / מפות בעברית
+; Inno Setup 6 script for Hebrew Maps / מפות ישראל
 ;
 ; Compile from project root:
 ;   iscc installer\hebrew-maps.iss
@@ -24,7 +24,7 @@
 ; itself, with --no-browser). Without it – or on a PC without the WebView2 runtime –
 ; the shortcuts start hebrew-maps.exe, which opens the browser as before.
 
-#define MyAppName      "מפות בעברית"
+#define MyAppName      "מפות ישראל"
 #define MyAppNameEn    "HebrewMaps"
 ; build.ps1 / installer.yml pass /DMyAppVersion=x.y.z (= hmaps.__version__)
 #ifndef MyAppVersion
@@ -114,6 +114,13 @@ Source: "..\data\sample\*"; DestDir: "{app}\data\sample"; Flags: ignoreversion r
 [Dirs]
 ; Create an empty reports directory so the app can write quality reports
 Name: "{app}\data\reports"
+
+[InstallDelete]
+; The app was called "מפות בעברית" until v1.1: remove the old Start-menu folder and desktop
+; shortcut so an upgrade does not leave them next to the new "מפות ישראל" ones.
+; (Only shortcuts – the program folder and {app}\data are never touched here.)
+Type: filesandordirs; Name: "{autoprograms}\מפות בעברית"
+Type: files; Name: "{autodesktop}\מפות בעברית.lnk"
 
 [Icons]
 #ifdef HasDesktop

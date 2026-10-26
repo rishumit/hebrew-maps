@@ -44,7 +44,7 @@ SearchResult = {"type": "object", "properties": {
 
 spec = {
     "openapi": "3.1.0",
-    "info": {"title": "מפות בעברית – API", "version": "1.0.0",
+    "info": {"title": "מפות ישראל – API", "version": "1.0.0",
              "description": "API של מערכת המפות: חיפוש בעברית, נקודות עניין, גיאוקודינג, ניווט ואריחי מפה."},
     "paths": {
         "/api/health": {"get": {"summary": "בדיקת תקינות", "responses": ok("תקין")}},

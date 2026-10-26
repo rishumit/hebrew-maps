@@ -41,5 +41,5 @@ jobs:
           docker run -d --name hm -p 8080:8080 hebrew-maps/app:ci
           for i in $(seq 1 30); do curl -fs localhost:8080/api/health && break; sleep 2; done
           curl -fs "localhost:8080/api/search?q=%D7%99%D7%A8%D7%95%D7%A9%D7%9C%D7%99%D7%9D" | grep -q results
-          curl -fs localhost:8080/ | grep -q "מפות בעברית"
+          curl -fs localhost:8080/ | grep -q "מפות ישראל"
           curl -fsI localhost:8080/vendor/maplibre-gl.js

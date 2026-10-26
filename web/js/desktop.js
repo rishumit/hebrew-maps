@@ -1,4 +1,4 @@
-// מפות בעברית – desktop shell: tabs in a custom RTL title bar, one same-origin map iframe per tab.
+// מפות ישראל – desktop shell: tabs in a custom RTL title bar, one same-origin map iframe per tab.
 //
 // Each tab is <iframe src="/map.html#…">. The map reports what it shows ({type:'hmaps:state', title, kind, hash})
 // with postMessage (web/js/app.js → reportState), so tab titles follow the search / selected place / route,
@@ -15,7 +15,7 @@ import { ICONS } from './icons.js';
 const STORE_KEY = 'hmaps:desktop-tabs';
 const MAX_LIVE = 8;
 const MAX_CLOSED = 10;
-const APP_NAME = 'מפות בעברית';
+const APP_NAME = 'מפות ישראל';
 const DEFAULT_TITLE = 'מפה';
 const KIND_ICON = {
   map: 'M3 6.5l6-3 6 3 6-3v14l-6 3-6-3-6 3zM9 3.5v14M15 6.5v14',

@@ -1,7 +1,7 @@
 [package]
 name = "hebrew-maps-desktop"
 version = "1.1.0"
-description = "מפות בעברית – desktop window for the offline Hebrew maps server"
+description = "מפות ישראל – desktop window for the offline Hebrew maps server"
 edition = "2021"
 publish = false
 

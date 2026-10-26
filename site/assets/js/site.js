@@ -1,4 +1,4 @@
-// מפות בעברית – product site. Progressive enhancement only: every link and section works without this file.
+// מפות ישראל – product site. Progressive enhancement only: every link and section works without this file.
 //  * header shadow on scroll + the small-screen menu
 //  * the screenshot tour as ARIA tabs (without JS all screenshots are shown one after another)
 //  * gentle reveal-on-scroll (off with prefers-reduced-motion)

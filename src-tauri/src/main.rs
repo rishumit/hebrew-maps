@@ -1,4 +1,4 @@
-//! מפות בעברית – desktop shell (Tauri 2).
+//! מפות ישראל – desktop shell (Tauri 2).
 //!
 //! Starts the bundled Python server (the PyInstaller `hebrew-maps.exe`, installed next to
 //! this exe) on a local port, shows a loading screen until `/api/health` answers, then
@@ -33,7 +33,7 @@ use tauri::{
 use tauri_plugin_window_state::StateFlags;
 
 const MAIN: &str = "main";
-const TITLE: &str = "מפות בעברית";
+const TITLE: &str = "מפות ישראל";
 const START_PAGE: &str = "/desktop.html";
 const MAP_PAGE: &str = "/map.html";
 /// Everything the pages may ask of the window: the custom title bar's buttons and drag area
@@ -146,7 +146,7 @@ fn create_main_window(app: &AppHandle, extra_host: Option<String>) -> tauri::Res
         .decorations(false)
         .shadow(true)
         .visible(false) // shown after window-state has restored size/position
-        // The taskbar / Alt+Tab title follows the page (the shell sets "<tab title> – מפות בעברית").
+        // The taskbar / Alt+Tab title follows the page (the shell sets "<tab title> – מפות ישראל").
         .on_document_title_changed(|w, title| {
             let title = title.trim();
             let _ = w.set_title(if title.is_empty() { TITLE } else { title });

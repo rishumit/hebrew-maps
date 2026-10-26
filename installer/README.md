@@ -1,4 +1,4 @@
-# בניית מתקין Windows — מפות בעברית
+# בניית מתקין Windows — מפות ישראל
 # Windows Installer Build Guide — Hebrew Maps
 
 ---
@@ -147,9 +147,9 @@ C:\Users\<user>\AppData\Local\Programs\HebrewMaps\
 
 ## הסרת התקנה / Uninstall
 
-**לוח הבקרה** → **תוכניות** → **הסרת התקנת תוכנית** → בחרו **מפות בעברית**
+**לוח הבקרה** → **תוכניות** → **הסרת התקנת תוכנית** → בחרו **מפות ישראל**
 
-**Control Panel** → **Programs** → **Uninstall a program** → select **מפות בעברית**
+**Control Panel** → **Programs** → **Uninstall a program** → select **מפות ישראל**
 
 ---
 

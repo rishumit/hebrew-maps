@@ -1,4 +1,4 @@
-/* מפות בעברית – "עדכונים" panel and the weekly update notice (web/js/updates.js) */
+/* מפות ישראל – "עדכונים" panel and the weekly update notice (web/js/updates.js) */
 
 .upd-intro p { margin: 0 0 var(--space-2); color: var(--text); font-size: var(--text-sm); line-height: var(--leading-normal); }
 .upd-intro .upd-alert { margin: var(--space-2) 0; }

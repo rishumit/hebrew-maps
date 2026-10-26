@@ -163,7 +163,7 @@ button:focus {
 #### Structure (1.3.1)
 ```html
 <!-- טוב ✅ -->
-<h1>מפות בעברית</h1>
+<h1>מפות ישראל</h1>
   <h2>תוצאות חיפוש</h2>
     <h3>מסעדת השף</h3>
     <h3>בית קפה נורדאו</h3>
@@ -172,7 +172,7 @@ button:focus {
     <h3>תיירות</h3>
 
 <!-- רע ❌ - דילוג ברמות -->
-<h1>מפות בעברית</h1>
+<h1>מפות ישראל</h1>
 <h3>תוצאות</h3>
 ```
 
@@ -526,7 +526,7 @@ pa11y-ci --sitemap https://maps.example.co.il/sitemap.xml
 ### 7.1 Missing Alt Text
 ```diff
 - <img src="logo.png">
-+ <img src="logo.png" alt="מפות בעברית - לוגו">
++ <img src="logo.png" alt="מפות ישראל - לוגו">
 ```
 
 ### 7.2 Low Contrast

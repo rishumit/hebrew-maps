@@ -1,4 +1,4 @@
-# מפות בעברית – Hebrew Maps
+# מפות ישראל – Hebrew Maps
 #   docker compose up -d            -> web app + API (http://localhost:8080) and routing
 #   setup.cmd / ./setup.sh           -> first-time data build (see README)
 name: hebrew-maps

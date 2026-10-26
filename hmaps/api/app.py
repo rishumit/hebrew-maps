@@ -228,7 +228,7 @@ async def meta(req: Request) -> Response:
     m = st.ds.meta
     base = str(req.base_url).rstrip("/")
     return JSONResponse({
-        "name": "מפות בעברית", "version": __version__,
+        "name": "מפות ישראל", "version": __version__,
         "dataset": {"available": st.ds.available, "demo": st.ds.demo, "built": m.get("built"), "osm_date": m.get("osm_date"),
                     "version": st.ds.version},
         "basemap": {"type": "openmaptiles" if st.basemap.available else "fallback",

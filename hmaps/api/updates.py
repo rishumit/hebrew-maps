@@ -888,7 +888,7 @@ def install(component_id: str, data: Path | None = None, job: Job | None = None,
         raise UpdateError("unavailable", "הרכיב הזה עדיין לא זמין בגרסה המקוונת.")
     if not compatible(entry):
         raise UpdateError("app_too_old", f"העדכון דורש גרסה {entry.get('min_app_version')} של התוכנה או חדשה יותר. "
-                                         "התקינו קודם את הגרסה החדשה של מפות בעברית.")
+                                         "התקינו קודם את הגרסה החדשה של מפות ישראל.")
     inst = installed(data).get(component_id)
     if not force and not needs_update(inst, entry):
         job.state = "done"
@@ -953,7 +953,7 @@ def uploads_dir(data: Path) -> Path:
 
 
 def _bad_bundle(msg: str = "") -> UpdateError:
-    return UpdateError("bad_bundle", msg or "הקובץ שנבחר אינו קובץ עדכון של מפות בעברית. "
+    return UpdateError("bad_bundle", msg or "הקובץ שנבחר אינו קובץ עדכון של מפות ישראל. "
                                            f"בחרו את הקובץ {BUNDLE_PREFIX}-….zip שהורד מאתר ההורדה.")
 
 
@@ -996,7 +996,7 @@ def install_from_bundle(component_id: str, bundle: Path, data: Path | None = Non
         raise UpdateError("unavailable", "הרכיב הזה לא נמצא בקובץ העדכון.")
     if not compatible(entry):
         raise UpdateError("app_too_old", f"העדכון דורש גרסה {entry.get('min_app_version')} של התוכנה או חדשה יותר. "
-                                         "התקינו קודם את הגרסה החדשה של מפות בעברית (גם קובץ ההתקנה אפשר להעביר "
+                                         "התקינו קודם את הגרסה החדשה של מפות ישראל (גם קובץ ההתקנה אפשר להעביר "
                                          "בדיסק-און-קי).")
     if not force and not needs_update(installed(data).get(component_id), entry):
         job.state = "done"

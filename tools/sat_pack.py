@@ -33,9 +33,9 @@ setlocal
 set "TILES=%LOCALAPPDATA%\Programs\HebrewMaps\data\tiles"
 if not exist "%TILES%" set "TILES=%~dp0"
 set "OUT=%TILES%\satellite.mbtiles"
-echo תצלומי אוויר למפות בעברית ({tiles} אריחים, זום {minzoom}-{maxzoom}, {gb} GB)
+echo תצלומי אוויר למפות ישראל ({tiles} אריחים, זום {minzoom}-{maxzoom}, {gb} GB)
 echo היעד: %OUT%
-echo סגרו את "מפות בעברית" לפני שממשיכים.
+echo סגרו את "מפות ישראל" לפני שממשיכים.
 pause
 {checks}
 echo מחבר ובודק את הקובץ... (כמה דקות)

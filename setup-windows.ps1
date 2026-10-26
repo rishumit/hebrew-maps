@@ -58,7 +58,10 @@ Ok "assets ready"
 
 # ------------------------------------------------------------------ 3. start the server (demo data)
 Step 3 6 "Starting the map (demo data until the real data is ready)"
-$shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "מפות בעברית.lnk"
+# the app was called "מפות בעברית" until v1.1 – drop the old shortcut
+$oldShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "מפות בעברית.lnk"
+if (Test-Path $oldShortcut) { Remove-Item $oldShortcut -Force -ErrorAction SilentlyContinue }
+$shortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "מפות ישראל.lnk"
 try {
   $ws = New-Object -ComObject WScript.Shell
   $lnk = $ws.CreateShortcut($shortcut)
