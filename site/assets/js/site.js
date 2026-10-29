@@ -9,6 +9,7 @@
   'use strict';
 
   const REPO = 'rishumit/hebrew-maps';
+  const RELEASES_URL = `https://github.com/${REPO}/releases`;
   const STABLE_ASSET = 'HebrewMaps-Setup.exe';
   const CACHE_KEY = 'hm:latest-release';
   const CACHE_MS = 60 * 60 * 1000;
@@ -118,6 +119,7 @@
   // ------------------------------------------------------------ latest release
   const metas = document.querySelectorAll('[data-dl-meta]');
   const links = document.querySelectorAll('a[data-dl-link][href*="/releases/"]');
+  const assetLinks = document.querySelectorAll('[data-release-asset]');
   if (!metas.length && !links.length) return;
 
   const fmtSize = (bytes) => `${(bytes / 1048576).toLocaleString('he-IL', { maximumFractionDigits: 0 })} MB`;
@@ -144,7 +146,7 @@
   } catch { /* storage blocked */ }
   if (cached && Date.now() - cached.at < CACHE_MS) {
     apply(cached.rel);
-    return;
+    if (!assetLinks.length) return;
   }
 
   const ctrl = 'AbortController' in window ? new AbortController() : null;
@@ -158,7 +160,29 @@
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((data) => {
       const assets = Array.isArray(data.assets) ? data.assets : [];
-      const exe = assets.find((a) => a.name === STABLE_ASSET) || assets.find((a) => /^HebrewMaps-Setup.*\.exe$/i.test(a.name));
+      const exe = assets.find((a) => a.name === STABLE_ASSET) || assets.find((a) => /^HebrewMaps-Setup-(?!Program-)\d[\w.-]*\.exe$/i.test(a.name));
+      const program = assets.find((a) => a.name === 'HebrewMaps-Setup-Program.exe') || assets.find((a) => /^HebrewMaps-Setup-Program-\d[\w.-]*\.exe$/i.test(a.name));
+      const fullLink = document.querySelector('[data-release-asset="full"]');
+      const programLink = document.querySelector('[data-release-asset="program"]');
+      if (!exe) {
+        links.forEach((a) => {
+          a.href = RELEASES_URL;
+          a.title = 'קובץ ההתקנה לא זמין כרגע. פתיחת רשימת הגרסאות.';
+        });
+      }
+      if (fullLink) {
+        if (exe && /^https:\/\//.test(exe.browser_download_url || '')) fullLink.href = exe.browser_download_url;
+        else fullLink.hidden = true;
+      }
+      if (programLink) {
+        if (program && /^https:\/\//.test(program.browser_download_url || '')) programLink.href = program.browser_download_url;
+        else {
+          programLink.hidden = true;
+          programLink.parentElement.hidden = true;
+        }
+      }
+      const missing = document.querySelector('[data-installer-missing]');
+      if (missing && ((!exe && fullLink) || (!program && programLink))) missing.hidden = false;
       const rel = {
         tag: String(data.tag_name || ''),
         date: data.published_at || (exe && exe.updated_at) || null,
@@ -171,7 +195,20 @@
         sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), rel }));
       } catch { /* storage blocked */ }
     })
-    .catch(() => { /* API blocked / offline / rate limited – the static link and text stay */ })
+    .catch((error) => {
+      if (error.message === '404') {
+        links.forEach((a) => {
+          a.href = RELEASES_URL;
+          a.title = 'קובץ ההתקנה לא זמין כרגע. פתיחת רשימת הגרסאות.';
+        });
+        assetLinks.forEach((a) => { a.hidden = true; });
+        const programLink = document.querySelector('[data-release-asset="program"]');
+        if (programLink) programLink.parentElement.hidden = true;
+        const missing = document.querySelector('[data-installer-missing]');
+        if (missing) missing.hidden = false;
+      }
+      // API blocked / offline / rate limited: keep the stable links as a fallback.
+    })
     .finally(() => clearTimeout(timer));
 })();
 
@@ -270,36 +307,56 @@
       const singles = assets.filter((a) => SINGLE.test(a.name))
         .sort((a, b) => Object.keys(COMPONENTS).indexOf((a.name.match(SINGLE) || [])[1]) -
           Object.keys(COMPONENTS).indexOf((b.name.match(SINGLE) || [])[1]));
-      if (!full.length && !singles.length) return;
       const d = box.querySelector('[data-off-date]');
       const s = box.querySelector('[data-off-size]');
       const when = full[0]?.updated_at || singles[0]?.updated_at || rel.published_at;
       if (d && when) d.textContent = `נתונים מ-${fmtDate(when)}`;
       const link = box.querySelector('[data-off-link]');
+      link.hidden = true;
+      const parts = box.querySelector('[data-off-parts]');
+      parts.innerHTML = '';
+      parts.hidden = true;
+      const components = box.querySelector('[data-off-components]');
+      components.innerHTML = '';
+      components.hidden = true;
+      box.querySelector('[data-off-specific-label]').hidden = true;
+      if (!full.length) box.querySelector('[data-off-missing]').hidden = false;
       if (full.length) {
         const total = full.reduce((n, a) => n + (a.size || 0), 0);
         if (s && total) s.innerHTML = `<bdi>${fmtSize(total)}</bdi>${full.length > 1 ? ` ב-${full.length} קבצים` : ''}`;
-        if (full.length === 1) link.href = full[0].browser_download_url;
+        if (full.length === 1) {
+          link.href = full[0].browser_download_url;
+          link.hidden = false;
+        }
         else {
           link.href = full[0].browser_download_url;
-          const ul = box.querySelector('[data-off-parts]');
-          ul.innerHTML = full.map((a, i) => `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
+          parts.innerHTML = full.map((a, i) => `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
             + `קובץ ${i + 1} מתוך ${full.length} · <bdi>${fmtSize(a.size)}</bdi></a></li>`).join('');
-          ul.hidden = false;
+          parts.hidden = false;
           link.hidden = true;
         }
       }
       if (singles.length) {
-        const ul = box.querySelector('[data-off-components]');
-        ul.innerHTML = singles.map((a) => {
+        components.innerHTML = singles.map((a) => {
           const component = (a.name.match(SINGLE) || [])[1];
           return `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
             + `${COMPONENTS[component]} · <bdi>${fmtSize(a.size)}</bdi></a></li>`;
         }).join('');
-        ul.hidden = false;
+        components.hidden = false;
         box.querySelector('[data-off-specific-label]').hidden = false;
       }
     })
-    .catch(() => { /* API blocked / offline / rate limited – the static link stays */ })
+    .catch((error) => {
+      if (error.message === '404') {
+        box.querySelector('[data-off-link]').hidden = true;
+        box.querySelector('[data-off-parts]').hidden = true;
+        const components = box.querySelector('[data-off-components]');
+        components.innerHTML = '';
+        components.hidden = true;
+        box.querySelector('[data-off-specific-label]').hidden = true;
+        box.querySelector('[data-off-missing]').hidden = false;
+      }
+      // API blocked / offline / rate limited: keep the static links as a fallback.
+    })
     .finally(() => clearTimeout(timer));
 })();
