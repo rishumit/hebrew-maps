@@ -116,10 +116,10 @@ Source: "..\data\transit\*"; DestDir: "{app}\data\transit"; Flags: onlyifdoesnte
 
 ; Data — prayer times
 Source: "..\data\zmanim.json"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
-#endif
 
-; Data — sample database (always present)
+; Demo database is part of the full installer only. The program-only installer contains no datasets.
 Source: "..\data\sample\*"; DestDir: "{app}\data\sample"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+#endif
 
 [Dirs]
 ; Create an empty reports directory so the app can write quality reports

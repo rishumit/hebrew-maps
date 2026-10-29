@@ -505,6 +505,7 @@ a.badge:hover { border-color: var(--line-strong); text-decoration: none; }
 .dl-card .app-icon { width: 72px; height: 72px; border-radius: 18px; box-shadow: 0 10px 22px -10px rgba(37, 99, 235, .7); }
 .dl-card h2 { font-size: var(--fs-xl); }
 .dl-card .dl-meta { margin-top: .35rem; }
+.dl-description { margin: var(--s-3) 0 0; color: var(--muted); font-size: var(--fs-sm); }
 @media (max-width: 760px) { .dl-card { grid-template-columns: auto 1fr; } .dl-card .btn { grid-column: 1 / -1; width: 100%; } }
 
 .req { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
