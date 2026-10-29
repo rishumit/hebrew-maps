@@ -108,7 +108,7 @@
 | **Phase 4: Testing** | ✅ הושלם | יחידה, אינטגרציה, E2E, ביצועים, CI |
 | **Phase 5: Launch** | 🟡 מוכן להתקנה | הרצת `setup.cmd` במחשב היעד |
 
-**מסמכי המימוש:** [11-implementation.md](./11-implementation.md) · [12-operations.md](./12-operations.md) · [api.md](./api.md) · [adr/](./adr)
+**מסמכי המימוש:** [11-implementation.md](./11-implementation.md) · [12-operations.md](./12-operations.md) · [13-printing-plan.md](./13-printing-plan.md) · [api.md](./api.md) · [adr/](./adr)
 
 ---
 

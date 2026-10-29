@@ -426,6 +426,7 @@ export class TransitPlanner {
   _card(it) {
     let out = `<div class="tr-card-head">
       <button type="button" class="btn btn-secondary btn-sm" data-act="tr-back">${svg('back', { size: 16 })}כל האפשרויות</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-act="tr-print">הדפסת מסלול</button>
       <div class="tr-card-sum"><strong><bdi>${esc(it.departure_text)}</bdi> – <bdi>${esc(it.arrival_text)}</bdi></strong>
         <span>${esc(it.duration_text)} · ${esc(transfersText(it.transfers))} · הליכה ${esc(it.walk_distance_text)}</span></div>
     </div>
@@ -479,6 +480,7 @@ export class TransitPlanner {
       this.draw(false);
       this.dirs._refresh();
     });
+    body.querySelector('[data-act="tr-print"]')?.addEventListener('click', () => this.app.printing.openTransit());
     const it = this.result?.itineraries?.[this.selected];
     body.querySelectorAll('[data-leg]').forEach((b) => b.addEventListener('click', () => {
       const l = it?.legs[Number(b.dataset.leg)];

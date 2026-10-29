@@ -186,6 +186,7 @@ export class Directions {
                 </button></li>`).join('')}
             </ul>
             ${elevationSlot(this.app.meta, this.mode, r)}
+            <div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="print-route">הדפסת מסלול והוראות</button></div>
             ${this.mode === 'foot' ? `<div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="guide">${svg('signpost', { size: 16 })}מדריך מסלול: שלבים, מים ובטיחות</button></div>` : ''}
             <h3 class="subtitle">הוראות הגעה</h3>
             <ol class="steps">
@@ -259,6 +260,7 @@ export class Directions {
       this._refresh();
     }));
     const r = this.routes[this.selected];
+    body.querySelector('[data-act="print-route"]')?.addEventListener('click', () => app.printing.openDirections());
     if (r) fillElevation(body, app.meta, this.mode, r);
     body.querySelector('[data-act="guide"]')?.addEventListener('click', () => openGuide(app, {
       kind: 'route', coordinates: r.geometry.coordinates,

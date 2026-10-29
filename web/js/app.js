@@ -8,6 +8,7 @@ import { PoiHoverCard } from './hovercard.js';
 import { svg } from './icons.js';
 import { MapView } from './map.js';
 import { Panel } from './panel.js';
+import { PrintManager } from './printing.js';
 import { trailView } from './trails.js';
 import { initUpdates, openUpdates } from './updates.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
@@ -65,6 +66,7 @@ const app = {
     };
     this.map = new MapView($('#map'), this.meta, this.categories, initial);
     this.directions = new Directions(this);
+    this.printing = new PrintManager(this);
     this.hoverCard = new PoiHoverCard(this, $('#map'));
 
     this._initSearch();
@@ -708,6 +710,7 @@ const app = {
       const act = b.dataset.menu;
       if (act === 'nearby-list') this.panel.show(visibleListView(this, this.map.visiblePois(), this.map.visibleTrails()));
       else if (act === 'directions') this.directions.open({});
+      else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'recent') this._recentDialog();
       else if (act === 'shortcuts') shortcutsDialog();

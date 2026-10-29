@@ -99,17 +99,112 @@ export class MapView {
   }
 
   // ----------------------------------------------------------------- styles
-  _resolvedTheme() {
-    return this.theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : this.theme;
+  _resolvedTheme(theme = this.theme) {
+    return theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
   }
 
-  _baseStyle() {
-    const theme = this._resolvedTheme();
+  _baseStyle(themeOverride, satelliteOverride) {
+    const theme = this._resolvedTheme(themeOverride || this.theme);
     const b = this.meta.basemap;
     const terrain = this.meta.terrain;
-    const satellite = this.satellite || false;
+    const satellite = satelliteOverride ?? this.satellite;
     if (b.type === 'openmaptiles' && b.tilejson) return omtStyle(theme, { tilejson: b.tilejson, glyphs: b.glyphs, terrain, satellite });
     return fallbackStyle(theme, { tiles: b.fallback_tiles, glyphs: b.glyphs, terrain, satellite });
+  }
+
+  /** Render a light, static print map without moving or restyling the interactive map. */
+  async capturePrintMap({ routeFeatures = [], endpoints = [], stopPoints = [], fitRoute = false, includePois = true } = {}) {
+    const live = this.map;
+    const box = document.createElement('div');
+    Object.assign(box.style, { position: 'fixed', insetInlineStart: '-10000px', top: '0', width: '1600px', height: '1050px',
+      opacity: '0', pointerEvents: 'none', zIndex: '-1' });
+    document.body.append(box);
+    let printMap;
+    try {
+      const center = live.getCenter();
+      printMap = new maplibregl.Map({
+        container: box, style: this._baseStyle('light', false), center: [center.lng, center.lat], zoom: live.getZoom(),
+        bearing: 0, pitch: 0, interactive: false, attributionControl: false, maplibreLogo: false,
+        preserveDrawingBuffer: true, pixelRatio: 2, maxCanvasSize: [4096, 4096], fadeDuration: 0,
+        maxBounds: [[this.meta.bounds[0] - 1.5, this.meta.bounds[1] - 1.5], [this.meta.bounds[2] + 1.5, this.meta.bounds[3] + 1.5]],
+      });
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('טעינת המפה להדפסה נמשכה יותר מדי זמן')), 25000);
+        printMap.once('load', () => { clearTimeout(timer); resolve(); });
+      });
+
+      const routeCollection = { type: 'FeatureCollection', features: routeFeatures.filter((f) => f?.geometry?.coordinates?.length) };
+      const pointCollection = { type: 'FeatureCollection', features: [] };
+      const addPoint = (point, properties = {}) => {
+        if (!Number.isFinite(point?.lon) || !Number.isFinite(point?.lat)) return;
+        pointCollection.features.push({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: [point.lon, point.lat] } });
+      };
+      if (includePois) {
+        const layers = ['pois', 'results'].filter((id) => live.getLayer(id));
+        const seen = new Set();
+        try {
+          for (const feature of live.queryRenderedFeatures({ layers })) {
+            if (feature.geometry?.type !== 'Point') continue;
+            const p = feature.properties || {};
+            const name = p.name || p.label || p.name_he;
+            if (!name) continue;
+            const coords = feature.geometry.coordinates;
+            const key = p.id != null ? String(p.id) : `${coords[0].toFixed(5)},${coords[1].toFixed(5)},${name}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            addPoint({ lon: coords[0], lat: coords[1] }, { kind: 'poi', name: String(name), color: this.catColor[p.cat] || p.color || '#4B5563' });
+            if (seen.size >= 100) break;
+          }
+        } catch { /* an empty POI layer is still a valid print map */ }
+      }
+      for (const [i, stop] of stopPoints.entries()) addPoint(stop, { kind: 'stop', name: stop.name || `תחנה ${i + 1}`, color: stop.color || '#2563EB' });
+      for (const [i, endpoint] of endpoints.entries()) addPoint(endpoint, { kind: 'endpoint', name: endpoint.name || (i === 0 ? 'מוצא' : 'יעד'), role: i === 0 ? 'from' : 'to' });
+
+      printMap.addSource('print-routes', { type: 'geojson', data: routeCollection });
+      printMap.addLayer({ id: 'print-route-casing', type: 'line', source: 'print-routes',
+        layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#FFFFFF', 'line-width': 8 } });
+      printMap.addLayer({ id: 'print-route', type: 'line', source: 'print-routes', filter: ['!=', ['get', 'kind'], 'walk'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['coalesce', ['get', 'color'], '#2563EB'], 'line-width': 4.5 } });
+      printMap.addLayer({ id: 'print-walk', type: 'line', source: 'print-routes', filter: ['==', ['get', 'kind'], 'walk'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#4B5563', 'line-width': 3.5, 'line-dasharray': [1, 1.5] } });
+      printMap.addSource('print-points', { type: 'geojson', data: pointCollection });
+      printMap.addLayer({ id: 'print-point-circles', type: 'circle', source: 'print-points',
+        paint: { 'circle-radius': ['match', ['get', 'kind'], 'endpoint', 7, 'stop', 5, 3.5],
+          'circle-color': ['case', ['==', ['get', 'kind'], 'endpoint'], ['match', ['get', 'role'], 'from', '#059669', '#DC2626'], ['coalesce', ['get', 'color'], '#4B5563']],
+          'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 2 } });
+      printMap.addLayer({ id: 'print-point-labels', type: 'symbol', source: 'print-points',
+        layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Medium'], 'text-size': 11, 'text-offset': [0, 0.8],
+          'text-anchor': 'top', 'text-optional': true, 'text-max-width': 12 },
+        paint: { 'text-color': '#1F2937', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5 } });
+
+      if (fitRoute) {
+        const coords = routeCollection.features.flatMap((f) => {
+          const g = f.geometry;
+          if (g.type === 'LineString') return g.coordinates;
+          if (g.type === 'MultiLineString') return g.coordinates.flat();
+          return [];
+        }).concat(endpoints.map((p) => [p.lon, p.lat]).filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat)));
+        if (coords.length) {
+          const lons = coords.map((p) => p[0]), lats = coords.map((p) => p[1]);
+          printMap.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+            { padding: 100, maxZoom: 16, duration: 0 });
+        }
+      } else {
+        const bounds = live.getBounds().toArray();
+        printMap.fitBounds(bounds, { padding: 40, maxZoom: live.getZoom(), duration: 0 });
+      }
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('טעינת שכבות המפה להדפסה נמשכה יותר מדי זמן')), 25000);
+        printMap.once('idle', () => { clearTimeout(timer); resolve(); });
+        printMap.triggerRepaint();
+      });
+      return printMap.getCanvas().toDataURL('image/png');
+    } finally {
+      printMap?.remove();
+      box.remove();
+    }
   }
 
   setTheme(theme) {
