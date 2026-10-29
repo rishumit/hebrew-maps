@@ -21,13 +21,13 @@ and the command line (also for a weekly Windows scheduled task, see
     python -m hmaps update --bundle E:\\HebrewMaps-Update-2026-10-22.zip   # offline update file
     python -m hmaps update --app [--check]       # the program itself (see appupdate.py)
 
-Offline update file (for computers without internet): every weekly release also
-carries ``HebrewMaps-Update-<date>.zip`` – manifest.json plus the component ZIPs
-(see ``tools/release.py bundle``). It is copied with a USB stick and installed
-from the "עדכונים" page ("עדכון מקובץ", ``POST /api/updates/offline`` with the
-file as the request body) or with ``--bundle``; every component inside is
-verified against the SHA-256 of that manifest exactly like an online download.
-The offline file always holds full packages (no deltas).
+Offline update files (for computers without internet): every weekly release
+carries a full ``HebrewMaps-Update-<date>.zip`` and one ZIP per component, such
+as ``HebrewMaps-Update-<date>-transit.zip`` (see ``tools/release.py bundle``).
+Copy the full file or just the needed component with a USB stick and install it
+from the "עדכונים" page ("עדכון מקובץ", ``POST /api/updates/offline``) or with
+``--bundle``. Each package is self-contained and verifies its component files
+against the included manifest. Offline files always hold full packages (no deltas).
 
 Delta packages: a manifest entry may list ``deltas`` (``{from, to, file, size, sha256,
 kind}``) – small packages that turn an installed version into a newer one (changed images

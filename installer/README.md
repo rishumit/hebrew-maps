@@ -128,9 +128,20 @@ HebrewMaps-Setup-1.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLIC
 - נתוני demo — `data\sample\maps.db`
   Demo dataset — `data\sample\maps.db`
 - קבצי Tiles, ניווט, DEM, תחבורה ציבורית — אם קיימים ב-`data\`
-  Tiles, routing, DEM, transit data — if present in `data\`
+  Base map tiles, map database, transit, and prayer times (public CI installer); the program-only installer contains no data snapshot
 
 ---
+
+## Data included in the public installer
+
+The Windows installer workflow downloads the current `maps`, `basemap`, `transit`, and `zmanim`
+components before compiling the full `HebrewMaps-Setup-<version>.exe`. The maps component includes
+the offline routing graph. The installer does not include terrain, media, or satellite photos. The
+full installer is the file linked from the website.
+
+The same release also contains `HebrewMaps-Setup-Program-<version>.exe`, a small program-only
+installer. `app-manifest.json` points to this file, so in-app software updates do not redownload the
+map data. Both installers preserve data already present on the target computer.
 
 ## התקנה / Installation
 

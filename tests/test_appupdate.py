@@ -76,6 +76,10 @@ class ManifestTest(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 appupdate.parse_manifest(bad)
 
+    def test_program_only_setup_manifest(self):
+        m = appupdate.parse_manifest(self.good(file="HebrewMaps-Setup-Program-9.1.0.exe"))
+        self.assertEqual(m["file"], "HebrewMaps-Setup-Program-9.1.0.exe")
+
     def test_url_allow_list(self):
         ok = ["https://github.com/rishumit/hebrew-maps/releases/download/v1/x.exe",
               "https://objects.githubusercontent.com/github-production-release-asset/1",

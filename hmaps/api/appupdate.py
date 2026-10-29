@@ -55,7 +55,7 @@ from . import updates as U
 
 log = logging.getLogger("hmaps.appupdate")
 
-SETUP_RE = re.compile(r"^HebrewMaps-Setup-[0-9A-Za-z.+-]+\.exe$")
+SETUP_RE = re.compile(r"^HebrewMaps-Setup-(?:Program-)?[0-9A-Za-z.+-]+\.exe$")
 APP_MANIFEST = "app-manifest.json"
 DOWNLOAD_PAGE = "https://rishumit.github.io/hebrew-maps/download.html"
 #: the only hosts an installer (and its manifest) may come from
@@ -152,10 +152,12 @@ def _from_api() -> dict:
         if a.get("name") == APP_MANIFEST and url_allowed(a.get("browser_download_url", "")):
             return parse_manifest(U._read_json(a["browser_download_url"], allow=url_allowed), a["browser_download_url"])
     version = rel["tag_name"][1:]
-    for a in assets:
+    candidates = sorted(assets, key=lambda a: (0 if str(a.get("name", "")).startswith("HebrewMaps-Setup-Program-") else 1,
+                                                str(a.get("name", ""))))
+    for a in candidates:
         name = a.get("name", "")
         digest = str(a.get("digest") or "")
-        if SETUP_RE.match(name) and name != "HebrewMaps-Setup.exe" and digest.startswith("sha256:"):
+        if SETUP_RE.match(name) and digest.startswith("sha256:"):
             return parse_manifest({"version": version, "tag": rel["tag_name"], "file": name, "size": a.get("size"),
                                    "sha256": digest[7:], "url": a.get("browser_download_url"),
                                    "date": (rel.get("published_at") or "")[:10] or None,

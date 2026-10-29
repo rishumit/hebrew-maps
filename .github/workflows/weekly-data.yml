@@ -18,11 +18,11 @@ name: Weekly data release
 #                       versions (hmaps/core/delta.py: changed images only / zstd binary patch of maps.db,
 #                       tiles, transit.npz); skipped – with a notice – when not worth it (≥ 60 % of the full
 #                       package), the old release is gone, the runner disk is short or the time budget is used
-#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the offline update file (every component, also the
-#                     unchanged ones, in one ZIP for a USB stick; split into -partN files above ~2 GB; full
-#                     packages only, no deltas)
-#   data-latest       rolling pointer release: the newest manifest.json + the offline update file under
-#                     a stable name (HebrewMaps-Update.zip) for the download site
+#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the full offline update (split into -partN above ~2 GB)
+#                     + HebrewMaps-Update-YYYY-MM-DD-<component>.zip: a single-component offline update
+#                       for smaller USB transfers; full packages only, no deltas
+#   data-latest       rolling pointer release: the newest manifest.json + full and per-component offline files
+#                     under stable names (HebrewMaps-Update.zip, HebrewMaps-Update-<component>.zip)
 # manifest.json always lists all components; one that was not rebuilt (terrain most weeks, or a
 # job that failed) keeps pointing at the asset of an earlier dated release ("status": "unchanged").
 # Per component it also lists "deltas" (this run's + earlier ones still within the 6-week retention,
@@ -535,8 +535,8 @@ jobs:
               --notes "מצביע לגרסת הנתונים העדכנית ביותר: $TAG. התוכנה קוראת מכאן את manifest.json. HebrewMaps-Update.zip – קובץ עדכון למחשב בלי אינטרנט."
           fi
 
-      # one file with every component (also the ones not rebuilt this week) for computers without
-      # internet: downloaded from the site, carried on a USB stick, installed via "עדכונים" → "עדכון מקובץ"
+      # a full offline update plus one small, self-contained offline ZIP per component. This lets
+      # computers without internet carry only the component they need on a USB stick.
       - name: Offline update file
         if: steps.manifest.outputs.new != 'none'
         run: |
@@ -547,6 +547,8 @@ jobs:
           done < missing.txt
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
             --date "$DATE" --out offline --stable latest
+          python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
+            --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,media,zmanim
           gh release upload "$TAG" offline/*.zip --clobber
           gh release upload data-latest latest/*.zip --clobber
 

@@ -239,14 +239,15 @@
 })();
 
 // ------------------------------------------------------------ offline update file (download.html#offline)
-// The weekly data workflow keeps HebrewMaps-Update.zip (or -part1/-part2… above 2 GB) on the
-// data-latest release; the static link above works without JS, this only adds date / size and
-// lists every file when the update is split.
+// The weekly data workflow publishes a full offline update and a smaller ZIP for each component.
 (() => {
   const box = document.querySelector('[data-off]');
   if (!box) return;
   const REPO = 'rishumit/hebrew-maps';
-  const NAME = /^HebrewMaps-Update(?:-part(\d+))?\.zip$/;
+  const FULL = /^HebrewMaps-Update(?:-part(\d+))?\.zip$/;
+  const SINGLE = /^HebrewMaps-Update-(maps|basemap|terrain|transit|media|zmanim)\.zip$/;
+  const COMPONENTS = { maps: 'מפה ונקודות עניין', basemap: 'מפת בסיס', terrain: 'טופוגרפיה',
+    transit: 'תחבורה ציבורית', media: 'תמונות ותוכן', zmanim: 'זמני תפילות' };
   const fmtSize = (b) => (b >= 1e9
     ? `${(b / 1073741824).toLocaleString('he-IL', { maximumFractionDigits: 1 })} GB`
     : `${(b / 1048576).toLocaleString('he-IL', { maximumFractionDigits: 0 })} MB`);
@@ -261,28 +262,43 @@
   })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((rel) => {
-      const files = (Array.isArray(rel.assets) ? rel.assets : [])
-        .filter((a) => NAME.test(a.name) && /^https:\/\/github\.com\//.test(a.browser_download_url))
-        .map((a) => ({ ...a, part: Number((a.name.match(NAME) || [])[1] || 0) }))
+      const assets = (Array.isArray(rel.assets) ? rel.assets : [])
+        .filter((a) => /^https:\/\/github\.com\//.test(a.browser_download_url));
+      const full = assets.filter((a) => FULL.test(a.name))
+        .map((a) => ({ ...a, part: Number((a.name.match(FULL) || [])[1] || 0) }))
         .sort((a, b) => a.part - b.part);
-      if (!files.length) return;
-      const total = files.reduce((n, a) => n + (a.size || 0), 0);
+      const singles = assets.filter((a) => SINGLE.test(a.name))
+        .sort((a, b) => Object.keys(COMPONENTS).indexOf((a.name.match(SINGLE) || [])[1]) -
+          Object.keys(COMPONENTS).indexOf((b.name.match(SINGLE) || [])[1]));
+      if (!full.length && !singles.length) return;
       const d = box.querySelector('[data-off-date]');
       const s = box.querySelector('[data-off-size]');
-      const when = files[0].updated_at || rel.published_at;
+      const when = full[0]?.updated_at || singles[0]?.updated_at || rel.published_at;
       if (d && when) d.textContent = `נתונים מ-${fmtDate(when)}`;
-      if (s && total) s.innerHTML = `<bdi>${fmtSize(total)}</bdi>${files.length > 1 ? ` ב-${files.length} קבצים` : ''}`;
       const link = box.querySelector('[data-off-link]');
-      if (files.length === 1) {
-        link.href = files[0].browser_download_url;
-        return;
+      if (full.length) {
+        const total = full.reduce((n, a) => n + (a.size || 0), 0);
+        if (s && total) s.innerHTML = `<bdi>${fmtSize(total)}</bdi>${full.length > 1 ? ` ב-${full.length} קבצים` : ''}`;
+        if (full.length === 1) link.href = full[0].browser_download_url;
+        else {
+          link.href = full[0].browser_download_url;
+          const ul = box.querySelector('[data-off-parts]');
+          ul.innerHTML = full.map((a, i) => `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
+            + `קובץ ${i + 1} מתוך ${full.length} · <bdi>${fmtSize(a.size)}</bdi></a></li>`).join('');
+          ul.hidden = false;
+          link.hidden = true;
+        }
       }
-      link.href = files[0].browser_download_url;
-      const ul = box.querySelector('[data-off-parts]');
-      ul.innerHTML = files.map((a, i) => `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
-        + `קובץ ${i + 1} מתוך ${files.length} · <bdi>${fmtSize(a.size)}</bdi></a></li>`).join('');
-      ul.hidden = false;
-      link.hidden = true;
+      if (singles.length) {
+        const ul = box.querySelector('[data-off-components]');
+        ul.innerHTML = singles.map((a) => {
+          const component = (a.name.match(SINGLE) || [])[1];
+          return `<li><a class="btn btn-sm" href="${a.browser_download_url.replace(/"/g, '%22')}">`
+            + `${COMPONENTS[component]} · <bdi>${fmtSize(a.size)}</bdi></a></li>`;
+        }).join('');
+        ul.hidden = false;
+        box.querySelector('[data-off-specific-label]').hidden = false;
+      }
     })
     .catch(() => { /* API blocked / offline / rate limited – the static link stays */ })
     .finally(() => clearTimeout(timer));

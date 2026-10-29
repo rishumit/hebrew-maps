@@ -121,9 +121,9 @@ schtasks /Create /F /SC WEEKLY /D FRI /ST 06:10 /TN "HebrewMaps online update" /
 עדכון אוטומטי של התוכנה זמין רק בתוכנה המותקנת ב-Windows; בהרצה מקוד המקור הדף מפנה לאתר ההורדה. היומן של ההתקנה: `%TEMP%\HebrewMaps-update\install-<גרסה>.log`.
 
 ### עדכון במחשב בלי אינטרנט (קובץ עדכון)
-כל ריצה שבועית מפרסמת גם **קובץ עדכון** אחד עם כל הרכיבים: ‏`HebrewMaps-Update-YYYY-MM-DD.zip` בגרסה המתוארכת, ואותו קובץ בשם קבוע `HebrewMaps-Update.zip` ב-`data-latest` (הקישור באתר: `download.html#offline`). מעל כ-2GB (מגבלת GitHub לקובץ) הוא מתחלק ל-`-part1`, ‏`-part2`… וכל חלק עומד בפני עצמו.
+כל ריצה שבועית מפרסמת קובץ עדכון מלא (`HebrewMaps-Update-YYYY-MM-DD.zip`, או `-partN` אם הוא גדול מ-2GB) וגם ZIP נפרד לכל רכיב, למשל `HebrewMaps-Update-YYYY-MM-DD-transit.zip`. ב-`data-latest` מתפרסמים שמות קבועים (`HebrewMaps-Update.zip` וקבצים כמו `HebrewMaps-Update-transit.zip`), עם קישורים מדף ההורדה. כך אפשר להעביר רק את הרכיב הדרוש במחשב ללא אינטרנט.
 
-- **מבנה:** ZIP לא דחוס עם `manifest.json` (רק הרכיבים שבקובץ, ‏`"bundle": {"part", "parts", "date"}`), ה-ZIP של כל רכיב, ו-`README.txt` בעברית. נבנה ב-`tools/release.py bundle`; רכיבים שלא נבנו מחדש השבוע מורדים מהגרסה הקודמת שלהם.
+- **מבנה:** ZIP לא דחוס עם `manifest.json` (רק הרכיבים שבקובץ), ה-ZIP של כל רכיב, ו-`README.txt` בעברית. נבנה ב-`tools/release.py bundle`; רכיבים שלא נבנו מחדש השבוע מורדים מהגרסה הקודמת שלהם.
 - **התקנה:** עדכונים ← "עדכון מקובץ…" (הקובץ נשלח לשרת המקומי ב-`POST /api/updates/offline`, נשמר זמנית ב-`data/updates/offline/` ונמחק בסוף), או בשורת הפקודה: `python -m hmaps update --bundle E:\HebrewMaps-Update-2026-10-22.zip`.
 - כל רכיב מועתק מתוך הקובץ ונבדק מול הגודל וה-SHA-256 שב-manifest, בדיוק כמו בהורדה מקוונת, ומותקן רק אם הוא חדש מהמותקן. ב-`components.json` הוא נרשם עם `"source": "offline"`.
 

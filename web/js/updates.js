@@ -281,9 +281,9 @@ function render(body, app) {
     ${appHtml()}
     <section class="p-section upd-offline" aria-labelledby="upd-off-h">
       <h3 id="upd-off-h">מחשב בלי אינטרנט?</h3>
-      <p>במחשב עם אינטרנט מורידים את <b>קובץ העדכון</b> מאתר ההורדה
-        (<bdi dir="ltr">${esc(SITE_OFFLINE.replace(/^https:\/\//, ''))}</bdi>), מעבירים אותו בדיסק-און-קי, ובוחרים אותו כאן.
-        רק חבילות חדשות יותר ממה שכבר במחשב מותקנות.</p>
+      <p>במחשב עם אינטרנט מורידים מאתר ההורדה
+        (<bdi dir="ltr">${esc(SITE_OFFLINE.replace(/^https:\/\//, ''))}</bdi>) את העדכון המלא או רק את הרכיב הרצוי,
+        מעבירים אותו בדיסק-און-קי, ובוחרים אותו כאן. רק חבילות חדשות יותר ממה שכבר במחשב מותקנות.</p>
       <input type="file" accept=".zip,application/zip" hidden data-act="file" aria-label="קובץ עדכון" tabindex="-1">
       <button type="button" class="btn btn-secondary btn-sm" data-act="pick" ${busy || uploading ? 'disabled' : ''}>
         ${svg('download', { size: 16 })}עדכון מקובץ…</button>

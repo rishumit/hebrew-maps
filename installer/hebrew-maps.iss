@@ -30,6 +30,9 @@
 #ifndef MyAppVersion
   #define MyAppVersion "1.1.0"
 #endif
+#ifndef ProgramOnly
+  #define ProgramOnly 0
+#endif
 #define MyAppPublisher "Hebrew Maps"
 #define MyAppURL       "http://localhost:8080"
 #define MyAppExeName   "hebrew-maps.exe"
@@ -46,7 +49,11 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppNameEn}
 DefaultGroupName={#MyAppName}
+#if ProgramOnly
+OutputBaseFilename=HebrewMaps-Setup-Program-{#MyAppVersion}
+#else
 OutputBaseFilename=HebrewMaps-Setup-{#MyAppVersion}
+#endif
 OutputDir=.
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -83,9 +90,17 @@ Source: "dist\hebrew-maps\*"; DestDir: "{app}"; Flags: ignoreversion recursesubd
 ; Web assets (HTML, JS, CSS, fonts, icons)
 Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; Data shipped with a local build (CI builds ship none: data\ is not in git). Upgrades must
-; never replace what the user downloaded since (maps.current would point back to an old
-; database) – onlyifdoesntexist everywhere below, except the sample database of the app.
+; The full CI installer ships a curated data snapshot (maps, base tiles, transit and zmanim).
+; Local builds include whichever supported files are present in data\. Upgrades must never
+; replace what the user downloaded since – onlyifdoesntexist everywhere below, except sample data.
+
+; Data — only included in the full installer. The program-only installer is used by self-update
+; and must stay small; both installer types preserve the installed data directory on upgrades.
+#if ProgramOnly
+; Program-only profile: no data snapshot
+#else
+; Component versions installed with this snapshot
+Source: "..\data\components.json"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
 
 ; Data — current map pointer file
 Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
@@ -93,20 +108,18 @@ Source: "..\data\maps.current"; DestDir: "{app}\data"; Flags: onlyifdoesntexist 
 ; Data — map databases (wildcard matches any dated build)
 Source: "..\data\maps-*.db"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
 
-; Data — routing graph
+; Data — offline routing graph, distributed with the maps component
 Source: "..\data\routing\*"; DestDir: "{app}\data\routing"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Data — map tiles
 Source: "..\data\tiles\*"; DestDir: "{app}\data\tiles"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; Data — DEM / terrain elevation
-Source: "..\data\dem\*"; DestDir: "{app}\data\dem"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
-
 ; Data — public transit (GTFS)
 Source: "..\data\transit\*"; DestDir: "{app}\data\transit"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; Data — media / images
-Source: "..\data\media\*"; DestDir: "{app}\data\media"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
+; Data — prayer times
+Source: "..\data\zmanim.json"; DestDir: "{app}\data"; Flags: onlyifdoesntexist skipifsourcedoesntexist
+#endif
 
 ; Data — sample database (always present)
 Source: "..\data\sample\*"; DestDir: "{app}\data\sample"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist

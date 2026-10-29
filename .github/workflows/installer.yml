@@ -182,6 +182,18 @@ jobs:
         run: .venv\Scripts\python.exe tools\fetch_assets.py
 
       # -----------------------------------------------------------------------
+      # 8a. Include the requested offline data snapshot in the public installer.
+      #     Keep terrain and media out of the initial install; maps includes offline routing.
+      # -----------------------------------------------------------------------
+      - name: Download installer data snapshot
+        shell: pwsh
+        run: |
+          .venv\Scripts\python.exe -m hmaps update `
+            --component maps --component basemap --component transit --component zmanim `
+            --force --no-delta
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # -----------------------------------------------------------------------
       # 9. Compile Inno Setup installer
       # -----------------------------------------------------------------------
       - name: Inno Setup — compile installer
@@ -190,10 +202,16 @@ jobs:
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           # Run ISCC from the installer\ dir so relative paths in the .iss are correct
           Push-Location installer
-          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} hebrew-maps.iss
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} /DProgramOnly=0 hebrew-maps.iss
           $exit = $LASTEXITCODE
+          if ($exit -eq 0) {
+            & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} /DProgramOnly=1 hebrew-maps.iss
+            $exit = $LASTEXITCODE
+          }
           Pop-Location
           if ($exit -ne 0) { exit $exit }
+          $full = Get-Item installer\HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+          if ($full.Length -ge 2GB) { Write-Error "Full installer exceeds the GitHub 2 GiB release asset limit."; exit 1 }
 
       # -----------------------------------------------------------------------
       # 9a. app-manifest.json for the in-app updater (size + SHA-256 + Hebrew notes)
@@ -214,7 +232,7 @@ jobs:
               $notes = "installer\notes.md"
             }
           }
-          .venv\Scripts\python.exe tools\release.py app-manifest --installer "installer\HebrewMaps-Setup-$env:VERSION.exe" `
+          .venv\Scripts\python.exe tools\release.py app-manifest --installer "installer\HebrewMaps-Setup-Program-$env:VERSION.exe" `
             --version $env:VERSION --tag $tag --notes $notes --out installer\app-manifest.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -227,6 +245,7 @@ jobs:
           name: HebrewMaps-Setup-${{ steps.version.outputs.value }}
           path: |
             installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+            installer/HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}.exe
             installer/app-manifest.json
           retention-days: 30
 
@@ -239,7 +258,9 @@ jobs:
       - name: Stable installer name
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
         shell: pwsh
-        run: Copy-Item installer\HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe installer\HebrewMaps-Setup.exe -Force
+        run: |
+          Copy-Item installer\HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe installer\HebrewMaps-Setup.exe -Force
+          Copy-Item installer\HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}.exe installer\HebrewMaps-Setup-Program.exe -Force
 
       # -----------------------------------------------------------------------
       # 11. Create GitHub Release (only on version tags or when manually requested)
@@ -270,7 +291,9 @@ jobs:
             Built automatically from commit ${{ github.sha }}
           files: |
             installer/HebrewMaps-Setup-${{ steps.version.outputs.value }}.exe
+            installer/HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}.exe
             installer/HebrewMaps-Setup.exe
+            installer/HebrewMaps-Setup-Program.exe
             installer/app-manifest.json
           draft: false
           prerelease: false

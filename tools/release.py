@@ -536,16 +536,22 @@ def bundle_names(date: str, parts: int) -> list[str]:
 
 
 def stable_name(name: str) -> str:
-    """HebrewMaps-Update-2026-10-22[-part2].zip -> HebrewMaps-Update[-part2].zip (the data-latest link)."""
+    """Remove the date from a full, split, or component-specific offline package name."""
     return re.sub(rf"^{BUNDLE_PREFIX}-\d{{4}}-\d{{2}}-\d{{2}}", BUNDLE_PREFIX, name)
 
 
-def bundle(manifest: dict, dirs: list[Path], out: Path, date: str, limit: int = BUNDLE_LIMIT) -> list[Path]:
+def bundle(manifest: dict, dirs: list[Path], out: Path, date: str, limit: int = BUNDLE_LIMIT,
+           components: list[str] | None = None) -> list[Path]:
     """Every component ZIP of *manifest* in one (or, above *limit*, a few) offline update file(s).
 
     Each file is self-contained: a manifest.json listing only the components inside it, the component
     ZIPs (stored – they are compressed already) and a Hebrew README.txt."""
-    entries = [(cid, e) for cid, e in manifest["components"].items() if e.get("file")]
+    selected = set(components or [])
+    unknown = selected - set(catalog.IDS)
+    if unknown:
+        raise SystemExit("bundle: unknown component(s): " + ", ".join(sorted(unknown)))
+    entries = [(cid, e) for cid, e in manifest["components"].items()
+               if e.get("file") and (not selected or cid in selected)]
     if not entries:
         raise SystemExit("bundle: the manifest lists no component files")
     missing = [f for _, f in bundle_missing(manifest, dirs)]
@@ -565,16 +571,20 @@ def bundle(manifest: dict, dirs: list[Path], out: Path, date: str, limit: int = 
         else:
             bins.append([cid])
     order = {cid: i for i, cid in enumerate(catalog.IDS)}
+    if selected:
+        bins = [[cid] for cid in selected if cid in sizes]
     bins = sorted((sorted(b, key=order.get) for b in bins), key=lambda b: order[b[0]])
     out.mkdir(parents=True, exist_ok=True)
     result = []
-    for i, (b, name) in enumerate(zip(bins, bundle_names(date, len(bins))), 1):
+    names = ([f"{BUNDLE_PREFIX}-{date}-{b[0]}.zip" for b in bins]
+             if selected else bundle_names(date, len(bins)))
+    for i, (b, name) in enumerate(zip(bins, names), 1):
         m = {k: v for k, v in manifest.items() if k != "components" and not k.startswith("_")}
         m["components"] = {cid: {k: v for k, v in manifest["components"][cid].items() if k != "url"} for cid in b}
-        m["bundle"] = {"part": i, "parts": len(bins), "date": date}
+        m["bundle"] = {"part": 1 if selected else i, "parts": 1 if selected else len(bins), "date": date}
         items = "\n".join(f"  • {manifest['components'][cid].get('name_he') or cid} – "
                           f"{manifest['components'][cid].get('date') or ''} ({sizes[cid] / 1e6:.0f} MB)" for cid in b)
-        part = f" · קובץ {i} מתוך {len(bins)} (צריך את כולם)" if len(bins) > 1 else ""
+        part = f" · קובץ {i} מתוך {len(bins)} (צריך את כולם)" if len(bins) > 1 and not selected else ""
         path = out / name
         tmp = path.with_name(path.name + ".tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
@@ -599,7 +609,8 @@ def cmd_bundle(args) -> int:
         return 0
     if not args.date or not args.out:
         raise SystemExit("bundle: --date and --out are required")
-    files = bundle(m, dirs, Path(args.out), args.date)
+    selected = [c.strip() for c in args.components.split(",") if c.strip()] if args.components else None
+    files = bundle(m, dirs, Path(args.out), args.date, components=selected)
     if args.stable:
         st = Path(args.stable)
         st.mkdir(parents=True, exist_ok=True)
@@ -729,6 +740,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dist", action="append", help="folder with component ZIPs (repeatable)")
     p.add_argument("--date", help="YYYY-MM-DD")
     p.add_argument("--out", help="folder for the offline update file(s)")
+    p.add_argument("--components", help="comma-separated component ids; emit one offline ZIP per component")
     p.add_argument("--stable", help="also link them here under the stable names of the data-latest release")
     p.add_argument("--list-missing", action="store_true", help="only print '<release> <file>' of absent ZIPs")
     args = ap.parse_args(argv)

@@ -486,6 +486,19 @@ class UpdaterTest(unittest.TestCase):
         self.assertIn("terrain", updates.bundle_plan(updates.read_bundle(bundle), self.data))
         self.assertFalse(any((self.data / "updates" / "downloads").iterdir()))
 
+    def test_offline_single_component_bundles(self):
+        m = release.build_manifest(self.rel, TAG, VERSION, DATE, None, repo="o/r")
+        out = Path(tempfile.mkdtemp(prefix="single-bundle-", dir=self.root))
+        packages = release.bundle(m, [self.rel], out, DATE, components=["basemap", "zmanim"])
+        self.assertEqual({p.name for p in packages}, {
+            f"HebrewMaps-Update-{DATE}-basemap.zip", f"HebrewMaps-Update-{DATE}-zmanim.zip"})
+        for package in packages:
+            manifest = updates.read_bundle(package)
+            self.assertEqual(len(manifest["components"]), 1)
+            self.assertEqual(manifest["bundle"]["parts"], 1)
+            component = next(iter(manifest["components"]))
+            self.assertEqual(release.stable_name(package.name), f"HebrewMaps-Update-{component}.zip")
+
     def test_offline_bundle_split_and_rejects(self):
         sizes = sorted(p.stat().st_size for p in self.rel.glob("hmaps-*.zip"))
         parts = self.make_bundle(limit=sizes[-1] + 10)
