@@ -128,8 +128,8 @@ class GuideUiTest(unittest.TestCase):
 
     def test_hikes_near_list(self):
         page = self.page(hash_="#map=13.00/31.4400/35.3800")
-        page.locator("#btn-layers").click()
-        page.locator("#btn-hikes-near").click()
+        page.locator("#btn-menu").click()
+        page.locator('[data-menu="hikes"]').click()
         expect(page.locator("#panel-title")).to_contain_text("מסלולי טיול באזור")
         items = page.locator('.results [data-hike]')
         expect(items).to_have_count(2)

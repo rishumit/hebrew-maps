@@ -71,12 +71,10 @@
         <label class="map-type"><input type="radio" name="maptype" value="nature"><span class="swatch swatch-nature" aria-hidden="true"></span><span>טבע וטיולים</span></label>
         <label class="map-type"><input type="radio" name="maptype" value="topo"><span class="swatch swatch-topo" aria-hidden="true"></span><span>טופוגרפית</span></label>
         <label class="map-type"><input type="radio" name="maptype" value="dark"><span class="swatch swatch-dark" aria-hidden="true"></span><span>לילה</span></label>
+        <label class="map-type"><input type="radio" name="maptype" value="satellite"><span class="swatch swatch-satellite" aria-hidden="true"></span><span>תצלומי לוויין</span></label>
       </div>
-      <h3 class="popover-sub">שכבות</h3>
-      <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
-      <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
-      <label class="switch"><input type="checkbox" id="toggle-satellite"><span>תצלום אווירי (אורתופוטו)</span></label>
-      <div class="sat-offline" id="sat-offline">
+      <div class="sat-offline" id="sat-offline" hidden>
+        <h3 class="popover-sub">שמירה לשימוש אופליין</h3>
         <button type="button" id="btn-sat-save" class="btn btn-secondary btn-sm popover-btn" aria-describedby="sat-save-status"><span data-icon="download"></span>שמירת האזור הנוכחי לשימוש אופליין</button>
         <div id="sat-save-confirm" class="sat-confirm" hidden>
           <button type="button" id="btn-sat-save-go" class="btn btn-primary btn-sm">הורדה</button>
@@ -96,8 +94,9 @@
         <progress id="sat-save-progress" class="sat-progress" max="100" value="0" aria-label="התקדמות שמירת תצלומי האוויר" hidden></progress>
         <p id="sat-save-status" class="sat-status" role="status" aria-live="polite"></p>
       </div>
-      <button type="button" id="btn-hikes-near" class="btn btn-secondary btn-sm popover-btn"><span data-icon="hiker"></span>מסלולי טיול באזור</button>
-      <label class="switch"><input type="checkbox" id="toggle-kosher"><span>להציג רק מקומות כשרים</span></label>
+      <h3 class="popover-sub">שכבות</h3>
+      <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
+      <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
       <h3 class="popover-sub">מראה הממשק</h3>
       <div class="segmented" role="radiogroup" aria-label="מראה הממשק">
         <label><input type="radio" name="uitheme" value="auto"><span>אוטומטי</span></label>

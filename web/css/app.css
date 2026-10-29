@@ -318,6 +318,11 @@ main { position: absolute; inset: 0; }
 .swatch-light { background: linear-gradient(135deg, #F4F3EF 40%, #A9D3F5 40% 55%, #FCE3A1 55% 62%, #F4F3EF 62%); }
 .swatch-nature { background: linear-gradient(135deg, #BDE3B0 35%, #AED49C 35% 60%, #9CCBF0 60% 75%, #F0E2B6 75%); }
 .swatch-dark { background: linear-gradient(135deg, #1B1E23 45%, #0F2A43 45% 60%, #7F5E22 60% 66%, #1B1E23 66%); }
+.swatch-satellite { background: linear-gradient(35deg, transparent 44%, #d9d0a0 45% 48%, transparent 49%),
+  linear-gradient(145deg, transparent 27%, #b7ae7d 28% 30%, transparent 31%),
+  radial-gradient(ellipse at 70% 24%, #a5a36c 0 22%, transparent 23%),
+  radial-gradient(ellipse at 24% 76%, #79916a 0 29%, transparent 30%),
+  linear-gradient(135deg, #546d4b, #8a8b5c 48%, #435f45); }
 .switch { display: flex; align-items: center; gap: var(--space-2); padding: 6px 0; cursor: pointer; }
 .switch input { width: 18px; height: 18px; accent-color: var(--primary); }
 .sat-offline { margin: 0 0 var(--space-2); }
@@ -431,7 +436,7 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 }
 
 /* ---------------------------------------------------------------- topographic map + elevation profile */
-.map-types { grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); }
+.map-types { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .map-types .swatch { width: 100%; max-width: 72px; }
 .swatch-topo { background: repeating-radial-gradient(circle at 70% 35%, #F6F3EA 0 5px, #B08055 5px 6px), #F6F3EA; }
 .elev { margin: var(--space-3) 0; }

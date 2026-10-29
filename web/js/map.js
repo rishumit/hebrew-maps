@@ -113,14 +113,18 @@ export class MapView {
   }
 
   setTheme(theme) {
+    this.setMapType(theme, this.satellite);
+  }
+
+  setMapType(theme, satellite) {
     this.theme = theme;
+    this.satellite = satellite;
     this.map.setStyle(this._baseStyle(), { diff: false });
   }
 
   /** הצגה/הסתרה של שכבת תצלומי לוויין (אורתופוטו govmap). */
   setSatellite(on) {
-    this.satellite = on;
-    this.map.setStyle(this._baseStyle(), { diff: false });
+    this.setMapType(this.theme, on);
   }
 
   // ----------------------------------------------------------------- 3D mode

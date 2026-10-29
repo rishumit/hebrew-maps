@@ -66,7 +66,6 @@ const app = {
     this.map = new MapView($('#map'), this.meta, this.categories, initial);
     this.directions = new Directions(this);
     this.hoverCard = new PoiHoverCard(this, $('#map'));
-    this._kosherOnly = store.get('kosherOnly', false);
 
     this._initSearch();
     this._initChips();
@@ -80,7 +79,6 @@ const app = {
       ? `נתונים: ${this.meta.dataset.osm_date || ''} · נבנו ${new Date(this.meta.dataset.built).toLocaleDateString('he-IL')}` : '';
 
     bus.on('map:ready', () => {
-      if (this._kosherOnly) this.map.setPoiFilter({ cats: this.activeChip ? [this.activeChip] : [], kosher: true });
       if (this._restored) return;
       this._restored = true;
       if (hash.dir) this._restoreDirections(hash.dir);
@@ -129,7 +127,7 @@ const app = {
     if (!q) return;
     if (this._searchCtrl) this._searchCtrl.abort();
     this._searchCtrl = new AbortController();
-    const filt = { ...filters, kosher: filters.kosher ?? (this._kosherOnly || undefined) };
+    const filt = { ...filters };
     this.lastSearch = { q, filters: filt };
     this.panel.show({ ...loadingView('results:' + q, `מחפש: ${q}`), replace });
     announce(`מחפש ${q}`);
@@ -320,7 +318,7 @@ const app = {
   _setChip(id, applyFilter = true) {
     this.activeChip = id;
     $$('#chips [data-chip]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.chip === id)));
-    if (applyFilter) this.map.setPoiFilter({ cats: id ? [id] : [], kosher: this._kosherOnly });
+    if (applyFilter) this.map.setPoiFilter({ cats: id ? [id] : [] });
   },
 
   _categoriesDialog() {
@@ -376,12 +374,20 @@ const app = {
     document.addEventListener('pointerdown', (e) => {
       if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) closePop();
     });
-    const mapType = store.get('maptype', 'light');
-    pop.querySelector(`input[name="maptype"][value="${mapType}"]`).checked = true;
+    const satellite = !!store.get('satellite', false);
+    const mapType = satellite ? 'satellite' : store.get('maptype', 'light');
+    const selectedType = pop.querySelector(`input[name="maptype"][value="${mapType}"]`)
+      || pop.querySelector('input[name="maptype"][value="light"]');
+    selectedType.checked = true;
+    const satTools = $('#sat-offline');
+    satTools.hidden = !satellite;
     pop.querySelectorAll('input[name="maptype"]').forEach((r) => r.addEventListener('change', () => {
-      store.set('maptype', r.value);
-      this.map.setTheme(effectiveMapTheme());
-      announce(`סוג המפה: ${r.nextElementSibling.nextElementSibling.textContent}`);
+      const useSatellite = r.value === 'satellite';
+      satTools.hidden = !useSatellite;
+      store.set('satellite', useSatellite);
+      if (!useSatellite) store.set('maptype', r.value);
+      this.map.setMapType(effectiveMapTheme(), useSatellite);
+      announce(`סוג המפה: ${r.parentElement.lastElementChild.textContent.trim()}`);
     }));
     const ui = store.get('uitheme', 'auto');
     pop.querySelector(`input[name="uitheme"][value="${ui}"]`).checked = true;
@@ -395,21 +401,7 @@ const app = {
     });
     $('#toggle-pois').addEventListener('change', (e) => this.map.setPoisVisible(e.target.checked));
     $('#toggle-trails')?.addEventListener('change', (e) => this.map.setOutdoorVisible(e.target.checked));
-    $('#toggle-satellite')?.addEventListener('change', (e) => {
-      store.set('satellite', e.target.checked);
-      this.map.setSatellite(e.target.checked);
-    });
-    const satEl = $('#toggle-satellite');
-    if (satEl) satEl.checked = !!store.get('satellite', false);
     this._bindSatelliteSave();
-    const kosher = $('#toggle-kosher');
-    kosher.checked = !!store.get('kosherOnly', false);
-    kosher.addEventListener('change', () => {
-      this._kosherOnly = kosher.checked;
-      store.set('kosherOnly', kosher.checked);
-      this.map.setPoiFilter({ cats: this.activeChip ? [this.activeChip] : [], kosher: kosher.checked });
-      announce(kosher.checked ? 'מוצגים רק מקומות כשרים' : 'מוצגים כל המקומות');
-    });
   },
 
   // ------------------------------------------------------------------ satellite offline area
@@ -426,6 +418,13 @@ const app = {
     const LABEL = label.textContent;
     const countryBtn = $('#btn-sat-country');
     const countryBox = $('#sat-country');
+    const enableSatellite = () => {
+      const type = $('input[name="maptype"][value="satellite"]');
+      if (!type.checked) {
+        type.checked = true;
+        type.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    };
     const fmt = (n) => Number(n).toLocaleString('he-IL');
     const mb = (b) => {
       if (b >= 1e9) return `${fmt(Math.round(b / 1e8) / 10)}GB`;
@@ -544,7 +543,7 @@ const app = {
       pending = null;
       try {
         await api.satelliteDownload(bbox, minzoom, maxzoom);
-        if (!$('#toggle-satellite').checked) $('#toggle-satellite').click();
+        enableSatellite();
         watch();
         btn.focus();
       } catch (e) {
@@ -589,7 +588,7 @@ const app = {
         closeCountry();
         try {
           await api.satelliteDownloadCountry(level);
-          if (!$('#toggle-satellite').checked) $('#toggle-satellite').click();
+          enableSatellite();
           watch();
           btn.focus();
         } catch (e) {

@@ -358,9 +358,4 @@ export function initGuide(app) {
     if (!view?.key?.startsWith('guide:') && stageData !== EMPTY) setStageData(app, EMPTY);
   });
   bus.on('panel:close', () => { if (stageData !== EMPTY) setStageData(app, EMPTY); });
-  $('#btn-hikes-near')?.addEventListener('click', () => {
-    const pop = $('#layers-pop');
-    if (pop && !pop.hidden) $('#btn-layers')?.click();
-    openHikesNear(app);
-  });
 }
