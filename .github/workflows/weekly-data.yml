@@ -81,9 +81,6 @@ concurrency:
   group: weekly-data
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 env:
   HMAPS_DATA: data
   PYTHONUTF8: "1"
