@@ -629,10 +629,13 @@ def _swap(component_id: str, staging: Path, data: Path) -> None:
             _publish_tiles(staging / f"{stem}.mbtiles", data / "tiles", stem)
     elif component_id == "transit":
         meta = json.loads((staging / "transit.json").read_text(encoding="utf-8"))
-        db.publish(staging / "transit.npz", data / "transit" / "transit.npz")
-        tmp = data / "transit" / "transit.json.tmp"
+        transit_dir = data / "transit"
+        transit_dir.mkdir(parents=True, exist_ok=True)
+        live = db.publish(staging / "transit.npz", transit_dir / "transit.npz")
+        meta["file"] = live.name
+        tmp = transit_dir / "transit.json.tmp"
         tmp.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
-        _replace(tmp, data / "transit" / "transit.json")
+        _replace(tmp, transit_dir / "transit.json")
     elif component_id == "media":
         src_root = staging / "media"
         if src_root.is_dir():

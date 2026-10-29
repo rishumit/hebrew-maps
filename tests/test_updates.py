@@ -358,6 +358,32 @@ class UpdaterTest(unittest.TestCase):
         self.assertEqual(json.loads((self.data / "sources" / "zmanim" / "zmanim.json").read_text(encoding="utf-8")),
                          SNAPSHOT)
 
+    def test_install_transit_creates_missing_data_directory(self):
+        from hmaps.transit import data as transit_data, gtfs
+        from tests import gtfs_fixture
+
+        source = self.root / "transit-source"
+        transit_source = source / "transit"
+        gtfs.build(gtfs_fixture.write(self.root / "transit-source.zip"), transit_source, source="test")
+        meta_path = transit_source / "transit.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["file"] = "build-machine-only.npz"
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        dist = self.root / "transit-release"
+        package = release.pack("transit", source, dist, VERSION)
+
+        transit_dir = self.data / "transit"
+        self.assertFalse(transit_dir.exists())
+        updates.install_zip("transit", package, self.data,
+                            {"version": VERSION, "date": DATE, "release": TAG, "file": package.name})
+
+        live = db.resolve(transit_dir / "transit.npz")
+        self.assertTrue(live.is_file())
+        self.assertEqual((transit_dir / "transit.current").read_text(encoding="utf-8").strip(), live.name)
+        installed_meta = json.loads((transit_dir / "transit.json").read_text(encoding="utf-8"))
+        self.assertEqual(installed_meta["file"], live.name)
+        self.assertEqual(transit_data.get(transit_dir).meta["start"], "2026-10-01")
+
     def test_sha256_mismatch_is_rejected(self):
         self.write_manifest({"basemap": {"sha256": "0" * 64}})
         with self.assertRaises(updates.UpdateError) as cm:
