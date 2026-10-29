@@ -204,6 +204,8 @@ p.more, .section-head p.more { margin-top: var(--s-6); }
 .dl-meta > span + span::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: var(--line-strong); margin-inline-end: .5rem; }
 .dl-meta a { color: inherit; }
 .dl-meta [data-dl-version] { font-weight: 700; color: var(--ink); }
+.dl-meta > [data-download-total][hidden] { display: none; }
+.dl-meta [data-download-count] { padding-inline: .25em; border-radius: .35em; background: var(--leaf-soft); color: var(--leaf); font-size: 1.08em; font-weight: 800; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { /* wrapped lines would start with a stray dot */
   .dl-meta { gap: .2rem 1.1rem; }
   .dl-meta > span + span::before { display: none; }

@@ -2,9 +2,9 @@
 //  * header shadow on scroll + the small-screen menu
 //  * the screenshot tour as ARIA tabs (without JS all screenshots are shown one after another)
 //  * gentle reveal-on-scroll (off with prefers-reduced-motion)
-//  * the newest release (version / size / date) from the GitHub API. The download buttons already point at
-//    releases/latest/download/HebrewMaps-Setup.exe, so nothing breaks when the API is blocked (common behind
-//    filtered networks) or rate limited.
+//  * the newest release (version / size / date) and installer downloads across stable versions from the GitHub API.
+//    Download buttons already point at releases/latest/download/HebrewMaps-Setup.exe, so nothing breaks when the
+//    API is blocked (common behind filtered networks) or rate limited.
 (() => {
   'use strict';
 
@@ -172,6 +172,69 @@
       } catch { /* storage blocked */ }
     })
     .catch(() => { /* API blocked / offline / rate limited – the static link and text stay */ })
+    .finally(() => clearTimeout(timer));
+})();
+
+// ------------------------------------------------------------ installer downloads across all app versions
+// GitHub's per-asset download_count is summed for stable vX.Y.Z releases only; data bundles are excluded.
+(() => {
+  const box = document.querySelector('[data-download-total]');
+  if (!box) return;
+
+  const REPO = 'rishumit/hebrew-maps';
+  const KEY = 'hm:installer-downloads-all-versions';
+  const CACHE_MS = 60 * 60 * 1000;
+  const countNode = box.querySelector('[data-download-count]');
+  const show = (count) => {
+    if (!Number.isSafeInteger(count) || count < 0) return;
+    countNode.textContent = count.toLocaleString('he-IL');
+    box.hidden = false;
+  };
+
+  let cached = null;
+  try { cached = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch { /* storage blocked */ }
+  if (cached && Number.isSafeInteger(cached.count) && Date.now() - cached.at < CACHE_MS) {
+    show(cached.count);
+    return;
+  }
+
+  const ctrl = 'AbortController' in window ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl && ctrl.abort(), 12000);
+  const headers = { Accept: 'application/vnd.github+json' };
+  const options = {
+    headers,
+    signal: ctrl ? ctrl.signal : undefined,
+    referrerPolicy: 'no-referrer',
+    credentials: 'omit',
+  };
+
+  async function loadAll() {
+    let page = 1;
+    let total = 0;
+    while (true) {
+      const response = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`, options);
+      if (!response.ok) throw new Error(String(response.status));
+      const releases = await response.json();
+      for (const release of releases) {
+        if (release.prerelease || !/^v\d/i.test(String(release.tag_name || ''))) continue;
+        const assets = Array.isArray(release.assets) ? release.assets : [];
+        for (const asset of assets) {
+          if (/^HebrewMaps-Setup(?:[-_].*)?\.exe$/i.test(String(asset.name || '')) && Number.isSafeInteger(asset.download_count)) {
+            total += asset.download_count;
+          }
+        }
+      }
+      if (releases.length < 100) return total;
+      page += 1;
+    }
+  }
+
+  loadAll()
+    .then((count) => {
+      show(count);
+      try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), count })); } catch { /* storage blocked */ }
+    })
+    .catch(() => { /* API blocked / offline / rate limited – omit the statistic */ })
     .finally(() => clearTimeout(timer));
 })();
 
