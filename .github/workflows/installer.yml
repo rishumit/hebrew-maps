@@ -202,7 +202,7 @@ jobs:
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           # Run ISCC from the installer\ dir so relative paths in the .iss are correct
           Push-Location installer
-          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} /DProgramOnly=0 hebrew-maps.iss
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} hebrew-maps.iss
           $exit = $LASTEXITCODE
           if ($exit -eq 0) {
             & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} /DProgramOnly=1 hebrew-maps.iss

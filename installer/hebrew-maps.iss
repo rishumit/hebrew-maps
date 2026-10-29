@@ -30,9 +30,6 @@
 #ifndef MyAppVersion
   #define MyAppVersion "1.1.0"
 #endif
-#ifndef ProgramOnly
-  #define ProgramOnly 0
-#endif
 #define MyAppPublisher "Hebrew Maps"
 #define MyAppURL       "http://localhost:8080"
 #define MyAppExeName   "hebrew-maps.exe"
@@ -49,7 +46,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppNameEn}
 DefaultGroupName={#MyAppName}
-#if ProgramOnly
+#ifdef ProgramOnly
 OutputBaseFilename=HebrewMaps-Setup-Program-{#MyAppVersion}
 #else
 OutputBaseFilename=HebrewMaps-Setup-{#MyAppVersion}
@@ -96,7 +93,7 @@ Source: "..\web\*"; DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs cr
 
 ; Data — only included in the full installer. The program-only installer is used by self-update
 ; and must stay small; both installer types preserve the installed data directory on upgrades.
-#if ProgramOnly
+#ifdef ProgramOnly
 ; Program-only profile: no data snapshot
 #else
 ; Component versions installed with this snapshot
