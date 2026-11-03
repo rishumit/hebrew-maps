@@ -135,7 +135,9 @@ def _summary(route: dict) -> str:
     return "דרך " + " ו".join(names[:2]) if names else ""
 
 
-def shape(osrm: dict, mode: str) -> dict:
+def shape(osrm: dict, mode: str, avoid: frozenset[str] = frozenset(), avoid_ignored: frozenset[str] = frozenset()) -> dict:
+    from ..route.avoid import LABELS_HE
+
     routes = []
     for r in osrm.get("routes", []):
         steps = []
@@ -156,7 +158,15 @@ def shape(osrm: dict, mode: str) -> dict:
             "distance_text": format_distance(r.get("distance", 0)), "duration_text": format_duration(r.get("duration", 0)),
             "summary": _summary(r), "geometry": r.get("geometry"), "steps": steps,
         })
-    return {"mode": mode, "mode_he": MODES.get(mode, mode), "routes": routes}
+        if avoid:
+            unmet = [a for a in r.get("avoid_unmet", []) if a in avoid]
+            routes[-1]["avoid_unmet"] = [{"id": a, "name_he": LABELS_HE.get(a, a)} for a in unmet]
+    out = {"mode": mode, "mode_he": MODES.get(mode, mode), "routes": routes}
+    if avoid:
+        out["avoid"] = sorted(avoid)
+    if avoid_ignored:
+        out["avoid_ignored"] = [{"id": a, "name_he": LABELS_HE.get(a, a)} for a in sorted(avoid_ignored)]
+    return out
 
 
 class RoutingError(Exception):
@@ -166,8 +176,12 @@ class RoutingError(Exception):
         self.message = message
 
 
+#: avoid options the stock OSRM profiles support (``exclude=`` classes of car.lua)
+OSRM_EXCLUDE = {"car": {"toll": "toll", "motorway": "motorway"}}
+
+
 def route(base_urls: dict[str, str], mode: str, points: list[tuple[float, float]], alternatives: bool = True,
-          timeout: float = 15.0) -> dict:
+          timeout: float = 15.0, avoid: frozenset[str] = frozenset()) -> dict:
     """Query OSRM. *points* are (lat, lon) pairs: origin, [via...], destination."""
     if mode not in base_urls:
         raise RoutingError(400, "אמצעי תחבורה לא נתמך")
@@ -177,6 +191,10 @@ def route(base_urls: dict[str, str], mode: str, points: list[tuple[float, float]
     profile = {"car": "driving", "foot": "walking", "bike": "cycling"}[mode]
     url = (f"{base_urls[mode].rstrip('/')}/route/v1/{profile}/{coords}?overview=full&geometries=geojson&steps=true"
            f"&alternatives={'true' if alternatives and len(points) == 2 else 'false'}&continue_straight=default")
+    excl = OSRM_EXCLUDE.get(mode, {})
+    classes = sorted({excl[a] for a in avoid if a in excl})
+    if classes:
+        url += "&exclude=" + ",".join(classes)
     try:
         with urllib.request.urlopen(urllib.request.Request(url), timeout=timeout) as resp:
             data = json.loads(resp.read())
@@ -195,7 +213,7 @@ def route(base_urls: dict[str, str], mode: str, points: list[tuple[float, float]
         raise RoutingError(404, "אחת הנקודות רחוקה מדי מדרך – נסו לבחור נקודה קרובה יותר לכביש או לשביל")
     if code != "Ok":
         raise RoutingError(502, f"שגיאה בחישוב המסלול ({code})")
-    return shape(data, mode)
+    return shape(data, mode, avoid, frozenset(a for a in avoid if a not in excl))
 
 
 def health(base_urls: dict[str, str], timeout: float = 2.0) -> dict[str, bool]:
@@ -216,32 +234,45 @@ def any_value(d: dict[str, Any]) -> bool:
 
 # ---------------------------------------------------------------------------- back-end selection
 
-def _local(graph_path, mode: str, points: list[tuple[float, float]]) -> dict:
+def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset()) -> dict:
     from ..route.engine import NoRoute, get_router
 
     router = get_router(graph_path)
     if router is None:
         raise RoutingError(503, "שירות הניווט אינו זמין כרגע. ייתכן שהוא עדיין בהכנה – נסו שוב בעוד כמה דקות.")
+    ignored = frozenset()
+    if "pa" in avoid and router.pa_areas() is None:
+        ignored = frozenset({"pa"})  # the areas file is not installed yet (older data package)
     try:
-        data = router.route(mode, points)
+        data = router.route(mode, points, avoid - ignored)
     except NoRoute as e:
         if e.code == "NoSegment":
             raise RoutingError(404, "אחת הנקודות רחוקה מדי מדרך – נסו לבחור נקודה קרובה יותר לכביש או לשביל") from e
         raise RoutingError(404, "לא נמצא מסלול בין הנקודות שנבחרו") from e
-    return shape(data, mode)
+    return shape(data, mode, avoid, ignored)
 
 
-def route_any(settings, mode: str, points: list[tuple[float, float]], alternatives: bool = True) -> dict:
-    """Route with OSRM and/or the built-in router according to ``HMAPS_ROUTER``."""
+def route_any(settings, mode: str, points: list[tuple[float, float]], alternatives: bool = True,
+              avoid: frozenset[str] = frozenset()) -> dict:
+    """Route with OSRM and/or the built-in router according to ``HMAPS_ROUTER``.
+
+    *avoid* (:mod:`hmaps.route.avoid`): OSRM only knows toll / motorway, so other options go to
+    the built-in router when its graph is installed."""
+    from ..route.avoid import FOR_PROFILE
+
     if mode not in MODES:
         raise RoutingError(400, "אמצעי תחבורה לא נתמך")
+    avoid = frozenset(a for a in avoid if a in FOR_PROFILE.get(mode, ()))
     if settings.router == "local":
-        return _local(settings.graph_path, mode, points)
+        return _local(settings.graph_path, mode, points, avoid)
+    local_ok = settings.router == "auto" and settings.graph_path.exists()
+    if local_ok and avoid - set(OSRM_EXCLUDE.get(mode, {})):
+        return _local(settings.graph_path, mode, points, avoid)
     try:
-        return route(settings.osrm, mode, points, alternatives)
+        return route(settings.osrm, mode, points, alternatives, avoid=avoid)
     except RoutingError as e:
-        if settings.router == "auto" and e.status == 503 and settings.graph_path.exists():
-            return _local(settings.graph_path, mode, points)
+        if local_ok and e.status == 503:
+            return _local(settings.graph_path, mode, points, avoid)
         raise
 
 

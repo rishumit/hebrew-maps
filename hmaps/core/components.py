@@ -51,7 +51,8 @@ COMPONENTS: tuple[Component, ...] = (
         "maps", "מפה ונקודות עניין",
         "מאגר המקומות, הרחובות, הכתובות והחיפוש, שבילים מסומנים, טקסטים ועובדות מוויקיפדיה ומוויקינתונים, "
         "וגרף הניווט המובנה. מבוסס OpenStreetMap ומתעדכן כל שבוע.",
-        required=("maps.db",), optional=("routing/graph.npz", "routing/graph.json", "reports/"),
+        required=("maps.db",),
+        optional=("routing/graph.npz", "routing/graph.json", "routing/avoid_areas.json", "reports/"),
     ),
     Component(
         "basemap", "מפת בסיס",

@@ -48,6 +48,29 @@ MAX_SPEED_MS = {"car": 115 / 3.6, "foot": FOOT_SPEED / 3.6 / TRAIL_COST_FACTOR, 
 
 _NO = {"no", "private", "agricultural", "forestry", "delivery"}
 
+#: per-edge flags (``flags`` array of graph.npz) – used by the "avoid" options of the router
+FLAG_TOLL = 1
+FLAG_UNPAVED = 2
+_PAVED = {"paved", "asphalt", "concrete", "concrete:plates", "concrete:lanes", "paving_stones", "sett", "chipseal",
+          "metal", "wood", "bricks"}
+_UNPAVED = {"unpaved", "dirt", "earth", "ground", "gravel", "fine_gravel", "compacted", "sand", "grass", "mud",
+            "pebblestone", "rock", "stone", "salt", "woodchips", "grass_paver"}
+
+
+def way_flags(tags: dict) -> int:
+    """Bit set of :data:`FLAG_TOLL` / :data:`FLAG_UNPAVED` for one OSM way."""
+    f = 0
+    if tags.get("toll") == "yes" or tags.get("toll:motorcar") == "yes":
+        f |= FLAG_TOLL
+    surface = tags.get("surface", "").split(";")[0].strip()
+    if surface in _UNPAVED:
+        f |= FLAG_UNPAVED
+    elif surface not in _PAVED:
+        tt = tags.get("tracktype", "")
+        if tt in ("grade2", "grade3", "grade4", "grade5") or (tags.get("highway") == "track" and tt != "grade1"):
+            f |= FLAG_UNPAVED
+    return f
+
 
 def _hav(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -119,7 +142,7 @@ class GraphBuilder:
         self.lons = array("d")
         self.lats = array("d")
         self.way_start = array("q", [0])
-        self.way_attr: list[tuple] = []  # (name_idx, ref_idx, class_id, roundabout, speeds...)
+        self.way_attr: list[tuple] = []  # (name_idx, ref_idx, class_id, roundabout, speeds..., flags)
         self.names: dict[str, int] = {"": 0}
 
     def _name(self, s: str | None) -> int:
@@ -150,6 +173,7 @@ class GraphBuilder:
             self._name(name), self._name(tags.get("ref")), CLASS_ID[hw],
             tags.get("junction") in ("roundabout", "circular"),
             sp["car"][0], sp["car"][1], sp["foot"][0], sp["foot"][1], sp["bike"][0], sp["bike"][1],
+            way_flags(tags),
         ))
         return True
 
@@ -212,6 +236,7 @@ class GraphBuilder:
             "geom": np.frombuffer(geom, dtype=np.float32).reshape(-1, 2).copy(),
             "name": attrs[:, 0].astype(np.int32), "ref": attrs[:, 1].astype(np.int32),
             "cls": attrs[:, 2].astype(np.int8), "roundabout": attrs[:, 3].astype(bool),
+            "flags": attrs[:, 10].astype(np.uint8),
         }
         with np.errstate(divide="ignore"):
             for i, p in enumerate(PROFILES):

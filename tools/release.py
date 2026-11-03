@@ -141,6 +141,7 @@ def sources(component_id: str, data: Path) -> list[tuple[Path, str]]:
         add(db.resolve(data / "maps.db"), "maps.db")
         add(data / "routing" / "graph.npz", "routing/graph.npz")
         add(data / "routing" / "graph.json", "routing/graph.json")
+        add(data / "routing" / "avoid_areas.json", "routing/avoid_areas.json")
         rep = data / "reports"
         if rep.is_dir():
             for f in sorted(rep.iterdir()):

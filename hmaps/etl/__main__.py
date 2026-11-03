@@ -141,6 +141,23 @@ def _zmanim_from_snapshot(con) -> None:
         log.exception("prayer times failed – continuing without them")
 
 
+def _write_avoid_areas(graph_path: Path) -> None:
+    """Approximate Areas A / B next to the routing graph (hmaps/route/avoid.py)."""
+    import json
+
+    from ..route.avoid import areas_path
+
+    b = builder.LAST_BUILDER[0]
+    data = b.avoid_areas() if b is not None else None
+    if not data:
+        return
+    out = areas_path(graph_path)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    tmp.replace(out)
+    log.info("avoid areas: %s", out)
+
+
 def cmd_build(args: argparse.Namespace) -> None:
     pbf = Path(args.pbf) if args.pbf else _pbf_path()
     if not pbf.exists():
@@ -158,12 +175,15 @@ def cmd_build(args: argparse.Namespace) -> None:
         def fill(con):
             b = builder.Builder(con)
             osm_py.extract(pbf, b, graph)
-            return b.finish()
+            stats = b.finish()
+            builder.LAST_BUILDER[0] = b
+            return stats
 
         report = _build(fill, out, not args.no_enrich, meta, versioned=True)
         if graph is not None and graph.way_count:
             path = graph.save(DATA_DIR / "routing" / "graph.npz")
             log.info("routing graph ready: %s", path)
+            _write_avoid_areas(path)
     else:
         work = DATA_DIR / "work"
         poi_seq, streets_seq = osm.extract(pbf, work)

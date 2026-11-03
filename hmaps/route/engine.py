@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import avoid as avoid_mod
 from .graph import MAX_SPEED_MS, PROFILES
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ PROFILE_ALIASES = {"car": "car", "driving": "car", "foot": "foot", "walking": "f
 CELL = 0.004  # ~400 m grid for snapping
 MAX_SNAP_M = 1500.0
 MAX_SETTLED = 2_500_000
+#: unpaved metres a route may still use before "avoid dirt roads" counts as not met
+UNPAVED_TOLERANCE_M = 400.0
 
 
 class NoRoute(Exception):
@@ -62,9 +65,9 @@ def _modifier(delta: float) -> str:
 class _Profile:
     """CSR adjacency for one profile (compact arrays, fast scalar access)."""
 
-    def __init__(self, g: dict, name: str):
+    def __init__(self, g: dict, name: str, costs: tuple[np.ndarray, np.ndarray] | None = None):
         u, v = g["u"], g["v"]
-        cf, cb = g[f"cost_{name}_f"], g[f"cost_{name}_b"]
+        cf, cb = costs if costs is not None else (g[f"cost_{name}_f"], g[f"cost_{name}_b"])
         okf, okb = np.isfinite(cf), np.isfinite(cb)
         src = np.concatenate([u[okf], v[okb]])
         dst = np.concatenate([v[okf], u[okb]])
@@ -98,6 +101,10 @@ class Router:
         self.vlon = array("d", g["vlon"].tobytes())
         self.vlat = array("d", g["vlat"].tobytes())
         self.profiles: dict[str, _Profile] = {}
+        self._avoid_masks: dict[str, np.ndarray] = {}
+        self._junctions: np.ndarray | None = None
+        self._areas_loaded = False
+        self.areas: avoid_mod.Areas | None = None
         self._lock = threading.Lock()
         self._grid = None
         # vertex degree (all profiles) – used to decide whether a junction is a real choice
@@ -109,12 +116,71 @@ class Router:
         log.info("router loaded: %d vertices, %d edges", n, len(g["u"]))
 
     # ------------------------------------------------------------------ setup
-    def profile(self, name: str) -> _Profile:
-        if name not in self.profiles:
+    def profile(self, name: str, avoid: frozenset[str] = frozenset()) -> _Profile:
+        avoid = frozenset(a for a in avoid if a in avoid_mod.FOR_PROFILE.get(name, ()))
+        key = name if not avoid else f"{name}|{avoid_mod.key(avoid)}"
+        if key not in self.profiles:
             with self._lock:
-                if name not in self.profiles:
-                    self.profiles[name] = _Profile(self.g, name)
-        return self.profiles[name]
+                if key not in self.profiles:
+                    costs = None
+                    if avoid:
+                        g = self.g
+                        m = {k: self.avoid_mask(k) for k in avoid if k != "junctions"}
+                        costs = avoid_mod.apply(g, g[f"cost_{name}_f"], g[f"cost_{name}_b"], m, avoid,
+                                                self.junctions() if "junctions" in avoid else None)
+                    self.profiles[key] = _Profile(self.g, name, costs)
+                    # several avoid combinations may be asked for; keep the memory bounded
+                    extra = [k for k in self.profiles if "|" in k]
+                    if len(extra) > 2:
+                        del self.profiles[extra[0]]
+        return self.profiles[key]
+
+    # ------------------------------------------------------------------ avoid options
+    def avoid_mask(self, what: str) -> np.ndarray:
+        """Edges of one avoid category (cached; called with the lock held or from profile())."""
+        m = self._avoid_masks.get(what)
+        if m is None:
+            if what == "pa":
+                m = avoid_mod.pa_mask(self.g, self.pa_areas())
+            else:
+                m = avoid_mod.masks(self.g, self.names, frozenset([what]), None).get(what)
+            if m is None:
+                m = np.zeros(len(self.g["u"]), dtype=bool)
+            self._avoid_masks[what] = m
+        return m
+
+    def junctions(self) -> np.ndarray:
+        if self._junctions is None:
+            self._junctions = avoid_mod.junction_vertices(self.g)
+        return self._junctions
+
+    def pa_areas(self) -> "avoid_mod.Areas | None":
+        if not self._areas_loaded:
+            self.areas = avoid_mod.Areas.load(avoid_mod.areas_path(self.path))
+            self._areas_loaded = True
+        return self.areas
+
+    def avoid_available(self) -> dict[str, bool]:
+        """Which avoid options can be honoured with this graph (``pa`` needs the areas file)."""
+        return {a: (a != "pa" or self.pa_areas() is not None) for a in avoid_mod.AVOID}
+
+    def _unmet(self, path: list[tuple], avoid: frozenset[str]) -> list[str]:
+        """Avoid options the found route could not keep (it still uses such roads)."""
+        out = []
+        edges = [p[0] for p in path if abs(p[3] - p[2]) > 1e-9]
+        if not edges:
+            return out
+        ids = np.array(edges, dtype=np.int64)
+        lengths = self.g["length"][ids] * np.array([abs(p[3] - p[2]) for p in path if abs(p[3] - p[2]) > 1e-9])
+        for a in sorted(avoid):
+            if a == "junctions":
+                continue
+            m = self.avoid_mask(a)[ids]
+            used = float(lengths[m].sum())
+            # a few metres at the very start / end (the point itself is on such a road) do not count
+            if used > (UNPAVED_TOLERANCE_M if a == "unpaved" else 30.0):
+                out.append(a)
+        return out
 
     def _snap_index(self):
         if self._grid is None:
@@ -182,26 +248,38 @@ class Router:
         raise NoRoute("NoSegment")
 
     # ------------------------------------------------------------------ search
-    def route(self, profile: str, points: list[tuple[float, float]]) -> dict:
-        """OSRM-style response for (lat, lon) points (origin, [via...], destination)."""
+    def route(self, profile: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset()) -> dict:
+        """OSRM-style response for (lat, lon) points (origin, [via...], destination).
+
+        *avoid*: options of :mod:`hmaps.route.avoid`; the route gets ``"avoid_unmet"`` with the
+        ones it could not keep."""
         name = PROFILE_ALIASES.get(profile, profile)
         if name not in PROFILES:
             raise ValueError(profile)
-        prof = self.profile(name)
+        avoid = frozenset(a for a in avoid if a in avoid_mod.FOR_PROFILE.get(name, ()))
+        prof = self.profile(name, avoid)
+        base = self.profile(name) if avoid else prof
         legs, coords, total_d, total_t = [], [], 0.0, 0.0
+        unmet: set[str] = set()
         for (a, b) in zip(points, points[1:]):
-            leg = self._leg(prof, a, b)
+            leg = self._leg(prof, a, b, base=base)
+            path = leg.pop("path", None)
+            if avoid and path:
+                unmet.update(self._unmet(path, avoid))
             legs.append(leg)
             if coords and leg["coords"]:
                 leg["coords"] = leg["coords"][1:]
             coords += leg.pop("coords")
             total_d += leg["distance"]
             total_t += leg["duration"]
-        return {"code": "Ok", "routes": [{"distance": total_d, "duration": total_t,
-                                           "geometry": {"type": "LineString", "coordinates": coords}, "legs": legs}]}
+        r = {"distance": total_d, "duration": total_t, "geometry": {"type": "LineString", "coordinates": coords}, "legs": legs}
+        if avoid:
+            r["avoid_unmet"] = sorted(unmet)
+        return {"code": "Ok", "routes": [r]}
 
-    def _leg(self, prof: _Profile, a: tuple[float, float], b: tuple[float, float]) -> dict:
+    def _leg(self, prof: _Profile, a: tuple[float, float], b: tuple[float, float], base: _Profile | None = None) -> dict:
         g = self.g
+        base = base or prof
         e1, f1, _ = self.snap(a[0], a[1], prof)
         e2, f2, _ = self.snap(b[0], b[1], prof)
         u, v = g["u"], g["v"]
@@ -211,7 +289,7 @@ class Router:
             fwd = f2 >= f1
             cost = abs(f2 - f1) * float(cf[e1] if fwd else cb[e1])
             path = [(e1, fwd, f1, f2)]
-            return self._describe(prof, path, cost, a, b)
+            return self._describe(base, path, None, a, b)
 
         heads: dict[int, tuple[float, tuple]] = {}
         # sources: leave the start edge towards either end
@@ -285,7 +363,7 @@ class Router:
             n = p
         chain.reverse()
         path = [first_leg[n], *chain, targets[best_node][1]]
-        return self._describe(prof, path, best_total, a, b)
+        return self._describe(base, path, None if base is not prof else best_total, a, b)
 
     # ------------------------------------------------------------------ description
     def _edge_coords(self, e: int, fwd: bool, fa: float, fb: float) -> list[list[float]]:
@@ -310,7 +388,7 @@ class Router:
         out = [at(lo), *inner, at(hi)]
         return out if fwd else out[::-1]
 
-    def _describe(self, prof: _Profile, path: list[tuple], total_cost: float, a, b) -> dict:
+    def _describe(self, prof: _Profile, path: list[tuple], total_cost: float | None, a, b) -> dict:
         g = self.g
         lengths = g["length"]
         pieces = []
@@ -326,6 +404,8 @@ class Router:
                            "end_vertex": int(g["v"][e] if fwd else g["u"][e]) if (fb in (0.0, 1.0)) else -1})
         if not pieces:
             raise NoRoute("NoRoute")
+        if total_cost is None:  # searched with avoid penalties: report the real travel time
+            total_cost = sum(p["time"] for p in pieces)
         # a point exactly on a junction may snap onto a crossing street: ignore such slivers
         while len(pieces) > 1 and pieces[-1]["dist"] < 3:
             tail = pieces.pop()
@@ -396,7 +476,7 @@ class Router:
             c = p["coords"]
             coords += c[1:] if coords else c
         dist = sum(p["dist"] for p in pieces)
-        return {"distance": round(dist, 1), "duration": round(total_cost, 1),
+        return {"distance": round(dist, 1), "duration": round(total_cost, 1), "path": path,
                 "steps": [{**s, "distance": round(s["distance"], 1), "duration": round(s["duration"], 1)} for s in steps],
                 "coords": [[round(x, 6), round(y, 6)] for x, y in coords]}
 

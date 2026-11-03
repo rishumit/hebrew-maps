@@ -29,6 +29,7 @@ from typing import Any, Iterable
 from ..core import categories, geo, hours
 from ..core.hebrew import normalize
 from ..core.text import format_phone, normalize_url
+from ..route import avoid
 from .osm import osm_ref
 from .spatial import AreaIndex, NearestPlace
 from .trails import TrailCollector
@@ -190,6 +191,10 @@ class Builder:
         self.routes = TrailCollector()
         #: named stream / ridge / … segments, merged per name in finish()
         self.line_segs: dict[tuple[str, str], list[dict]] = defaultdict(list)
+        #: Palestinian Authority boundary (OSM admin_level 2, ISO3166-1 PS) and the localities
+        #: with an Arabic default name – the approximate Areas A / B of the router's "avoid" option
+        self.pa_polygons: list = []
+        self.pa_places: list[tuple[float, float, str, str]] = []
 
     # ------------------------------------------------------------------ ingest
     def _inside(self, lon: float, lat: float) -> bool:
@@ -206,6 +211,8 @@ class Builder:
             return
 
         if tags.get("boundary") == "administrative" and _polygons(geom):
+            if tags.get("admin_level") == "2" and "PS" in (tags.get("ISO3166-1"), tags.get("ISO3166-1:alpha2")):
+                self.pa_polygons.extend(_polygons(geom) or [])
             self._ingest_admin(ref, tags, geom)
             # boundaries may also carry place=* – fall through only for that
             if "place" not in tags:
@@ -302,6 +309,8 @@ class Builder:
         name = _he_name(tags)
         kind = tags["place"]
         pt = representative(geom)
+        if pt and avoid.is_palestinian_name(tags.get("name")):
+            self.pa_places.append((pt[0], pt[1], kind, tags["name"]))
         if not name or not pt or not self._inside(*pt):
             return
         try:
@@ -409,6 +418,20 @@ class Builder:
         self._write_streets()
         self.con.commit()
         return self.stats
+
+    def avoid_areas(self) -> dict | None:
+        """Approximate Areas A / B for the router (``routing/avoid_areas.json``); None without the PA boundary."""
+        if not self.pa_polygons:
+            log.warning("no Palestinian Authority boundary in the extract – the 'avoid areas A/B' option stays off")
+            return None
+        idx = AreaIndex(tolerance_deg=0.001)
+        idx.add("pa", 2, self.pa_polygons)
+        pts = self.pa_places
+        hits = idx.assign([p[0] for p in pts], [p[1] for p in pts]) if pts else []
+        inside = {(p[0], p[1]) for p, h in zip(pts, hits) if h}
+        out = avoid.build_pa_areas(pts, lambda lon, lat: (lon, lat) in inside)
+        log.info("avoid areas A/B: %d localities", len(out["pa"]))
+        return out
 
     def _resolve_cities(self, lons: list[float], lats: list[float], tagged: list[str | None]) -> list[str | None]:
         area_index, regional, nearest = self._assign
@@ -722,4 +745,10 @@ def run(con: sqlite3.Connection, poi_features: Iterable[dict], street_features: 
     for f in street_features:
         b.ingest_street(f)
     log.info("ingested %d street segments", b.stats.segments)
-    return b.finish()
+    stats = b.finish()
+    LAST_BUILDER[0] = b
+    return stats
+
+
+#: the builder of the last :func:`run` (the ETL writes its avoid areas next to the routing graph)
+LAST_BUILDER: list = [None]

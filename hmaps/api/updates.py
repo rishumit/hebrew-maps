@@ -610,6 +610,10 @@ def _swap(component_id: str, staging: Path, data: Path) -> None:
         _reapply_zmanim(staged, data)
         db.publish(staged, data / "maps.db")
         graph = staging / "routing" / "graph.npz"
+        areas = staging / "routing" / "avoid_areas.json"
+        if areas.exists():  # before the graph: the router reloads on the graph's change and reads it then
+            (data / "routing").mkdir(parents=True, exist_ok=True)
+            _replace(areas, data / "routing" / "avoid_areas.json")
         if graph.exists():
             _replace(graph, data / "routing" / "graph.npz")
             if (staging / "routing" / "graph.json").exists():
