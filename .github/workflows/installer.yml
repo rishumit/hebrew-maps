@@ -181,6 +181,13 @@ jobs:
         shell: pwsh
         run: .venv\Scripts\python.exe tools\fetch_assets.py
 
+      # 8-world. The low-zoom world map ships with the app (web/world/world.json, Natural Earth).
+      #          Built here when it is not committed yet.
+      - name: World map (Natural Earth)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path web\world\world.json)) { .venv\Scripts\python.exe -m tools.world }
+
       # -----------------------------------------------------------------------
       # 8a. Include the requested offline data snapshot in the public installer.
       #     Keep terrain and media out of the initial install; maps includes offline routing.
