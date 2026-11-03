@@ -12,7 +12,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/place/{id}  /api/street/{id}
     GET  /api/geocode?address=           forward geocoding
     GET  /api/reverse?lat=&lon=          reverse geocoding
-    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike
+    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa]
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
     GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
     GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)
@@ -63,6 +63,7 @@ from . import satellite as satellite_api
 from . import rich as rich_api
 from . import transit as transit_api
 from . import updates as updates_api
+from . import userdata as userdata_api
 from . import minyanim as minyanim_api
 from .search import SearchEngine, nearby, reverse
 from .settings import settings
@@ -240,7 +241,17 @@ async def meta(req: Request) -> Response:
         "attribution": ATTRIBUTION + (" · " + elev_mod.ATTRIBUTION if st.terrain.available else ""),
         "bounds": [34.15, 29.40, 35.95, 33.45],
         "terrain": _terrain_meta(st, base),
+        "world": _world_meta(base),
     })
+
+
+def _world_meta(base: str) -> str | None:
+    """URL of the low-zoom world map (web/world/world.json, tools/world.py) – null when not built."""
+    f = settings.web_dir / "world" / "world.json"
+    try:
+        return f"{base}/world/world.json?v={f.stat().st_mtime_ns % 10**8}"
+    except OSError:
+        return None
 
 
 def _terrain_meta(st: State, base: str) -> dict:
@@ -438,8 +449,10 @@ async def route_ep(req: Request) -> Response:
         pts.append(_latlon(v, "via"))
     pts.append(_latlon(req.query_params.get("to"), "to"))
     alts = req.query_params.get("alternatives", "1") not in ("0", "false")
+    from ..route.avoid import parse as parse_avoid
+    avoid = parse_avoid(req.query_params.get("avoid"), mode)
     try:
-        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts)
+        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts, avoid)
     except routing.RoutingError as e:
         return error_response(e.status, "routing_error", e.message)
     return cached(JSONResponse(res), 300)
@@ -836,6 +849,7 @@ def build_app() -> Starlette:
         *guide_api.ROUTES,  # /api/hikes…, /api/trails/{id}/guide, POST /api/guide, /tiles/hikes
         *outdoor.ROUTES,  # /api/trails/{id}, /tiles/trails, /tiles/parks
         *transit_api.routes(),  # public transport (hmaps/api/transit.py)
+        *userdata_api.ROUTES,  # favourites, saved routes / searches, data folder (hmaps/api/userdata.py)
         *minyanim_api.ROUTES,  # /api/minyanim/near (prayer times, hmaps/api/minyanim.py)
         *updates_api.ROUTES,  # /api/updates… (online data updates, hmaps/api/updates.py)
         Route("/api/elevation", elevation_ep, methods=["GET", "POST"]),

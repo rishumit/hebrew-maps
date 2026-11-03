@@ -40,8 +40,14 @@ if getattr(sys, "frozen", False):
     # _internal/ (sys._MEIPASS) is a sibling of the EXE.
     _base = os.path.dirname(sys.executable)
 
-    if not os.environ.get("HMAPS_DATA"):
-        os.environ["HMAPS_DATA"] = os.path.join(_base, "data")
+    if os.environ.get("HMAPS_DATA"):
+        os.environ["HMAPS_DATA_FROM_ENV"] = "1"  # the in-app "data folder" setting cannot override it
+    else:
+        # the folder chosen in the app (תפריט ← הגדרות ← תיקיית נתונים), else data\ next to the exe
+        from hmaps.core import userconfig as _uc
+
+        _chosen = _uc.configured_data_dir()
+        os.environ["HMAPS_DATA"] = str(_chosen) if _chosen and _chosen.is_dir() else os.path.join(_base, "data")
     if not os.environ.get("HMAPS_WEB"):
         os.environ["HMAPS_WEB"] = os.path.join(_base, "web")
 

@@ -13,9 +13,16 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
 
+def _data_dir() -> Path:
+    from ..core import userconfig
+
+    return userconfig.resolve_data_dir()
+
+
 @dataclass(frozen=True)
 class Settings:
-    data_dir: Path = field(default_factory=lambda: Path(_env("HMAPS_DATA", str(ROOT / "data"))))
+    # HMAPS_DATA > the folder chosen in the app (hmaps/core/userconfig.py) > ./data
+    data_dir: Path = field(default_factory=lambda: _data_dir())
     sample_db: Path = field(default_factory=lambda: Path(_env("HMAPS_SAMPLE_DB", str(ROOT / "data" / "sample" / "maps.db"))))
     web_dir: Path = field(default_factory=lambda: Path(_env("HMAPS_WEB", str(ROOT / "web"))))
     osrm: dict = field(default_factory=lambda: {
