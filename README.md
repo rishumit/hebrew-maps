@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center"><img src="docs/images/desktop.png" alt="צילום מסך: חיפוש מסעדות בתל אביב" width="720"></p>
+<p align="center"><img src="docs/images/desktop.png" alt="צילום מסך: תכנון נסיעה בתחבורה ציבורית" width="720"></p>
 
 ---
 
