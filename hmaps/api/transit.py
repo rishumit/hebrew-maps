@@ -4,6 +4,7 @@
     GET /api/transit/stop/{id}?time=ISO&limit=20                         next departures at a stop
     GET /api/transit/stop/{id}/routes                                    every line serving a stop
     GET /api/transit/route/{id}?direction=&from_stop=                    a line's ordered stops and path
+    GET /api/transit/route/{id}/timetable?direction=&date=&from_stop=&at=origin|stop   a line's timetable for a day
     GET /api/transit/stops?lat=&lon=&radius=500&mode=&code=              stops nearby (POI cards: by mode / sign number)
     GET /api/transit/status                                              feed dates and freshness
 
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import date
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -160,6 +162,45 @@ async def route_ep(req: Request) -> Response:
     return _static(JSONResponse(res))
 
 
+def _direction(req: Request) -> int | None:
+    direction = req.query_params.get("direction")
+    if direction in (None, ""):
+        return None
+    if not direction.isdigit():
+        raise planner.TransitError(400, "invalid_parameter", "direction חייב להיות מספר")
+    return int(direction)
+
+
+async def timetable_ep(req: Request) -> Response:
+    try:
+        data = _load()
+        if data is None:
+            return _err(503, "transit_not_ready", NOT_READY)
+        r = planner.find_route(data, req.path_params["id"])
+        if r is None:
+            return _err(404, "not_found", "הקו לא נמצא")
+        direction = _direction(req)
+        day = None
+        text = req.query_params.get("date")
+        if text:
+            try:
+                day = date.fromisoformat(text)
+            except ValueError:
+                raise planner.TransitError(400, "invalid_parameter", "פורמט תאריך לא תקין – צפוי YYYY-MM-DD")
+        at = req.query_params.get("at", "origin")
+        if at not in ("origin", "stop"):
+            raise planner.TransitError(400, "invalid_parameter", "at חייב להיות origin או stop")
+        frm = req.query_params.get("from_stop")
+        s = _stop(data, frm) if frm else None
+        res = await run_in_threadpool(planner.timetable, data, r, direction, day, s, at == "stop")
+    except planner.TransitError as e:
+        return _err(e.status, e.code, e.message)
+    resp = JSONResponse(res)
+    # "today" / "tomorrow" labels change at midnight
+    resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp
+
+
 async def stops_ep(req: Request) -> Response:
     try:
         data = _load()
@@ -198,4 +239,5 @@ def routes() -> list[Route]:
         Route("/api/transit/stop/{id}", stop_ep),
         Route("/api/transit/stop/{id}/routes", stop_routes_ep),
         Route("/api/transit/route/{id}", route_ep),
+        Route("/api/transit/route/{id}/timetable", timetable_ep),
     ]

@@ -185,6 +185,27 @@ POST /api/search
 - **`geometry`:** מסלול הקו מ-`shapes.txt`, ואם אין – קו בין התחנות.
 - שגיאות: ‏404 `not_found` (קו או תחנה), ‏400 `invalid_parameter` (`direction` לא תקין).
 
+### `GET /api/transit/route/{id}/timetable?direction=&date=&from_stop=&at=origin|stop`
+לוח הזמנים הרשמי של כיוון אחד בקו ליום אחד: כל הנסיעות שיוצאות באותו יום שירות (לפי לוח השנה של ה-GTFS, כולל חגים), עם שעת היציאה מתחנת המוצא.
+- **`direction`, ‏`from_stop`:** כמו בתצוגת הקו.
+- **`date`:** ‏`YYYY-MM-DD`. ברירת המחדל: היום.
+- **`at=stop`:** השעות המתוכננות בתחנה `from_stop` במקום שעות היציאה מתחנת המוצא. נסיעות שלא עוצרות בה (או רק מורידות בה) לא נכללות.
+```json
+{ "route": {…}, "direction": 0, "headsign": "גימל", "origin": {"id": "A", "name": "אלף/הרצל", …}, "stop": {…}, "at_stop": false,
+  "date": "2026-10-14", "day_label": "יום רביעי", "weekday": "יום רביעי", "covered": true,
+  "days": [ {"date": "2026-10-14", "label": "היום", "short": "ד׳", "day_month": "14/10", "trips": 4}, … ],
+  "departures": [ {"time": "08:00", "secs": 28800, "hour": 8, "minute": 0, "next_day": false, "mark": null}, …,
+                  {"time": "12:00", "secs": 43200, "hour": 12, "minute": 0, "next_day": false, "mark": "*"} ],
+  "notes": [ {"mark": "*", "text": "מסתיים בתחנת בית/בוגרשוב"} ],
+  "count": 4, "first": "08:00", "last": "12:00", "next_service": null, "message": null,
+  "source_text": "לפי לוח הזמנים הרשמי של משרד התחבורה" }
+```
+- **`days`:** שבעת הימים הקרובים (בתוך תקופת לוח הזמנים), עם מספר הנסיעות בכל יום – לבחירת יום.
+- **`mark` / ‏`notes`:** נסיעות של חלופה שיוצאת מתחנה אחרת או מסתיימת לפני התחנה הסופית מסומנות, וההסבר ב-`notes`.
+- **`next_day`:** נסיעה של יום השירות הזה שיוצאת אחרי חצות (בקובץ: ‎`24:10`).
+- **אין נסיעות:** ‏`departures` ריק, ‏`message` מסביר, ו-`next_service` הוא היום הבא עם נסיעות (עד שבועיים קדימה). תאריך מחוץ לתקופת לוח הזמנים: ‏`covered: false`.
+- שגיאות: ‏404 `not_found`, ‏400 `invalid_parameter` (`date`, ‏`direction` או `at` לא תקינים).
+
 ### `GET /api/transit/stops?lat=&lon=&radius=500`
 תחנות בסביבה, ממוינות לפי מרחק.
 

@@ -2232,6 +2232,193 @@
     }
    }
   },
+  "/api/transit/route/{id}/timetable": {
+   "get": {
+    "summary": "לוח הזמנים של כיוון אחד בקו ליום אחד: כל שעות היציאה מתחנת המוצא (או מתחנה בדרך)",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "route_id של GTFS",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "direction",
+      "in": "query",
+      "required": false,
+      "description": "מספר הכיוון ברשימת directions (ברירת מחדל: הכיוון שעוצר ב-from_stop)",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "description": "תאריך YYYY-MM-DD (ברירת מחדל: היום)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "from_stop",
+      "in": "query",
+      "required": false,
+      "description": "stop_id של תחנה בקו",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "at",
+      "in": "query",
+      "required": false,
+      "description": "origin (ברירת מחדל) – שעות היציאה מתחנת המוצא; stop – השעות המתוכננות בתחנה from_stop",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "לוח זמנים",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "route": {
+           "type": "object"
+          },
+          "direction": {
+           "type": "integer"
+          },
+          "headsign": {
+           "type": "string"
+          },
+          "origin": {
+           "type": "object"
+          },
+          "terminus": {
+           "type": "object"
+          },
+          "stop": {
+           "type": "object",
+           "description": "התחנה שהזמנים שלה מוצגים"
+          },
+          "at_stop": {
+           "type": "boolean"
+          },
+          "date": {
+           "type": "string"
+          },
+          "day_label": {
+           "type": "string"
+          },
+          "weekday": {
+           "type": "string"
+          },
+          "covered": {
+           "type": "boolean",
+           "description": "false כשהתאריך מחוץ לטווח לוח הזמנים השמור"
+          },
+          "days": {
+           "type": "array",
+           "description": "השבוע הקרוב: date, label, short, day_month, trips",
+           "items": {
+            "type": "object"
+           }
+          },
+          "departures": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "time": {
+              "type": "string"
+             },
+             "secs": {
+              "type": "integer"
+             },
+             "hour": {
+              "type": "integer"
+             },
+             "minute": {
+              "type": "integer"
+             },
+             "next_day": {
+              "type": "boolean",
+              "description": "נסיעה של יום השירות הזה אחרי חצות"
+             },
+             "mark": {
+              "type": [
+               "string",
+               "null"
+              ],
+              "description": "סימון הערה (ראו notes)"
+             }
+            }
+           }
+          },
+          "notes": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "mark": {
+              "type": "string"
+             },
+             "text": {
+              "type": "string"
+             }
+            }
+           }
+          },
+          "count": {
+           "type": "integer"
+          },
+          "first": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "last": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "next_service": {
+           "type": [
+            "object",
+            "null"
+           ],
+           "description": "היום הבא עם נסיעות, כשאין נסיעות בתאריך"
+          },
+          "message": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "פרמטר לא תקין"
+     },
+     "404": {
+      "description": "הקו או התחנה לא נמצאו"
+     }
+    }
+   }
+  },
   "/api/transit/stops": {
    "get": {
     "summary": "תחנות בסביבה",

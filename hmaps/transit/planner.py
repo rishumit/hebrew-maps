@@ -822,8 +822,8 @@ def _serves(d: TransitData, pat: int, stop: int, board: bool = True) -> int:
     return -1
 
 
-def line_view(d: TransitData, route: int, direction: int | None = None, from_stop: int | None = None) -> dict:
-    """The full, ordered stop list of one direction of a line (its most common stop pattern)."""
+def _pick(d: TransitData, route: int, direction: int | None, from_stop: int | None) -> tuple[list[dict], int, int]:
+    """(directions, chosen direction, its representative pattern) – the one boarded at *from_stop* when given."""
     dirs = _directions(d, route)
     if not dirs:
         raise TransitError(404, "not_found", "לקו אין נסיעות בלוח הזמנים")
@@ -841,6 +841,12 @@ def line_view(d: TransitData, route: int, direction: int | None = None, from_sto
     if from_stop is not None and _serves(d, pat, from_stop) < 0:
         pat = next((p for p in pats if _serves(d, p, from_stop) >= 0),
                    next((p for p in pats if _serves(d, p, from_stop, board=False) >= 0), pat))
+    return dirs, direction, pat
+
+
+def line_view(d: TransitData, route: int, direction: int | None = None, from_stop: int | None = None) -> dict:
+    """The full, ordered stop list of one direction of a line (its most common stop pattern)."""
+    dirs, direction, pat = _pick(d, route, direction, from_stop)
     a, b = int(d.pat_ptr[pat]), int(d.pat_ptr[pat + 1])
     # a representative trip: the most common timetable profile of the pattern
     t0, t1 = int(d.pat_trips[pat]), int(d.pat_trips[pat + 1])
@@ -878,3 +884,118 @@ def line_view(d: TransitData, route: int, direction: int | None = None, from_sto
             "stops": stops, "trips": int(t1 - t0),
             "geometry": {"type": "LineString", "coordinates": _geometry_ride(d, pat, 0, b - a - 1)},
             "estimated_text": ESTIMATED_TEXT}
+
+
+# ----------------------------------------------------------------------------- line timetable
+
+DAY_LABELS = ["יום שני", "יום שלישי", "יום רביעי", "יום חמישי", "יום שישי", "שבת", "יום ראשון"]
+DAY_SHORT = ["ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳", "א׳"]
+NOTE_MARKS = "*†‡§¶#"
+
+
+def _day_label(day: date, today: date) -> str:
+    if day == today:
+        return "היום"
+    if day == today + timedelta(days=1):
+        return "מחר"
+    return DAY_LABELS[day.weekday()]
+
+
+def timetable(d: TransitData, route: int, direction: int | None = None, day: date | None = None,
+              from_stop: int | None = None, at_stop: bool = False, today: date | None = None) -> dict:
+    """The published timetable of one direction of a line for one service day.
+
+    Every trip of the direction that runs on *day* (GTFS calendar, holidays included), with its
+    departure time from the line's first stop – or, with *at_stop*, the scheduled time at *from_stop*.
+    Short turns and variants that start or end elsewhere are marked with a note. Times after
+    midnight that belong to *day*'s service ("25:10") are flagged ``next_day``.
+    """
+    today = today or datetime.now(TZ).date()
+    day = day or today
+    dirs, direction, main = _pick(d, route, direction, from_stop)
+    pats = dirs[direction]["pats"]
+    a, b = int(d.pat_ptr[main]), int(d.pat_ptr[main + 1])
+    origin, terminus = int(d.pat_stops[a]), int(d.pat_stops[b - 1])
+    use_stop = at_stop and from_stop is not None and any(_serves(d, p, from_stop) >= 0 for p in pats)
+    board = from_stop if use_stop else origin
+
+    def stop_index(p: int) -> int:
+        if use_stop:
+            return _serves(d, p, from_stop)
+        return 0
+
+    def trips_on(k: int) -> int:
+        act = d.active(k)
+        if act is None:
+            return 0
+        return int(sum(int(act[int(d.pat_trips[p]):int(d.pat_trips[p + 1])].sum()) for p in pats if stop_index(p) >= 0))
+
+    # the week ahead (or the start of the feed), for the day picker
+    first = max(today, d.start) if today <= d.end else d.start
+    days = []
+    for i in range(7):
+        x = first + timedelta(days=i)
+        if not d.covers(x):
+            break
+        days.append({"date": x.isoformat(), "label": _day_label(x, today), "short": DAY_SHORT[x.weekday()],
+                     "day_month": f"{x.day}/{x.month}", "trips": trips_on(d.day_index(x))})
+
+    head = {"route": _route_info(d, route), "direction": direction, "headsign": _pat_headsign(d, main),
+            "origin": d.stop_info(origin), "terminus": d.stop_info(terminus),
+            "stop": d.stop_info(board), "at_stop": use_stop, "date": day.isoformat(),
+            "day_label": _day_label(day, today), "weekday": DAY_LABELS[day.weekday()], "days": days,
+            "feed_start": d.start.isoformat(), "feed_end": d.end.isoformat(),
+            "source_text": "לפי לוח הזמנים הרשמי של משרד התחבורה"}
+    if not d.covers(day):
+        head.update({"covered": False, "departures": [], "notes": [], "count": 0, "first": None, "last": None,
+                     "next_service": None,
+                     "message": f"אין נתונים לתאריך הזה. לוח הזמנים השמור מכסה את {d.start:%d/%m/%Y} – {d.end:%d/%m/%Y}."})
+        return head
+
+    k = d.day_index(day)
+    act = d.active(k)
+    rows: list[tuple[int, str | None]] = []
+    for p in pats:
+        i = stop_index(p)
+        if i < 0:
+            continue
+        pa, pb = int(d.pat_ptr[p]), int(d.pat_ptr[p + 1])
+        if int(d.pat_flags[pa + i]) & NO_PICKUP:
+            continue
+        notes = []
+        if not use_stop and int(d.pat_stops[pa]) != origin:
+            notes.append(f"יוצא מתחנת {d.stop_names[int(d.pat_stops[pa])]}")
+        end = int(d.pat_stops[pb - 1])
+        if end != terminus:
+            notes.append(f"מסתיים בתחנת {d.stop_names[end]}")
+        note = ", ".join(notes) or None
+        t0, t1 = int(d.pat_trips[p]), int(d.pat_trips[p + 1])
+        sel = np.flatnonzero(act[t0:t1])
+        if not len(sel):
+            continue
+        trips = t0 + sel
+        times = d.trip_start[trips].astype(np.int64) + d.prof_dep[d.prof_ptr[d.trip_prof[trips]] + i]
+        rows.extend((int(t), note) for t in times)
+    rows = sorted(set(rows), key=lambda r: (r[0], r[1] or ""))
+    marks: dict[str, str] = {}
+    deps = []
+    for secs, note in rows:
+        if note and note not in marks:
+            marks[note] = NOTE_MARKS[len(marks) % len(NOTE_MARKS)] * (1 + len(marks) // len(NOTE_MARKS))
+        h, m = divmod(secs // 60, 60)
+        deps.append({"time": f"{h % 24:02d}:{m:02d}", "secs": secs, "hour": int(h % 24), "minute": int(m),
+                     "next_day": secs >= 86400, "mark": marks.get(note) if note else None})
+    nxt = None
+    if not deps:
+        for i in range(1, 15):
+            x = day + timedelta(days=i)
+            if not d.covers(x):
+                break
+            if trips_on(d.day_index(x)):
+                nxt = {"date": x.isoformat(), "label": _day_label(x, today)}
+                break
+    head.update({"covered": True, "departures": deps, "count": len(deps),
+                 "first": deps[0]["time"] if deps else None, "last": deps[-1]["time"] if deps else None,
+                 "notes": [{"mark": v, "text": k_} for k_, v in marks.items()], "next_service": nxt,
+                 "message": None if deps else f"אין נסיעות בקו בכיוון הזה ב{head['weekday']} {day.day}/{day.month}."})
+    return head

@@ -153,6 +153,45 @@ class TransitUiTest(unittest.TestCase):
         real = [e for e in self.errors if "404" not in e and "Failed to load resource" not in e and "503" not in e]
         self.assertEqual(real, [])
 
+    def test_line_timetable(self):
+        page = self.new_page()
+        page.locator('.tr-radio:has(input[value="depart"])').click()
+        page.locator("#tr-when").fill(f"{gtfs_fixture.WEDNESDAY}T07:55")
+        page.locator("#tr-when").dispatch_event("change")
+        page.locator(".tr-opt button").first.click()
+        page.locator(".tr-legs .tr-line-btn").first.click()
+        expect(page.locator(".tr-ls")).to_have_count(3)
+        # the timetable tab: the day picker and every departure of the chosen day from the first stop
+        tab = page.locator('[role="tab"][data-tab="timetable"]')
+        tab.click()
+        expect(tab).to_have_attribute("aria-selected", "true")
+        expect(tab).to_be_focused()
+        expect(page.locator(".tt-days .tt-day")).to_have_count(7)
+        page.locator("#tt-date").fill(gtfs_fixture.WEDNESDAY)
+        page.locator("#tt-date").dispatch_event("change")
+        expect(page.locator(".tt-sum")).to_contain_text("4")
+        expect(page.locator(".tt-where")).to_contain_text("אלף/הרצל")
+        expect(page.locator(".tt-grid tbody tr")).to_have_count(3)  # 08, 09, 12
+        expect(page.locator(".tt-grid tbody tr").first).to_contain_text("08")
+        expect(page.locator(".tt-grid .tt-t")).to_have_count(4)
+        expect(page.locator(".tt-notes")).to_contain_text("מסתיים בתחנת בית/בוגרשוב")
+        page.screenshot(path=str(SHOTS / "26-transit-timetable.png"))
+        issues = page.evaluate(AUDIT_JS)
+        self.assertEqual(issues, [], issues)
+        # Shabbat: no trips, and a way to the next day with service
+        page.locator("#tt-date").fill("2026-10-17")
+        page.locator("#tt-date").dispatch_event("change")
+        expect(page.locator(".tr-notice")).to_contain_text("אין נסיעות")
+        page.locator("[data-tt-go]").click()
+        expect(page.locator(".tt-grid .tt-t")).to_have_count(4)
+        # keyboard: back to the stops tab (RTL: the right arrow moves back)
+        page.locator('[role="tab"][data-tab="timetable"]').focus()
+        page.keyboard.press("ArrowRight")
+        expect(page.locator('[role="tab"][data-tab="stops"]')).to_have_attribute("aria-selected", "true")
+        expect(page.locator(".tr-ls")).to_have_count(3)
+        real = [e for e in self.errors if "404" not in e and "Failed to load resource" not in e and "503" not in e]
+        self.assertEqual(real, [])
+
     def test_shabbat_notice(self):
         page = self.new_page(dark=True)
         page.locator('.tr-radio:has(input[value="depart"])').click()

@@ -277,6 +277,50 @@ class TransitEngineTest(unittest.TestCase):
         with self.assertRaises(self.planner.TransitError):
             self.planner.line_view(d, r2, 5)
 
+    def test_timetable(self):
+        from datetime import date
+
+        d = self.planner
+        data = self.data
+        wed = date.fromisoformat(gtfs_fixture.WEDNESDAY)
+        r1 = data.route_index["r1"]
+        t = d.timetable(data, r1, None, wed, today=wed)
+        self.assertTrue(t["covered"])
+        self.assertEqual(t["origin"]["id"], "A")
+        self.assertEqual(t["headsign"], "גימל")
+        self.assertEqual([x["time"] for x in t["departures"]], ["08:00", "08:30", "09:00", "12:00"])
+        self.assertEqual((t["first"], t["last"], t["count"]), ("08:00", "12:00", 4))
+        # the short turn (A → B) is marked, with a note
+        self.assertEqual(t["departures"][-1]["mark"], "*")
+        self.assertEqual(t["notes"], [{"mark": "*", "text": "מסתיים בתחנת בית/בוגרשוב"}])
+        self.assertIsNone(t["departures"][0]["mark"])
+        # the day picker: a week from today, with the number of trips per day (Monday is a holiday)
+        self.assertEqual(t["days"][0]["label"], "היום")
+        self.assertEqual(t["days"][1]["label"], "מחר")
+        self.assertEqual([x["trips"] for x in t["days"]], [4, 4, 1, 0, 4, 0, 4])
+        # times at a stop along the line (the short turn only drops off at B)
+        t = d.timetable(data, r1, None, wed, data.id_index["B"], True, today=wed)
+        self.assertTrue(t["at_stop"])
+        self.assertEqual(t["stop"]["id"], "B")
+        self.assertEqual([x["time"] for x in t["departures"]], ["08:05", "08:35", "09:05"])
+        # Friday: one trip; Shabbat: none, with the next day that has service
+        fri = date.fromisoformat(gtfs_fixture.WEDNESDAY).replace(day=16)
+        self.assertEqual([x["time"] for x in d.timetable(data, r1, None, fri, today=wed)["departures"]], ["08:00"])
+        t = d.timetable(data, r1, None, fri.replace(day=17), today=wed)
+        self.assertEqual(t["count"], 0)
+        self.assertTrue(t["message"])
+        self.assertEqual(t["next_service"]["date"], "2026-10-18")
+        # a trip after midnight belongs to the previous service day
+        t = d.timetable(data, data.route_index["r3"], None, date.fromisoformat(gtfs_fixture.TUESDAY), today=wed)
+        self.assertEqual(t["departures"][0]["time"], "00:10")
+        self.assertTrue(t["departures"][0]["next_day"])
+        # the other direction of a route with direction_id; a date outside the feed
+        t = d.timetable(data, data.route_index["r2"], 1, wed, today=wed)
+        self.assertEqual((t["origin"]["id"], [x["time"] for x in t["departures"]]), ("E", ["10:00"]))
+        t = d.timetable(data, r1, None, date(2030, 1, 1), today=wed)
+        self.assertFalse(t["covered"])
+        self.assertEqual(t["departures"], [])
+
     def test_route_ids_on_boards_and_legs(self):
         d = self.data
         res = self.planner.departures(d, d.id_index["A"], self.planner.parse_time(f"{gtfs_fixture.WEDNESDAY}T07:00"))
@@ -523,6 +567,20 @@ class TransitApiTest(unittest.TestCase):
         self.assertEqual(s, 404)
         self.assertEqual(body["error"]["code"], "not_found")
         s, body, _ = self.api_empty.get("/api/transit/route/r1")
+        self.assertEqual(s, 503)
+        # the timetable of a line
+        s, body, h = self.api.get("/api/transit/route/r1/timetable", date=gtfs_fixture.WEDNESDAY)
+        self.assertEqual(s, 200, body)
+        self.assertEqual([x["time"] for x in body["departures"]], ["08:00", "08:30", "09:00", "12:00"])
+        self.assertIn("max-age", h.get("cache-control", ""))
+        s, body, _ = self.api.get("/api/transit/route/r1/timetable", date=gtfs_fixture.WEDNESDAY, from_stop="B", at="stop")
+        self.assertEqual((body["stop"]["id"], body["departures"][0]["time"]), ("B", "08:05"))
+        for params, code in (({"date": "14/10"}, 400), ({"at": "x"}, 400), ({"direction": "9"}, 400)):
+            s, body, _ = self.api.get("/api/transit/route/r1/timetable", **params)
+            self.assertEqual(s, code, params)
+        s, body, _ = self.api.get("/api/transit/route/nope/timetable")
+        self.assertEqual(s, 404)
+        s, body, _ = self.api_empty.get("/api/transit/route/r1/timetable")
         self.assertEqual(s, 503)
         s, body, _ = self.api_empty.get("/api/transit/stop/A/routes")
         self.assertEqual(s, 503)

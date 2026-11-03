@@ -562,8 +562,11 @@ export class TransitPlanner {
   }
 
   // ------------------------------------------------------------------ line view
-  /** All stops of one direction of a line, its path on the map and a direction selector. */
-  async openLine(routeId, { direction, fromStop } = {}) {
+  /**
+   * One direction of a line: two tabs – its ordered stops (drawn on the map) and its timetable
+   * (every departure of a chosen day from the first stop, or from the stop it was opened at).
+   */
+  async openLine(routeId, { direction, fromStop, tab = 'stops' } = {}) {
     const app = this.app;
     const key = `${LINE_KEY}${++this._lineSeq}`;
     let data = null;
@@ -571,6 +574,36 @@ export class TransitPlanner {
     let fitted = false;
     let refocus = null;
     let ctrl = null;
+    // timetable tab
+    let tt = null;
+    let ttError = null;
+    let ttLoading = false;
+    let ttDate = null; // null = today
+    let ttAt = 'origin'; // origin | stop
+    let ttCtrl = null;
+    let ttScrolled = false;
+    const loadTT = async () => {
+      if (!data) return;
+      ttCtrl?.abort();
+      ttCtrl = new AbortController();
+      const signal = ttCtrl.signal;
+      ttLoading = true;
+      ttError = null;
+      app.panel.update(view());
+      try {
+        const res = await api.transitTimetable(data.route.id, {
+          direction: data.direction, date: ttDate, fromStop, at: ttAt }, signal);
+        if (signal.aborted) return;
+        tt = res;
+        ttScrolled = false;
+        announce(res.count ? `${res.day_label}: ${res.count} יציאות, הראשונה ב-${res.first}, האחרונה ב-${res.last}` : (res.message || 'אין נסיעות'));
+      } catch (e) {
+        if (signal.aborted) return;
+        ttError = e.message || 'שגיאה בטעינת לוח הזמנים';
+      }
+      ttLoading = false;
+      app.panel.update(view());
+    };
     const load = async (rid, dir) => {
       ctrl?.abort();
       ctrl = new AbortController();
@@ -581,6 +614,7 @@ export class TransitPlanner {
         data = res;
         error = null;
         fitted = false;
+        tt = null;
         const from = data.from_index != null ? data.stops[data.from_index] : null;
         announce(`${data.route.line} לכיוון ${data.headsign}: ${data.stops.length} תחנות${from ? `, מתחנה ${from.name}` : ''}`);
       } catch (e) {
@@ -588,9 +622,80 @@ export class TransitPlanner {
         error = e.message || 'שגיאה בטעינת הקו';
       }
       app.panel.update(view());
+      if (data && tab === 'timetable' && !tt) loadTT();
+    };
+    const stopsHtml = () => {
+      const r = data.route;
+      const fi = data.from_index;
+      const base = fi != null ? data.stops[fi].offset : 0;
+      return `<p class="tr-estimated">${svg('clock', { size: 16 })}<span>${esc(data.estimated_text)}${fi != null ? ' · הזמנים מהתחנה המסומנת' : ' · הזמנים מתחילת הקו'}</span></p>
+        <h3 class="subtitle" id="tr-ls-h">${data.stops.length} תחנות</h3>
+        <ol class="tr-line-stops" aria-labelledby="tr-ls-h" style="--line-color:${esc(r.color)}">${data.stops.map((st, i) => {
+          const rel = st.offset - base;
+          const time = i === fi ? 'כאן' : (fi != null && i < fi) ? '' : (fi == null && i === 0) ? 'יציאה' : offsetText(rel);
+          const sub = [st.code ? `תחנה ${st.code}` : '', st.city || '', !st.pickup && i === data.stops.length - 1 ? 'תחנה אחרונה' : !st.pickup ? 'ירידה בלבד' : !st.drop_off && i > 0 ? 'עלייה בלבד' : ''].filter(Boolean).join(' · ');
+          const aria = `${st.name}${sub ? ', ' + sub : ''}${i === fi ? ', התחנה הנוכחית' : time === 'יציאה' ? ', תחנת המוצא של הקו' : time ? `, ${fi != null ? 'עוד ' : 'אחרי '}${time}` : ''}`;
+          return `<li class="tr-ls${i === fi ? ' from' : ''}${fi != null && i < fi ? ' past' : ''}${i === 0 ? ' first' : ''}${i === data.stops.length - 1 ? ' last' : ''}">
+            <button type="button" data-lstop="${i}" aria-label="${esc(aria)}"${i === fi ? ' aria-current="location"' : ''}>
+              <span class="tr-ls-dot" aria-hidden="true"></span>
+              <span class="tr-ls-name">${esc(st.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+              <span class="tr-ls-time" aria-hidden="true"><bdi>${esc(time)}</bdi></span>
+            </button></li>`;
+        }).join('')}</ol>`;
+    };
+    const timetableHtml = () => {
+      const fi = data.from_index;
+      const fromSt = fi != null && fi > 0 ? data.stops[fi] : null;
+      let out = '';
+      if (fromSt) {
+        out += `<fieldset class="tt-at"><legend class="sr-only">הזמנים מתחנה</legend><div class="tr-radios">
+          <label class="tr-radio"><input type="radio" name="tt-at" value="origin" ${ttAt === 'origin' ? 'checked' : ''}><span>יציאה מתחנת המוצא</span></label>
+          <label class="tr-radio"><input type="radio" name="tt-at" value="stop" ${ttAt === 'stop' ? 'checked' : ''}><span>בתחנה ${esc(fromSt.name)}</span></label>
+        </div></fieldset>`;
+      }
+      if (ttError && !tt) return `${out}<div class="alert" role="alert">${svg('alert')}<div>${esc(ttError)}</div></div>`;
+      if (!tt) return `${out}<div class="skeleton" aria-busy="true" aria-label="טוען את לוח הזמנים"><div class="sk-line w80"></div><div class="sk-line w60"></div><div class="sk-line w80"></div></div>`;
+      const sel = tt.date;
+      out += `<div class="tt-days" role="radiogroup" aria-label="יום">${tt.days.map((x) => `<label class="tt-day${x.trips ? '' : ' none'}">
+          <input type="radio" name="tt-day" value="${esc(x.date)}" ${x.date === sel ? 'checked' : ''}>
+          <span aria-label="${esc(x.label)} ${esc(x.day_month)}, ${x.trips ? `${x.trips} נסיעות` : 'אין נסיעות'}"><b aria-hidden="true">${esc(x.label === 'היום' || x.label === 'מחר' ? x.label : x.short)}</b><small aria-hidden="true">${esc(x.day_month)}</small><small class="tt-n" aria-hidden="true">${x.trips || '–'}</small></span>
+        </label>`).join('')}</div>
+        <div class="tt-other"><label for="tt-date">תאריך אחר</label>
+          <input type="date" id="tt-date" value="${esc(sel)}" min="${esc(tt.feed_start)}" max="${esc(tt.feed_end)}"></div>`;
+      const where = tt.at_stop ? `בתחנה ${tt.stop.name}` : `מתחנת המוצא: ${tt.origin.name}`;
+      out += `<p class="tt-where">${svg('pin', { size: 16 })}<span>${esc(where)}${tt.stop.code ? ` <span class="tr-code">(תחנה ${esc(tt.stop.code)})</span>` : ''}</span></p>`;
+      if (ttError) out += `<div class="alert" role="alert">${svg('alert')}<div>${esc(ttError)}</div></div>`;
+      if (!tt.departures.length) {
+        out += `<div class="tr-notice" role="status">${svg('info', { size: 18 })}<div>${esc(tt.message || 'אין נסיעות ביום הזה.')}
+          ${tt.next_service ? `<button type="button" class="tr-stop-btn" data-tt-go="${esc(tt.next_service.date)}">לוח הזמנים של ${esc(tt.next_service.label)}</button>` : ''}</div></div>`;
+        return out;
+      }
+      out += `<p class="tt-sum"><span><b>${tt.count}</b> יציאות ב${esc(tt.day_label === 'היום' || tt.day_label === 'מחר' ? tt.day_label : tt.weekday)}</span>
+        <span>ראשונה <bdi>${esc(tt.first)}</bdi></span><span>אחרונה <bdi>${esc(tt.last)}</bdi></span></p>`;
+      // "now" in the selected day's own timeline (only for today)
+      const nowD = new Date();
+      const isToday = tt.days[0]?.label === 'היום' && tt.days[0].date === sel;
+      const nowSecs = nowD.getHours() * 3600 + nowD.getMinutes() * 60;
+      const next = isToday ? tt.departures.findIndex((x) => x.secs >= nowSecs) : -1;
+      const hours = [];
+      tt.departures.forEach((x, i) => {
+        const h = Math.floor(x.secs / 3600);
+        if (!hours.length || hours[hours.length - 1].h !== h) hours.push({ h, label: x.time.slice(0, 2), night: x.next_day, items: [] });
+        hours[hours.length - 1].items.push({ ...x, i });
+      });
+      out += `<table class="tt-grid" style="--line-color:${esc(data.route.color)};--line-text:${esc(data.route.text_color)}">
+        <caption class="sr-only">לוח הזמנים של ${esc(data.route.line)} לכיוון ${esc(data.headsign)}, ${esc(tt.weekday)} ${esc(sel)}, ${esc(where)}</caption>
+        <thead class="sr-only"><tr><th scope="col">שעה</th><th scope="col">דקות</th></tr></thead><tbody>
+        ${hours.map((hr) => `<tr${hr.items.some((x) => x.i === next) ? ' class="has-next"' : ''}>
+          <th scope="row"><bdi>${esc(hr.label)}</bdi>${hr.night ? '<small>אחרי חצות</small>' : ''}</th>
+          <td><div class="tt-mins">${hr.items.map((x) => `<span class="tt-t${x.i === next ? ' next' : ''}${isToday && next >= 0 && x.i < next ? ' past' : ''}${isToday && next < 0 ? ' past' : ''}"${x.i === next ? ' id="tt-next"' : ''} aria-label="${esc(x.time)}${x.mark ? ' – ' + esc(tt.notes.find((n) => n.mark === x.mark)?.text || '') : ''}${x.i === next ? ', היציאה הבאה' : ''}"><bdi>${String(x.minute).padStart(2, '0')}</bdi>${x.mark ? `<sup>${esc(x.mark)}</sup>` : ''}</span>`).join('')}</div></td>
+        </tr>`).join('')}</tbody></table>`;
+      if (tt.notes.length) out += `<ul class="tt-notes">${tt.notes.map((n) => `<li><sup>${esc(n.mark)}</sup> ${esc(n.text)}</li>`).join('')}</ul>`;
+      out += `<p class="tr-estimated tt-src">${svg('info', { size: 16 })}<span>${esc(tt.source_text)}. ${tt.at_stop ? 'הזמנים בתחנה הם לפי לוח הזמנים המתוכנן.' : 'הזמנים הם שעות היציאה מתחנת המוצא.'}</span></p>`;
+      return out;
     };
     const view = () => ({
-      key, label: data ? `${data.route.line} – תחנות הקו` : 'תחנות הקו', snap: 'half',
+      key, label: data ? `${data.route.line} – ${tab === 'timetable' ? 'לוח זמנים' : 'תחנות הקו'}` : 'תחנות הקו', snap: 'half',
       render: (body) => {
         if (!data && !error) {
           body.innerHTML = `${head(app, 'תחנות הקו')}<div class="skeleton" aria-busy="true" aria-label="טוען את תחנות הקו"><div class="sk-line w80"></div><div class="sk-line w60"></div><div class="sk-line w80"></div></div>`;
@@ -603,29 +708,16 @@ export class TransitPlanner {
           return;
         }
         const r = data.route;
-        const fi = data.from_index;
-        const base = fi != null ? data.stops[fi].offset : 0;
         const opts = data.directions;
         const cur = opts.findIndex((o) => o.current);
+        const tabBtn = (id, label, icon) => `<button type="button" role="tab" id="tt-tab-${id}" aria-controls="tt-panel" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}" data-tab="${id}">${svg(icon, { size: 16 })}<span>${label}</span></button>`;
         body.innerHTML = `${head(app, r.route_short_name || !r.title ? r.line : `${r.line} ${r.title}`, { sub: r.agency })}
           <div class="tr-line-head">${badge(r)}<strong>לכיוון ${esc(data.headsign)}</strong></div>
           ${error ? `<div class="alert" role="alert">${svg('alert')}<div>${esc(error)}</div></div>` : ''}
           ${opts.length > 1 ? `<div class="tr-line-dir"><label for="tr-dir-sel">כיוון</label>
             <select id="tr-dir-sel">${opts.map((o, i) => `<option value="${i}"${i === cur ? ' selected' : ''}>לכיוון ${esc(o.headsign)} (${esc(o.from)} ← ${esc(o.to)}, ${o.num_stops} תחנות)${o.serves_stop ? '' : fromStop ? ' – לא עוצר בתחנה' : ''}</option>`).join('')}</select></div>` : ''}
-          <p class="tr-estimated">${svg('clock', { size: 16 })}<span>${esc(data.estimated_text)}${fi != null ? ' · הזמנים מהתחנה המסומנת' : ' · הזמנים מתחילת הקו'}</span></p>
-          <h3 class="subtitle" id="tr-ls-h">${data.stops.length} תחנות</h3>
-          <ol class="tr-line-stops" aria-labelledby="tr-ls-h" style="--line-color:${esc(r.color)}">${data.stops.map((st, i) => {
-            const rel = st.offset - base;
-            const time = i === fi ? 'כאן' : (fi != null && i < fi) ? '' : (fi == null && i === 0) ? 'יציאה' : offsetText(rel);
-            const sub = [st.code ? `תחנה ${st.code}` : '', st.city || '', !st.pickup && i === data.stops.length - 1 ? 'תחנה אחרונה' : !st.pickup ? 'ירידה בלבד' : !st.drop_off && i > 0 ? 'עלייה בלבד' : ''].filter(Boolean).join(' · ');
-            const aria = `${st.name}${sub ? ', ' + sub : ''}${i === fi ? ', התחנה הנוכחית' : time === 'יציאה' ? ', תחנת המוצא של הקו' : time ? `, ${fi != null ? 'עוד ' : 'אחרי '}${time}` : ''}`;
-            return `<li class="tr-ls${i === fi ? ' from' : ''}${fi != null && i < fi ? ' past' : ''}${i === 0 ? ' first' : ''}${i === data.stops.length - 1 ? ' last' : ''}">
-              <button type="button" data-lstop="${i}" aria-label="${esc(aria)}"${i === fi ? ' aria-current="location"' : ''}>
-                <span class="tr-ls-dot" aria-hidden="true"></span>
-                <span class="tr-ls-name">${esc(st.name)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>
-                <span class="tr-ls-time" aria-hidden="true"><bdi>${esc(time)}</bdi></span>
-              </button></li>`;
-          }).join('')}</ol>`;
+          <div class="tt-tabs" role="tablist" aria-label="תצוגת הקו">${tabBtn('stops', 'תחנות', 'list')}${tabBtn('timetable', 'לוח זמנים', 'clock')}</div>
+          <div id="tt-panel" role="tabpanel" aria-labelledby="tt-tab-${tab}"${ttLoading ? ' aria-busy="true"' : ''}>${tab === 'timetable' ? timetableHtml() : stopsHtml()}</div>`;
         wireHead(body, app);
         this.drawLine(data, !fitted);
         fitted = true;
@@ -636,17 +728,60 @@ export class TransitPlanner {
           refocus = '#tr-dir-sel';
           load(o.route_id, o.direction);
         });
+        const tabs = [...body.querySelectorAll('[data-tab]')];
+        const pick = (id) => {
+          if (id === tab) return;
+          tab = id;
+          refocus = `#tt-tab-${id}`;
+          if (tab === 'timetable' && !tt && !ttLoading) loadTT(); // renders (loading, then loaded)
+          else app.panel.update(view());
+        };
+        tabs.forEach((b, i) => {
+          b.addEventListener('click', () => pick(b.dataset.tab));
+          b.addEventListener('keydown', (e) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            // RTL: the left arrow moves to the next tab
+            const j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowLeft' ? 1 : -1) + tabs.length) % tabs.length;
+            pick(tabs[j].dataset.tab);
+          });
+        });
         body.querySelectorAll('[data-lstop]').forEach((b) => b.addEventListener('click', () => {
           const st = data.stops[Number(b.dataset.lstop)];
           app.map.flyTo({ lat: st.lat, lon: st.lon }, 17);
           this.openStop(st.id);
         }));
+        const setDay = (value, focusSel) => {
+          if (!value || value === tt?.date) return;
+          ttDate = value;
+          refocus = focusSel;
+          loadTT();
+        };
+        body.querySelectorAll('input[name="tt-day"]').forEach((inp) => inp.addEventListener('change', () => {
+          if (inp.checked) setDay(inp.value, `input[name="tt-day"][value="${inp.value}"]`);
+        }));
+        body.querySelector('#tt-date')?.addEventListener('change', (e) => setDay(e.target.value, '#tt-date'));
+        body.querySelector('[data-tt-go]')?.addEventListener('click', (e) => setDay(e.currentTarget.dataset.ttGo, '#tt-panel h3, .tt-sum'));
+        body.querySelectorAll('input[name="tt-at"]').forEach((inp) => inp.addEventListener('change', () => {
+          if (!inp.checked || inp.value === ttAt) return;
+          ttAt = inp.value;
+          refocus = `input[name="tt-at"][value="${inp.value}"]`;
+          loadTT();
+        }));
         if (refocus) {
-          body.querySelector(refocus)?.focus();
-          refocus = null;
+          const el = body.querySelector(refocus);
+          if (el) {
+            el.focus({ preventScroll: false });
+            // a timetable load renders twice (loading, loaded): keep the focus target until it is done
+            if (!ttLoading) refocus = null;
+          }
         } else {
           keepFocus(body);
-          if (fi != null) body.querySelector('.tr-ls.from')?.scrollIntoView?.({ block: 'center' });
+          if (tab === 'stops' && data.from_index != null) body.querySelector('.tr-ls.from')?.scrollIntoView?.({ block: 'center' });
+        }
+        if (tab === 'timetable' && tt && !ttScrolled) {
+          ttScrolled = true;
+          body.querySelector('#tt-next')?.closest('tr')?.scrollIntoView?.({ block: 'center' });
         }
       },
     });

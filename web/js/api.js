@@ -108,6 +108,9 @@ export const api = {
   transitStopRoutes: (id, signal) => request(`/api/transit/stop/${encodeURIComponent(id)}/routes`, { signal }),
   transitRoute: (id, { direction, fromStop } = {}, signal) =>
     request(`/api/transit/route/${encodeURIComponent(id)}`, { params: { direction, from_stop: fromStop }, signal }),
+  transitTimetable: (id, { direction, date, fromStop, at } = {}, signal) =>
+    request(`/api/transit/route/${encodeURIComponent(id)}/timetable`, {
+      params: { direction, date: date || undefined, from_stop: fromStop, at: fromStop ? at : undefined }, signal }),
   transitStatus: () => request('/api/transit/status'),
   minyanimNear: (lat, lon, { radius, prayer, after, day } = {}, signal) =>
     request('/api/minyanim/near', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6), radius, prayer, after, day }, signal }),
