@@ -213,6 +213,16 @@ function transfersText(n) {
   return n === 0 ? 'ללא החלפות' : n === 1 ? 'החלפה אחת' : `${n} החלפות`;
 }
 
+/** Estimated fare of an itinerary (hmaps/transit/fares.py): total + one line per ticket. */
+function fareHtml(fare) {
+  if (!fare) return '';
+  const parts = fare.parts.length > 1 || fare.parts[0]?.note
+    ? `<ul class="tr-fare-parts">${fare.parts.map((p) => `<li><span>${esc(p.label)}${p.note ? ` <small>(${esc(p.note)})</small>` : ''}</span>
+        <bdi>₪${esc(String(p.price))}</bdi></li>`).join('')}</ul>` : '';
+  return `<div class="tr-fare-box"><div class="tr-fare-total">${svg('cash', { size: 18 })}<span>מחיר משוער: <strong>${esc(fare.text)}</strong></span></div>
+    ${parts}<p class="r-sub">לפי רב-קו "ערך צבור" (תעריף ${esc(fare.updated || '')}), בלי חופשי-חודשי והנחות. המחיר הסופי נקבע בתיקוף.</p></div>`;
+}
+
 export class TransitPlanner {
   constructor(app, dirs) {
     this.app = app;
@@ -412,12 +422,12 @@ export class TransitPlanner {
       const rides = it.legs.filter((l) => l.type !== 'walk');
       const lines = rides.map((l) => l.line).join(', ');
       const tags = it.tags.map((t) => TAGS[t]).filter(Boolean);
-      const aria = `אפשרות ${i + 1}: יציאה ${it.departure_text}, הגעה ${it.arrival_text}, ${it.duration_text}, ${rides.length ? transfersText(it.transfers) + ', ' + lines : 'הליכה בלבד'}, הליכה ${it.walk_distance_text}${tags.length ? ', ' + tags.join(', ') : ''}`;
+      const aria = `אפשרות ${i + 1}: יציאה ${it.departure_text}, הגעה ${it.arrival_text}, ${it.duration_text}, ${rides.length ? transfersText(it.transfers) + ', ' + lines : 'הליכה בלבד'}, הליכה ${it.walk_distance_text}${it.fare ? `, מחיר משוער ${it.fare.total} שקלים` : ''}${tags.length ? ', ' + tags.join(', ') : ''}`;
       out += `<li class="tr-opt"><button type="button" data-itin="${i}" aria-label="${esc(aria)}">
         <span class="tr-times"><bdi>${esc(it.departure_text)}</bdi> – <bdi>${esc(it.arrival_text)}</bdi></span>
         <span class="tr-dur">${esc(it.duration_text)}</span>
         <span class="tr-badges" aria-hidden="true">${it.legs.filter((l) => l.type !== 'walk' || l.duration >= 120).map((l) => badge(l, { small: true })).join('<span class="tr-sep">‹</span>')}</span>
-        <span class="tr-meta">${rides.length ? esc(transfersText(it.transfers)) + ' · ' : ''}הליכה ${esc(it.walk_distance_text)}${tags.length ? ` · <span class="tr-tag">${esc(tags[0])}</span>` : ''}</span>
+        <span class="tr-meta">${rides.length ? esc(transfersText(it.transfers)) + ' · ' : ''}הליכה ${esc(it.walk_distance_text)}${it.fare ? ` · <span class="tr-fare" title="מחיר משוער">${esc(it.fare.text)}</span>` : ''}${tags.length ? ` · <span class="tr-tag">${esc(tags[0])}</span>` : ''}</span>
       </button></li>`;
     });
     return out + '</ul>';
@@ -430,6 +440,7 @@ export class TransitPlanner {
       <div class="tr-card-sum"><strong><bdi>${esc(it.departure_text)}</bdi> – <bdi>${esc(it.arrival_text)}</bdi></strong>
         <span>${esc(it.duration_text)} · ${esc(transfersText(it.transfers))} · הליכה ${esc(it.walk_distance_text)}</span></div>
     </div>
+    ${fareHtml(it.fare)}
     <h3 class="subtitle">פירוט הנסיעה</h3>
     <ol class="tr-legs">`;
     it.legs.forEach((l, i) => {
@@ -509,6 +520,7 @@ export class TransitPlanner {
   }
 
   async openStop(id) {
+    this._stopId = id;
     const app = this.app;
     const time = this.timeMode === 'now' ? undefined : `${this.when}:00`;
     let data = null;
@@ -534,7 +546,12 @@ export class TransitPlanner {
         // the lines of the departures board (still clickable)
         const chips = routes?.count ? chipsHtml(routes, s.id, 'tr-routes-h')
           : data.lines.length ? `<div class="tr-lines" role="group" aria-label="קווים בתחנה">${data.lines.map((l) => lineButton(l, s.id)).join('')}</div>` : '';
+        const fav = { id: `tstop-${s.id}`, type: 'tstop', name: s.name, secondary: sub, icon: 'bus', color: '#2563EB',
+          location: { lat: s.lat, lon: s.lon } };
+        const on = app.saved?.isFavorite(fav.id);
         body.innerHTML = `${head(app, s.name, { sub })}
+          <div class="p-section tr-stop-actions"><button type="button" class="btn btn-secondary btn-sm" data-act="stop-fav" aria-pressed="${!!on}">
+            ${svg('star', { size: 16, cls: on ? 'icon-filled' : '' })}<span>${on ? 'התחנה שמורה' : 'שמירת התחנה'}</span></button></div>
           <p class="tr-estimated">${svg('clock', { size: 16 })}<span>${esc(data.estimated_text)}</span></p>
           ${data.feed?.warning ? `<div class="tr-warning" role="status">${svg('alert', { size: 18 })}<div>${esc(data.feed.warning)}</div></div>` : ''}
           ${chips}
@@ -542,6 +559,13 @@ export class TransitPlanner {
           ${data.departures.length ? departuresHtml(data.departures, s.id) : '<p class="p-empty">אין יציאות בשלוש השעות הקרובות.</p>'}
           ${routesError ? `<p class="p-empty" role="status">לא ניתן להציג את כל הקווים בתחנה: ${esc(routesError)}</p>` : this._routesHtml(routes, s.id)}`;
         wireHead(body, app);
+        body.querySelector('[data-act="stop-fav"]')?.addEventListener('click', (e) => {
+          const b = e.currentTarget;
+          const now = app.saved.toggleFavorite(fav);
+          b.setAttribute('aria-pressed', String(now));
+          b.querySelector('svg').classList.toggle('icon-filled', now);
+          b.querySelector('span').textContent = now ? 'התחנה שמורה' : 'שמירת התחנה';
+        });
         this._wireLines(body);
         wireScroll(body);
         keepFocus(body);

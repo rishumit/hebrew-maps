@@ -214,6 +214,10 @@ const app = {
         this.map.setHighlight(trail.geometry);
         if (fly) this.map.fitBounds(trail.bbox, 15);
         this.panel.show({ ...trailView(this, trail), replace: true });
+      } else if (kind === 'tstop') {
+        // a saved public-transport stop: its departures board
+        this.map.setSelection(item.location || null);
+        await this.directions.transit.openStop(id.slice(6));
       } else if (kind === 'hike') {
         this.map.setSelection(null);
         await openGuide(this, { kind: 'hike', id, name: item.name }, { signal, fly, replace });

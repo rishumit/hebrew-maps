@@ -24,7 +24,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ..transit import data as tdata
-from ..transit import planner
+from ..transit import fares, planner
 from .settings import settings
 
 log = logging.getLogger("hmaps.api.transit")
@@ -91,9 +91,55 @@ async def plan_ep(req: Request) -> Response:
         if data is None:
             return _err(503, "transit_not_ready", NOT_READY)
         res = await run_in_threadpool(planner.plan, data, frm, to, when, mode == "arrive", limit)
+        await run_in_threadpool(enrich, res)
     except planner.TransitError as e:
         return _err(e.status, e.code, e.message)
     return _cache(JSONResponse(res), req)
+
+
+#: walking legs shorter than this keep the straight line (a stop across the street)
+WALK_ROUTE_MIN_M = 40
+
+
+def walk_path(a: dict, b: dict, cache: dict) -> list[list[float]] | None:
+    """The walking route between two points along streets and paths (built-in router / OSRM)."""
+    from . import routing
+
+    key = (round(a["lat"], 5), round(a["lon"], 5), round(b["lat"], 5), round(b["lon"], 5))
+    if key in cache:
+        return cache[key]
+    coords = None
+    try:
+        r = routing.route_any(settings, "foot", [(a["lat"], a["lon"]), (b["lat"], b["lon"])], alternatives=False)
+        geom = (r.get("routes") or [{}])[0].get("geometry") or {}
+        coords = geom.get("coordinates") or None
+    except Exception as e:  # noqa: BLE001 - no walking graph yet / point off the network: keep the straight line
+        log.debug("walking route for a transit leg failed: %s", e)
+    if coords:
+        # start / end exactly at the stop or the chosen point (the route snaps to the nearest path)
+        start, end = [round(a["lon"], 6), round(a["lat"], 6)], [round(b["lon"], 6), round(b["lat"], 6)]
+        coords = [start, *coords, end]
+    cache[key] = coords
+    return coords
+
+
+def enrich(res: dict) -> None:
+    """Walking legs follow the streets (issue #9) and every itinerary gets an estimated fare (issue #10)."""
+    cache: dict = {}
+    for it in res.get("itineraries", []):
+        for lg in it.get("legs", []):
+            if lg.get("type") == "walk" and lg.get("distance", 0) >= WALK_ROUTE_MIN_M:
+                path = walk_path(lg["from"], lg["to"], cache)
+                if path:
+                    lg["geometry"] = {"type": "LineString", "coordinates": path}
+                    lg["routed"] = True
+        try:
+            fare = fares.estimate(it)
+        except Exception:  # noqa: BLE001 - a fare is a nice-to-have
+            log.exception("fare estimate failed")
+            fare = None
+        if fare:
+            it["fare"] = fare
 
 
 def _stop(data, sid: str) -> int:

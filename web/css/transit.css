@@ -205,3 +205,13 @@
   .tt-days, .tt-tabs, .tt-at, .tt-other { display: none; }
   .tt-t.next { background: none; color: inherit; box-shadow: none; }
 }
+
+/* estimated fare (hmaps/transit/fares.py) */
+.tr-fare { font-weight: 600; color: var(--text-strong); }
+.tr-fare-box { margin: var(--space-3) var(--space-4); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface-2); }
+.tr-fare-total { display: flex; align-items: center; gap: var(--space-2); color: var(--text-strong); }
+.tr-fare-parts { list-style: none; margin: var(--space-2) 0 0; padding: 0; font-size: var(--text-sm); }
+.tr-fare-parts li { display: flex; justify-content: space-between; gap: var(--space-2); padding: 2px 0; }
+.tr-fare-box .r-sub { margin-top: var(--space-2); }
+.tr-stop-actions { padding-top: 0; }
