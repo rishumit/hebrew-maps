@@ -74,30 +74,13 @@
         <label class="map-type"><input type="radio" name="maptype" value="dark"><span class="swatch swatch-dark" aria-hidden="true"></span><span>לילה</span></label>
         <label class="map-type"><input type="radio" name="maptype" value="satellite"><span class="swatch swatch-satellite" aria-hidden="true"></span><span>תצלומי לוויין</span></label>
       </div>
-      <div class="sat-offline" id="sat-offline" hidden>
-        <h3 class="popover-sub">שמירה לשימוש אופליין</h3>
-        <button type="button" id="btn-sat-save" class="btn btn-secondary btn-sm popover-btn" aria-describedby="sat-save-status"><span data-icon="download"></span>שמירת האזור הנוכחי לשימוש אופליין</button>
-        <div id="sat-save-confirm" class="sat-confirm" hidden>
-          <button type="button" id="btn-sat-save-go" class="btn btn-primary btn-sm">הורדה</button>
-          <button type="button" id="btn-sat-save-cancel" class="btn btn-secondary btn-sm">ביטול</button>
-        </div>
-        <button type="button" id="btn-sat-country" class="btn btn-secondary btn-sm popover-btn" aria-describedby="sat-save-status" aria-expanded="false" aria-controls="sat-country"><span data-icon="download"></span>הורדת תצלומי אוויר לכל הארץ</button>
-        <fieldset id="sat-country" class="sat-country" hidden>
-          <legend>רמת פירוט</legend>
-          <label class="sat-level"><input type="radio" name="satlevel" value="basic" checked><span>בסיסי <small>(זום עד 13)</small></span><small class="sat-est" data-level="basic"></small></label>
-          <label class="sat-level"><input type="radio" name="satlevel" value="detailed"><span>מפורט <small>(זום עד 15)</small></span><small class="sat-est" data-level="detailed"></small></label>
-          <label class="sat-level"><input type="radio" name="satlevel" value="full"><span>מלא <small>(זום עד 16 – גדול מאוד)</small></span><small class="sat-est" data-level="full"></small></label>
-          <div class="sat-confirm">
-            <button type="button" id="btn-sat-country-go" class="btn btn-primary btn-sm">הורדה</button>
-            <button type="button" id="btn-sat-country-cancel" class="btn btn-secondary btn-sm">ביטול</button>
-          </div>
-        </fieldset>
-        <progress id="sat-save-progress" class="sat-progress" max="100" value="0" aria-label="התקדמות שמירת תצלומי האוויר" hidden></progress>
-        <p id="sat-save-status" class="sat-status" role="status" aria-live="polite"></p>
-      </div>
-      <h3 class="popover-sub">שכבות</h3>
-      <label class="switch"><input type="checkbox" id="toggle-pois" checked><span>נקודות עניין</span></label>
-      <label class="switch"><input type="checkbox" id="toggle-trails" checked><span>שבילים מסומנים ושמורות טבע</span></label>
+      <p class="sat-offline-hint" id="sat-offline" hidden>
+        <button type="button" class="btn btn-secondary btn-sm popover-btn" id="btn-sat-offline"><span data-icon="download"></span>הורדת תצלומי אוויר לשימוש בלי אינטרנט…</button>
+      </p>
+      <fieldset class="layer-checks">
+        <legend class="popover-sub">שכבות</legend>
+        <div id="layer-checks"></div>
+      </fieldset>
       <h3 class="popover-sub">מראה הממשק</h3>
       <div class="segmented" role="radiogroup" aria-label="מראה הממשק">
         <label><input type="radio" name="uitheme" value="auto"><span>אוטומטי</span></label>
@@ -111,7 +94,10 @@
       <button type="button" role="menuitem" data-act="from"><span data-icon="m_depart"></span>מסלול מכאן</button>
       <button type="button" role="menuitem" data-act="to"><span data-icon="m_arrive"></span>מסלול לכאן</button>
       <button type="button" role="menuitem" data-act="nearby"><span data-icon="search"></span>מה יש בסביבה</button>
+      <button type="button" role="menuitem" data-act="fav"><span data-icon="star"></span>שמירה במועדפים</button>
       <button type="button" role="menuitem" data-act="copy"><span data-icon="copy"></span>העתקת קואורדינטות</button>
+      <button type="button" role="menuitem" data-act="print"><span data-icon="print"></span>הדפסת המפה</button>
+      <button type="button" role="menuitem" data-act="print-route" hidden><span data-icon="print"></span>הדפסת המסלול והוראות</button>
     </div>
   </main>
 
@@ -123,12 +109,14 @@
     <nav aria-label="תפריט ראשי">
       <ul class="menu-list">
         <li><button type="button" data-menu="nearby-list"><span data-icon="list"></span>רשימת המקומות שבמפה</button></li>
+        <li><button type="button" data-menu="saved"><span data-icon="star"></span>המועדפים והשמורים שלי</button></li>
         <li><button type="button" data-menu="directions"><span data-icon="directions"></span>תכנון מסלול</button></li>
         <li><button type="button" data-menu="print-map"><span data-icon="print"></span>הדפסת מפה</button></li>
         <li><button type="button" data-menu="hikes"><span data-icon="hiker"></span>מסלולי טיול באזור</button></li>
         <li><button type="button" data-menu="recent"><span data-icon="history"></span>חיפושים אחרונים</button></li>
         <li><button type="button" data-menu="shortcuts"><span data-icon="keyboard"></span>קיצורי מקלדת</button></li>
         <li><button type="button" data-menu="updates"><span data-icon="globe"></span>עדכונים</button></li>
+        <li><button type="button" data-menu="settings"><span data-icon="folder"></span>הגדרות ותיקיית נתונים</button></li>
         <li><button type="button" data-menu="data"><span data-icon="info"></span>מקורות הנתונים</button></li>
         <li><a href="/reports/quality-report.html" target="_blank" rel="noopener"><span data-icon="check"></span>דוח איכות נתונים<span class="sr-only"> (נפתח בלשונית חדשה)</span></a></li>
         <li><button type="button" data-menu="accessibility"><span data-icon="wheelchair"></span>הצהרת נגישות</button></li>

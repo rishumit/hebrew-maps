@@ -155,9 +155,68 @@ export function addSatellite(style, opacity = 1) {
   return style;
 }
 
-/** Insert the terrain groups into a style: `under` before `underId`, labels before `labelId`. */
-function addTerrain(style, t, terrain, underId, labelId) {
-  const { sources, under, labels } = terrainLayers(t, terrain);
+// ------------------------------------------------------------------ world (low zooms)
+// web/world/world.json (tools/world.py, Natural Earth): the whole globe when zoomed out – countries,
+// borders and Hebrew names – under the detailed map of Israel. `world` = the file's URL (meta.world).
+
+/** Land colour per Natural Earth MAPCOLOR7 (1–7): very light tints, so neighbours are told apart. */
+function worldLand(t, dark) {
+  const tints = dark
+    ? ['#23272E', '#262A2F', '#24292B', '#272628', '#25282D', '#282A2C', '#24272A']
+    : ['#F1EFE9', '#EEF0E6', '#F2EEE6', '#ECEFEA', '#F3F0EA', '#EFEDE4', '#EDEEE8'];
+  return ['match', ['get', 'c'], 1, tints[0], 2, tints[1], 3, tints[2], 4, tints[3], 5, tints[4], 6, tints[5], 7, tints[6], t.bg];
+}
+
+export function addWorld(style, t, world, dark = false) {
+  if (!world || style.sources.world) return style;
+  style.sources.world = { type: 'geojson', data: world, maxzoom: 8, tolerance: 0.6, buffer: 64,
+    attribution: '<a href="https://www.naturalearthdata.com" target="_blank" rel="noopener">Natural Earth</a>' };
+  const bg = style.layers.find((l) => l.type === 'background');
+  // the sea is the background of the globe; from zoom 8 the detailed map (and its own sea) takes over
+  if (bg) bg.paint = { ...bg.paint, 'background-color': ['interpolate', ['linear'], ['zoom'], 7.5, t.water, 8.5, t.bg] };
+  const at = style.layers.indexOf(bg) + 1;
+  const lay = (l) => ({ source: 'world', ...l });
+  style.layers.splice(at, 0,
+    lay({ id: 'world-land', type: 'fill', filter: ['==', ['get', 'l'], 'country'], paint: { 'fill-color': worldLand(t, dark) } }),
+    lay({ id: 'world-lake', type: 'fill', filter: ['==', ['get', 'l'], 'lake'], paint: { 'fill-color': t.water } }),
+    lay({ id: 'world-border', type: 'line', maxzoom: 8.5, filter: ['==', ['get', 'l'], 'country'],
+      layout: { 'line-join': 'round' },
+      paint: { 'line-color': t.boundary, 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 5, 0.9, 8, 1.3],
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 6.5, 0.6, 8.5, 0] } }));
+  const halo = { 'text-halo-color': t.halo, 'text-halo-width': 1.3 };
+  style.layers.push(
+    lay({ id: 'world-marine', type: 'symbol', maxzoom: 8, filter: ['==', ['get', 'l'], 'marine'],
+      layout: { 'text-field': ['get', 'n'], 'text-font': REG, 'text-max-width': 7, 'text-letter-spacing': 0.08,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 1, ['case', ['==', ['get', 'o'], 1], 12, 10], 6, ['case', ['==', ['get', 'o'], 1], 16, 13]],
+        'symbol-sort-key': ['get', 'r'] },
+      paint: { 'text-color': t.waterText, ...halo } }),
+    lay({ id: 'world-place-dot', type: 'circle', minzoom: 3, maxzoom: 10,
+      filter: ['all', ['==', ['get', 'l'], 'place'], ['<=', ['get', 'r'], 4]],
+      paint: { 'circle-radius': ['case', ['==', ['get', 'cap'], 1], 3, 2.2], 'circle-color': t.textMinor,
+        'circle-stroke-color': t.halo, 'circle-stroke-width': 1 } }),
+    lay({ id: 'world-place', type: 'symbol', minzoom: 3, maxzoom: 10, filter: ['==', ['get', 'l'], 'place'],
+      layout: { 'text-field': ['get', 'n'], 'text-font': REG, 'text-size': ['interpolate', ['linear'], ['zoom'], 3, 10, 8, 13],
+        'text-anchor': 'top', 'text-offset': [0, 0.35], 'text-max-width': 8, 'symbol-sort-key': ['-', ['get', 'r'], ['*', 3, ['get', 'cap']]] },
+      paint: { 'text-color': t.text, ...halo } }),
+    lay({ id: 'world-country', type: 'symbol', maxzoom: 9, filter: ['==', ['get', 'l'], 'clabel'],
+      layout: { 'text-field': ['get', 'n'], 'text-font': MED, 'text-max-width': 6, 'symbol-sort-key': ['get', 'r'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 1, ['case', ['<=', ['get', 'r'], 2], 11, 9], 5, ['case', ['<=', ['get', 'r'], 3], 15, 12], 8, 16] },
+      paint: { 'text-color': t.textMinor, ...halo } }),
+  );
+  return style;
+}
+
+/**
+ * Insert the terrain groups into a style: `under` before `underId`, labels before `labelId`.
+ * `topo` = { contours, hillshade } (layer check-boxes); the topographic theme shows both by default,
+ * any other theme only what was switched on.
+ */
+function addTerrain(style, t, terrain, underId, labelId, topo = { contours: true, hillshade: true }) {
+  if (!terrain || (!topo.contours && !topo.hillshade)) return style;
+  const tt = { ...THEMES.topo, ...t, ...(t.contour ? {} : { halo: t.halo, bg: t.bg }) };
+  if (!t.contour && t === THEMES.dark) Object.assign(tt, { contour: '#9A7A55', contourIndex: '#B89263', contourText: '#D9B98F', spot: '#D9B98F' });
+  const tr = { ...terrain, contours: topo.contours ? terrain.contours : null, dem: topo.hillshade ? terrain.dem : null };
+  const { sources, under, labels } = terrainLayers(tt, tr);
   Object.assign(style.sources, sources);
   const at = (id) => {
     const i = style.layers.findIndex((l) => l.id === id);
@@ -202,7 +261,12 @@ function road(id, theme, classes, widthKey, fill, casing, minzoom, extraFilter) 
   return layers;
 }
 
-export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = false }) {
+function topoFor(themeName, topo) {
+  const def = themeName === 'topo';
+  return { contours: topo?.contours ?? def, hillshade: topo?.hillshade ?? def };
+}
+
+export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = false, world = null, topo = null }) {
   const t = THEMES[themeName] || THEMES.light;
   const nature = themeName === 'nature' || themeName === 'topo';
   const layers = [
@@ -431,7 +495,8 @@ export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = fal
     sources: { openmaptiles: { type: 'vector', url: tilejson } },
     layers,
   };
-  const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'aeroway-area', 'water-name') : style;
+  const result = addTerrain(style, t, terrain, 'aeroway-area', 'water-name', topoFor(themeName, topo));
+  addWorld(result, t, world, themeName === 'dark');
   if (satellite !== false && satellite != null) {
     addSatellite(result, typeof satellite === 'number' ? satellite : 1);
   }
@@ -439,7 +504,7 @@ export function omtStyle(themeName, { tilejson, glyphs, terrain, satellite = fal
 }
 
 /** Basemap drawn from our own tiles while the full basemap is not built. */
-export function fallbackStyle(themeName, { tiles, glyphs, terrain, satellite = false }) {
+export function fallbackStyle(themeName, { tiles, glyphs, terrain, satellite = false, world = null, topo = null }) {
   const t = THEMES[themeName] || THEMES.light;
   const W = {
     motorway: [[6, 1], [12, 4], [16, 12], [18, 26]], trunk: [[7, 1], [12, 3.5], [16, 11], [18, 24]],
@@ -479,7 +544,8 @@ export function fallbackStyle(themeName, { tiles, glyphs, terrain, satellite = f
           'text-halo-color': t.halo, 'text-halo-width': 1.6 } },
     ],
   };
-  const result = themeName === 'topo' ? addTerrain(style, t, terrain, 'boundaries', 'street-names') : style;
+  const result = addTerrain(style, t, terrain, 'boundaries', 'street-names', topoFor(themeName, topo));
+  addWorld(result, t, world, themeName === 'dark');
   if (satellite !== false && satellite != null) {
     addSatellite(result, typeof satellite === 'number' ? satellite : 1);
   }

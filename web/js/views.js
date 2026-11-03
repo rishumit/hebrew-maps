@@ -4,6 +4,7 @@ import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './g
 import { svg } from './icons.js';
 import { operatorBadge } from './logos.js';
 import { minyanimHtml, wireMinyanim } from './minyanim.js';
+import { favoriteButton, wireFavorite } from './saved.js';
 import { poiTransitHtml, wirePoiTransit } from './transit.js';
 import { announce, copyText, esc, fmtDistance, fmtNumber, html, raw, render } from './util.js';
 
@@ -91,6 +92,8 @@ export function resultsView(app, query, data, filters) {
           <button type="button" class="filter-btn" data-filter="openNow" aria-pressed="${!!filters.openNow}">${svg('clock', { size: 16 })}פתוח עכשיו</button>
           <button type="button" class="filter-btn" data-filter="kosher" aria-pressed="${!!filters.kosher}">${svg('check', { size: 16 })}כשר</button>
         </div>` : ''}
+        ${query && app.saved && it.type !== 'nearby' ? `<div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="save-search"
+          ${app.saved.isSearchSaved(query) ? 'aria-pressed="true"' : ''}>${svg('star', { size: 16 })}שמירת החיפוש</button></div>` : ''}
         ${results.length ? `<ul class="results" aria-label="תוצאות">${list}</ul>`
           : `<div class="p-empty">${svg('search', { size: 40 })}<p>לא נמצאו תוצאות עבור "${esc(query)}".</p>
              <p>נסו לבדוק את האיות, לכתוב שם של עיר או רחוב, או לחפש סוג מקום כמו "בית מרקחת".</p></div>`}`;
@@ -101,6 +104,9 @@ export function resultsView(app, query, data, filters) {
         b.addEventListener('mouseenter', () => app.map.setSelection(r.location));
         b.addEventListener('focus', () => app.map.setSelection(r.location));
       });
+      body.querySelector('[data-act="save-search"]')?.addEventListener('click', () => app.saved.saveSearch(query, {
+        ...(filters.kosher ? { kosher: true } : {}), ...(filters.openNow ? { openNow: true } : {}),
+        ...(filters.category ? { category: filters.category } : {}) }));
       body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => {
         const f = { ...filters, [b.dataset.filter]: b.getAttribute('aria-pressed') !== 'true' };
         app.search(query, f, { replace: true });
@@ -116,6 +122,7 @@ function actionsBar(item, app, extra = '') {
   return `<div class="actions" role="group" aria-label="פעולות">
     <button type="button" class="action primary" data-act="route"><span class="a-circle">${svg('directions')}</span>מסלול</button>
     <button type="button" class="action" data-act="from"><span class="a-circle">${svg('start')}</span>מסלול מכאן</button>
+    ${item.id && loc ? favoriteButton(app, item) : ''}
     ${extra}
     <button type="button" class="action" data-act="share"><span class="a-circle">${svg('share')}</span>שיתוף</button>
     <button type="button" class="action" data-act="center"><span class="a-circle">${svg('locate')}</span>מרכוז במפה</button>
@@ -128,6 +135,7 @@ function wireActions(body, item, app) {
   body.querySelector('[data-act="from"]')?.addEventListener('click', () => app.directions.open({ from: { ...item.location, name, id: item.id } }));
   body.querySelector('[data-act="share"]')?.addEventListener('click', () => app.share(item));
   body.querySelector('[data-act="center"]')?.addEventListener('click', () => app.map.flyTo(item.location, 17));
+  wireFavorite(body, app, item);
   body.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy, b.dataset.copyLabel || 'הועתק')));
 }
 

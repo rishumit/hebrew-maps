@@ -6,11 +6,13 @@ import { Directions } from './directions.js';
 import { initGuide, openGuide, openHikesNear } from './guide.js';
 import { PoiHoverCard } from './hovercard.js';
 import { svg } from './icons.js';
-import { MapView } from './map.js';
+import { LAYER_GROUPS, MapView } from './map.js';
 import { Panel } from './panel.js';
 import { PrintManager } from './printing.js';
+import { Saved } from './saved.js';
 import { trailView } from './trails.js';
 import { initUpdates, openUpdates } from './updates.js';
+import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
 import { errorView, loadingView, placeView, pointView, poiView, resultsView, streetView, visibleListView } from './views.js';
 
@@ -61,12 +63,14 @@ const app = {
     const initial = {
       theme: effectiveMapTheme(),
       satellite: store.get('satellite', false),
+      layers: store.get('layers', {}),
       center: hash.center || saved?.center,
       zoom: hash.zoom ?? saved?.zoom,
     };
     this.map = new MapView($('#map'), this.meta, this.categories, initial);
     this.directions = new Directions(this);
     this.printing = new PrintManager(this);
+    this.saved = new Saved(this);
     this.hoverCard = new PoiHoverCard(this, $('#map'));
 
     this._initSearch();
@@ -96,12 +100,22 @@ const app = {
     const input = $('#q');
     const clear = $('#q-clear');
     this.searchBox = new Combobox(input, $('#q-list'), {
-      fetch: async (q, signal) => (await api.autocomplete(q, this.map.center(), signal)).suggestions || [],
-      empty: () => this.recent().slice(0, 6).map((r) => ({ ...r, type: 'history', _orig: r })),
+      // favourites first (their own name, e.g. "הבית", matches too), then the server's suggestions
+      fetch: async (q, signal) => {
+        const favs = this.saved.matchFavorites(q);
+        const res = (await api.autocomplete(q, this.map.center(), signal)).suggestions || [];
+        const ids = new Set(favs.map((f) => f.id));
+        return [...favs, ...res.filter((r) => !ids.has(r.id))];
+      },
+      empty: () => [
+        ...this.saved.items.favorites.slice(0, 4).map((f) => this.saved.asSuggestion(f)),
+        ...this.recent().filter((r) => !this.saved.isFavorite(r.id)).slice(0, 5).map((r) => ({ ...r, type: 'history', _orig: r })),
+      ],
       onSelect: (s) => {
         input.value = s.type === 'category' ? s.name : s.name;
         clear.hidden = !input.value;
         if (s.type === 'history') return this.openItem(s._orig);
+        if (s.type === 'favorite') return this.openItem(s._fav);
         if (s.type === 'category') return this.search(s.query || s.name, {});
         this.remember(s);
         this.openItem(s);
@@ -389,6 +403,7 @@ const app = {
       store.set('satellite', useSatellite);
       if (!useSatellite) store.set('maptype', r.value);
       this.map.setMapType(effectiveMapTheme(), useSatellite);
+      this._redrawLayerChecks?.();
       announce(`סוג המפה: ${r.parentElement.lastElementChild.textContent.trim()}`);
     }));
     const ui = store.get('uitheme', 'auto');
@@ -401,208 +416,34 @@ const app = {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (store.get('uitheme', 'auto') === 'auto') this.map.setTheme(effectiveMapTheme());
     });
-    $('#toggle-pois').addEventListener('change', (e) => this.map.setPoisVisible(e.target.checked));
-    $('#toggle-trails')?.addEventListener('change', (e) => this.map.setOutdoorVisible(e.target.checked));
-    this._bindSatelliteSave();
+    this._initLayerChecks();
+    // downloading aerial photos for offline use lives in the updates panel (web/js/satellite-offline.js)
+    $('#btn-sat-offline')?.addEventListener('click', () => {
+      closePop();
+      openUpdates(this, { section: 'satellite' });
+    });
   },
 
-  // ------------------------------------------------------------------ satellite offline area
-  /** "שמירת האזור הנוכחי": estimate → confirm → background download on the server, with progress. */
-  _bindSatelliteSave() {
-    const btn = $('#btn-sat-save');
-    if (!btn) return;
-    const confirmBox = $('#sat-save-confirm');
-    const goBtn = $('#btn-sat-save-go');
-    const cancelBtn = $('#btn-sat-save-cancel');
-    const bar = $('#sat-save-progress');
-    const status = $('#sat-save-status');
-    const label = btn.lastChild;
-    const LABEL = label.textContent;
-    const countryBtn = $('#btn-sat-country');
-    const countryBox = $('#sat-country');
-    const enableSatellite = () => {
-      const type = $('input[name="maptype"][value="satellite"]');
-      if (!type.checked) {
-        type.checked = true;
-        type.dispatchEvent(new Event('change', { bubbles: true }));
-      }
+  /** Check-boxes of the layers popover (web/js/map.js LAYER_GROUPS); remembered between visits. */
+  _initLayerChecks() {
+    const host = $('#layer-checks');
+    if (!host) return;
+    const groups = Object.entries(LAYER_GROUPS).filter(([, g]) => !g.needs || g.needs(this.meta));
+    const draw = () => {
+      host.innerHTML = groups.map(([id, g]) => `<label class="check"><input type="checkbox" data-layer="${id}"
+        ${this.map.layerOn(id) ? 'checked' : ''}><span>${esc(g.label)}</span></label>`).join('');
     };
-    const fmt = (n) => Number(n).toLocaleString('he-IL');
-    const mb = (b) => {
-      if (b >= 1e9) return `${fmt(Math.round(b / 1e8) / 10)}GB`;
-      return b >= 1e6 ? `${fmt(Math.round(b / 1e6))}MB` : `${fmt(Math.max(1, Math.round(b / 1e3)))}KB`;
-    };
-    let pending = null; // {bbox, minzoom, maxzoom}
-    let timer = null;
-    let lastBucket = -1;
-
-    const dur = (s) => {
-      if (s == null) return '';
-      if (s < 90) return 'פחות משתי דקות';
-      if (s < 3600) return `כ-${Math.round(s / 60)} דקות`;
-      if (s < 48 * 3600) return `כ-${fmt(Math.round(s / 360) / 10)} שעות`;
-      return `כ-${fmt(Math.round(s / 8640) / 10)} ימים`;
-    };
-    const setRunning = (on) => {
-      label.textContent = on ? 'עצירת ההורדה' : LABEL;
-      btn.dataset.running = on ? '1' : '';
-      bar.hidden = !on;
-      if (countryBtn) countryBtn.hidden = on;
-      if (on && countryBox) countryBox.hidden = true;
-    };
-    const finish = (job) => {
-      clearInterval(timer);
-      timer = null;
-      setRunning(false);
-      const msg = {
-        done: `האזור נשמר: ${fmt(job.fetched)} אריחים חדשים (${mb(job.bytes)}), ${fmt(job.skipped)} כבר היו שמורים. התצלומים יוצגו גם בלי אינטרנט.`,
-        cancelled: `ההורדה נעצרה (${fmt(job.done)} מתוך ${fmt(job.total)}). אפשר להמשיך מאותה נקודה בלחיצה נוספת.`,
-        error: 'ההורדה נעצרה: אין חיבור לשרת תצלומי האוויר (או שהסינון חוסם אותו). מה שכבר ירד נשמר – נסו שוב '
-          + 'כשיש אינטרנט; לבדיקה: download-satellite.cmd --test',
-      }[job.state] || '';
-      status.textContent = msg;
-    };
-    const show = (job) => {
-      bar.value = job.percent;
-      bar.setAttribute('aria-valuetext', `${job.percent}%`);
-      const bucket = Math.floor(job.percent / 10);
-      if (bucket !== lastBucket) { // the live region speaks every 10%, not every second
-        lastBucket = bucket;
-        const eta = job.eta_seconds ? `, נותרו ${dur(job.eta_seconds)}` : '';
-        status.textContent = `מוריד תצלומי אוויר${job.area === 'israel' ? ' לכל הארץ' : ''}: `
-          + `${Math.floor(job.percent)}% (${fmt(job.done)} מתוך ${fmt(job.total)}${eta})`;
-      }
-    };
-    const poll = async () => {
-      try {
-        const st = await api.satelliteStatus();
-        const job = st.job;
-        if (!job) return finish({ state: '' });
-        if (job.state === 'running' || job.state === 'pending') show(job);
-        else finish(job);
-      } catch {
-        /* server busy – try again on the next tick */
-      }
-    };
-    const watch = () => {
-      setRunning(true);
-      lastBucket = -1;
-      clearInterval(timer);
-      timer = setInterval(poll, 1000);
-      poll();
-    };
-
-    btn.addEventListener('click', async () => {
-      if (btn.dataset.running) {
-        try { await api.satelliteCancel(); } catch { /* the next poll shows the state */ }
-        return;
-      }
-      const m = this.map.map;
-      const b = m.getBounds();
-      const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((v) => +v.toFixed(5));
-      const minzoom = Math.max(7, Math.floor(m.getZoom()));
-      status.textContent = 'מחשב את גודל ההורדה…';
-      confirmBox.hidden = true;
-      try {
-        // the deepest zoom (up to +3, max 18) that still fits the per-download limit
-        let est = null;
-        let maxzoom = Math.min(minzoom + 3, 18);
-        for (; maxzoom >= minzoom; maxzoom--) {
-          est = await api.satelliteEstimate(bbox, minzoom, maxzoom);
-          if (!est.too_many) break;
-        }
-        if (!est || est.too_many || maxzoom < minzoom) {
-          status.textContent = 'האזור גדול מדי לשמירה בבת אחת. הגדילו את המפה (התקרבו) ונסו שוב.';
-          return;
-        }
-        if (est.tiles === 0) {
-          status.textContent = 'האזור שבמפה מחוץ לכיסוי תצלומי האוויר (ישראל).';
-          return;
-        }
-        if (est.missing === 0) {
-          status.textContent = `כל ${fmt(est.tiles)} האריחים של האזור (זום ${minzoom}–${maxzoom}) כבר שמורים במחשב.`;
-          return;
-        }
-        pending = { bbox, minzoom, maxzoom };
-        status.textContent = `להוריד ${fmt(est.missing)} אריחים (כ-${mb(est.bytes_estimate)}), זום ${minzoom}–${maxzoom}?`
-          + (est.cached ? ` ${fmt(est.cached)} כבר שמורים.` : '');
-        confirmBox.hidden = false;
-        goBtn.focus();
-      } catch (e) {
-        status.textContent = e.message;
-      }
+    draw();
+    host.addEventListener('change', (e) => {
+      const c = e.target.closest('[data-layer]');
+      if (!c) return;
+      this.map.setLayer(c.dataset.layer, c.checked);
+      const saved = { ...store.get('layers', {}), [c.dataset.layer]: c.checked };
+      store.set('layers', saved);
+      announce(`${LAYER_GROUPS[c.dataset.layer].label}: ${c.checked ? 'מוצג' : 'מוסתר'}`);
     });
-    cancelBtn.addEventListener('click', () => {
-      pending = null;
-      confirmBox.hidden = true;
-      status.textContent = '';
-      btn.focus();
-    });
-    goBtn.addEventListener('click', async () => {
-      if (!pending) return;
-      confirmBox.hidden = true;
-      const { bbox, minzoom, maxzoom } = pending;
-      pending = null;
-      try {
-        await api.satelliteDownload(bbox, minzoom, maxzoom);
-        enableSatellite();
-        watch();
-        btn.focus();
-      } catch (e) {
-        status.textContent = e.message;
-      }
-    });
-    // ---- whole country: level choice with estimates (tiles / size / time), then a background job
-    if (countryBtn && countryBox) {
-      const closeCountry = () => {
-        countryBox.hidden = true;
-        countryBtn.setAttribute('aria-expanded', 'false');
-      };
-      countryBtn.addEventListener('click', async () => {
-        if (!countryBox.hidden) { closeCountry(); return; }
-        confirmBox.hidden = true;
-        status.textContent = 'מחשב את גודל ההורדה…';
-        try {
-          const { levels } = await api.satelliteCountry();
-          for (const lv of levels) {
-            const el = countryBox.querySelector(`.sat-est[data-level="${lv.id}"]`);
-            if (!el) continue;
-            el.textContent = lv.missing === 0
-              ? 'כבר שמור במחשב'
-              : `${fmt(lv.missing)} אריחים, כ-${mb(lv.bytes_estimate)}, ${dur(lv.seconds_estimate)}`
-                + (lv.cached ? ` (${fmt(lv.cached)} כבר שמורים)` : '');
-          }
-          status.textContent = 'בחרו רמת פירוט. אפשר לעצור בכל רגע ולהמשיך אחר כך מאותה נקודה.';
-          countryBox.hidden = false;
-          countryBtn.setAttribute('aria-expanded', 'true');
-          countryBox.querySelector('input[name="satlevel"]:checked')?.focus();
-        } catch (e) {
-          status.textContent = e.message;
-        }
-      });
-      $('#btn-sat-country-cancel')?.addEventListener('click', () => {
-        closeCountry();
-        status.textContent = '';
-        countryBtn.focus();
-      });
-      $('#btn-sat-country-go')?.addEventListener('click', async () => {
-        const level = countryBox.querySelector('input[name="satlevel"]:checked')?.value || 'basic';
-        closeCountry();
-        try {
-          await api.satelliteDownloadCountry(level);
-          enableSatellite();
-          watch();
-          btn.focus();
-        } catch (e) {
-          status.textContent = e.message;
-        }
-      });
-    }
-
-    // a download started earlier (or from another tab) keeps showing its progress
-    api.satelliteStatus().then((st) => {
-      if (st.job && (st.job.state === 'running' || st.job.state === 'pending')) watch();
-    }).catch(() => {});
+    // the topographic map type turns contours + hillshade on by default
+    this._redrawLayerChecks = draw;
   },
 
   // ------------------------------------------------------------------ geolocation
@@ -713,6 +554,8 @@ const app = {
       else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'recent') this._recentDialog();
+      else if (act === 'saved') this.saved.open();
+      else if (act === 'settings') openSettings(this);
       else if (act === 'shortcuts') shortcutsDialog();
       else if (act === 'updates') openUpdates(this);
       else if (act === 'data') this._dataDialog();
@@ -734,10 +577,20 @@ const app = {
         case 'to': this.directions.open({ to: pt }); break;
         case 'nearby': this._nearbyResults(lat, lon); break;
         case 'copy': copyText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'הקואורדינטות הועתקו'); break;
+        case 'fav': this._favoriteAt(lat, lon); break;
+        case 'print':
+          // the printed map is centred on the spot that was clicked
+          this.map.map.jumpTo({ center: [lon, lat] });
+          this.printing.openMap();
+          break;
+        case 'print-route':
+          if (this.directions.mode === 'transit') this.printing.openTransit();
+          else this.printing.openDirections();
+          break;
       }
     });
     ctx.addEventListener('keydown', (e) => {
-      const items = $$('button', ctx);
+      const items = $$('button:not([hidden])', ctx);
       const i = items.indexOf(document.activeElement);
       if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
@@ -747,6 +600,9 @@ const app = {
     this._hideCtx = hideCtx;
     bus.on('map:context', ({ lat, lon, point }) => {
       this._ctxPoint = { lat, lon };
+      const d = this.directions;
+      const hasRoute = d.active && (d.mode === 'transit' ? !!d.transit.result?.itineraries?.length : d.routes.length > 0);
+      ctx.querySelector('[data-act="print-route"]').hidden = !hasRoute;
       ctx.hidden = false;
       const r = $('#map').getBoundingClientRect();
       const w = ctx.offsetWidth, h = ctx.offsetHeight;
@@ -757,6 +613,19 @@ const app = {
     document.addEventListener('pointerdown', (e) => {
       if (!ctx.hidden && !ctx.contains(e.target)) hideCtx();
     });
+  },
+
+  /** "שמירה במועדפים" of the context menu: the address of the spot (or its coordinates). */
+  async _favoriteAt(lat, lon) {
+    let name = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    let secondary = '';
+    try {
+      const rev = await api.reverse(lat, lon);
+      if (rev.address) name = rev.address;
+      secondary = rev.neighbourhood || rev.city || '';
+    } catch { /* keep the coordinates */ }
+    const item = { id: `coord-${lat.toFixed(6)},${lon.toFixed(6)}`, type: 'coordinate', name, secondary, location: { lat, lon } };
+    if (!this.saved.isFavorite(item.id)) this.saved.toggleFavorite(item);
   },
 
   async _nearbyResults(lat, lon) {

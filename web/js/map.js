@@ -10,7 +10,6 @@ const EMPTY = { type: 'FeatureCollection', features: [] };
 const LOGO_RING = { inpa: '#2F6B3A', kkl: '#1E6B3C' };
 // 'cover' = the logo is a square badge that fills the disc; 'contain' = logo on white
 const LOGO_FIT = { inpa: 'cover', kkl: 'contain' };
-const OUTDOOR_LAYER_IDS = ['parks-fill', 'parks-outline', 'trails-casing', 'trails-line', 'trails-bike', 'trails-label'];
 const TRAIL_CLICK_LAYERS = ['trails-line', 'trails-bike'];
 const ISRAEL_CENTER = [35.0, 31.6];
 // 3D view
@@ -21,6 +20,21 @@ const TERRAIN_EXAGGERATION = 1.4; // Israel's relief is modest; a little boost r
 // our own layers (added in _installOverlays) - never treated as basemap labels
 const OVERLAY_IDS = new Set(['pois', 'pois-cluster-count', 'results', 'endpoints', 'selection']);
 
+/**
+ * Layer check-boxes of the "שכבות" popover. `rebuild` groups change the style itself (the terrain
+ * sources / the world map), the others only switch the visibility of the layers they own.
+ */
+export const LAYER_GROUPS = {
+  pois: { label: 'נקודות עניין', test: (l) => ['pois', 'pois-cluster', 'pois-cluster-count'].includes(l.id) },
+  trails: { label: 'שבילים מסומנים', test: (l) => l.id.startsWith('trails-') },
+  parks: { label: 'שמורות טבע וגנים לאומיים', test: (l) => l.id === 'parks-fill' || l.id === 'parks-outline' },
+  labels: { label: 'שמות ותוויות', test: (l) => l.type === 'symbol' && ['openmaptiles', 'fallback', 'world', 'contours'].includes(l.source) },
+  buildings: { label: 'מבנים', test: (l) => l.id === 'building' || l.id === 'building-3d' },
+  contours: { label: 'קווי גובה', rebuild: true, test: (l) => l.source === 'contours', needs: (m) => !!m.terrain?.contours },
+  hillshade: { label: 'הצללת תבליט', rebuild: true, test: (l) => l.id === 'hillshade', needs: (m) => !!m.terrain?.dem },
+  world: { label: 'מפת העולם (בהתרחקות)', rebuild: true, test: (l) => l.source === 'world', needs: (m) => !!m.world },
+};
+
 export class MapView {
   constructor(container, meta, categories, initial) {
     this.meta = meta;
@@ -30,8 +44,9 @@ export class MapView {
     this.satellite = initial.satellite || false;
     this.poiFilter = { cats: [], kosher: false };
     this.is3d = false;
-    this.showPois = true;
-    this.showOutdoor = true; // marked trails + nature reserves
+    this.layers = { pois: true, trails: true, parks: true, labels: true, buildings: true, world: true, ...(initial.layers || {}) };
+    this.showPois = this.layers.pois;
+    this.showOutdoor = this.layers.trails; // marked trails are clickable only while shown
     this.data = { results: EMPTY, selection: EMPTY, route: EMPTY, location: EMPTY, highlight: EMPTY, endpoints: EMPTY };
 
     try {
@@ -43,13 +58,15 @@ export class MapView {
       console.warn('RTL plugin', e);
     }
 
-    const maxBounds = [[meta.bounds[0] - 1.5, meta.bounds[1] - 1.5], [meta.bounds[2] + 1.5, meta.bounds[3] + 1.5]];
+    // with the world map (web/world/world.json) the whole globe can be seen; without it the map stays on Israel
+    const maxBounds = this._maxBounds();
     this.map = new maplibregl.Map({
       container,
       style: this._baseStyle(),
       center: initial.center ? [initial.center.lon, initial.center.lat] : ISRAEL_CENTER,
       zoom: initial.zoom ?? 7.3,
-      minZoom: 5,
+      minZoom: meta.world ? 1 : 5,
+      renderWorldCopies: !!meta.world,
       maxZoom: 19,
       maxBounds,
       attributionControl: false,
@@ -98,6 +115,11 @@ export class MapView {
     canvas.setAttribute('role', 'application');
   }
 
+  _maxBounds() {
+    const b = this.meta.bounds;
+    return this.meta.world ? undefined : [[b[0] - 1.5, b[1] - 1.5], [b[2] + 1.5, b[3] + 1.5]];
+  }
+
   // ----------------------------------------------------------------- styles
   _resolvedTheme(theme = this.theme) {
     return theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
@@ -108,8 +130,10 @@ export class MapView {
     const b = this.meta.basemap;
     const terrain = this.meta.terrain;
     const satellite = satelliteOverride ?? this.satellite;
-    if (b.type === 'openmaptiles' && b.tilejson) return omtStyle(theme, { tilejson: b.tilejson, glyphs: b.glyphs, terrain, satellite });
-    return fallbackStyle(theme, { tiles: b.fallback_tiles, glyphs: b.glyphs, terrain, satellite });
+    const world = this.layers.world !== false ? this.meta.world || null : null;
+    const topo = { contours: this.layers.contours, hillshade: this.layers.hillshade };
+    if (b.type === 'openmaptiles' && b.tilejson) return omtStyle(theme, { tilejson: b.tilejson, glyphs: b.glyphs, terrain, satellite, world, topo });
+    return fallbackStyle(theme, { tiles: b.fallback_tiles, glyphs: b.glyphs, terrain, satellite, world, topo });
   }
 
   /** Render a light, static print map without moving or restyling the interactive map. */
@@ -126,7 +150,7 @@ export class MapView {
         container: box, style: this._baseStyle('light', false), center: [center.lng, center.lat], zoom: live.getZoom(),
         bearing: 0, pitch: 0, interactive: false, attributionControl: false, maplibreLogo: false,
         preserveDrawingBuffer: true, pixelRatio: 2, maxCanvasSize: [4096, 4096], fadeDuration: 0,
-        maxBounds: [[this.meta.bounds[0] - 1.5, this.meta.bounds[1] - 1.5], [this.meta.bounds[2] + 1.5, this.meta.bounds[3] + 1.5]],
+        maxBounds: this._maxBounds(),
       });
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('טעינת המפה להדפסה נמשכה יותר מדי זמן')), 25000);
@@ -331,7 +355,7 @@ export class MapView {
     }
     for (const id of ['building-3d', 'hillshade-3d']) if (m.getLayer(id)) m.removeLayer(id);
     for (const id of ['hillshade-3d-dem', 'terrain-3d']) if (m.getSource(id)) m.removeSource(id);
-    if (m.getLayer('building')) m.setLayoutProperty('building', 'visibility', 'visible');
+    this._applyLayers(); // the flat buildings come back (unless switched off)
     if (m.setSky) m.setSky(undefined);
   }
 
@@ -418,7 +442,6 @@ export class MapView {
         // spot never turns into a carpet of unlabelled icons (unnamed / minor places have
         // an empty label and still show as an icon)
         'text-optional': false,
-        visibility: this.showPois ? 'visible' : 'none',
       },
       paint: {
         'text-color': ['match', ['get', 'cat'], ...Object.entries(this.catColor).flatMap(([k, v]) => [k, dark ? '#E5E7EB' : v]), t.text],
@@ -453,6 +476,7 @@ export class MapView {
     this._addLayerSafe({ id: 'location-dot', type: 'circle', source: 'location',
       paint: { 'circle-color': '#2563EB', 'circle-radius': 7, 'circle-stroke-color': '#FFFFFF', 'circle-stroke-width': 3 } });
     if (this.is3d) this._apply3D(); // a theme change rebuilds the style
+    this._applyLayers();
     bus.emit('map:ready');
   }
 
@@ -466,15 +490,50 @@ export class MapView {
     // lines and areas go under the basemap labels; trail names stay on top
     const firstLabel = (m.getStyle().layers || []).find((l) => l.type === 'symbol')?.id;
     for (const layer of outdoorLayers(this._resolvedTheme())) {
-      layer.layout = { ...(layer.layout || {}), visibility: this.showOutdoor ? 'visible' : 'none' };
       this._addLayerSafe(layer, layer.type === 'symbol' ? undefined : firstLabel);
     }
   }
 
   setOutdoorVisible(visible) {
-    this.showOutdoor = visible;
-    for (const id of OUTDOOR_LAYER_IDS) {
-      if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    this.setLayer('trails', visible);
+    this.setLayer('parks', visible);
+  }
+
+  /** The theme's own default for a group that has none set (topo: contours + hillshade on). */
+  layerOn(group) {
+    const v = this.layers[group];
+    if (v !== undefined && v !== null) return v;
+    return (group === 'contours' || group === 'hillshade') ? this._resolvedTheme() === 'topo' : true;
+  }
+
+  /** Check-box of the layers popover. */
+  setLayer(group, visible) {
+    const g = LAYER_GROUPS[group];
+    if (!g) return;
+    this.layers[group] = !!visible;
+    this.showPois = this.layerOn('pois');
+    this.showOutdoor = this.layerOn('trails');
+    if (g.rebuild) {
+      this.map.setStyle(this._baseStyle(), { diff: false });
+      return;
+    }
+    this._applyLayers();
+  }
+
+  _applyLayers() {
+    const m = this.map;
+    const layers = m.getStyle?.()?.layers || [];
+    const has3d = !!m.getLayer('building-3d');
+    for (const l of layers) {
+      let on = true;
+      for (const [name, g] of Object.entries(LAYER_GROUPS)) {
+        if (!g.rebuild && g.test(l) && !this.layerOn(name)) on = false;
+      }
+      if (l.id === 'building' && has3d) on = false; // the 3D buildings replace the flat ones
+      const want = on ? 'visible' : 'none';
+      if ((l.layout?.visibility || 'visible') !== want) {
+        try { m.setLayoutProperty(l.id, 'visibility', want); } catch { /* layer gone */ }
+      }
     }
   }
 
@@ -627,10 +686,7 @@ export class MapView {
   }
 
   setPoisVisible(visible) {
-    this.showPois = visible;
-    for (const id of ['pois', 'pois-cluster', 'pois-cluster-count']) {
-      if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
-    }
+    this.setLayer('pois', visible);
   }
 
   // ----------------------------------------------------------------- camera

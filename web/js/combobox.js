@@ -17,6 +17,9 @@ function highlight(name, query) {
 
 export function suggestionIcon(s) {
   if (s.type === 'history') return `<span class="s-icon neutral">${svg('history', { size: 18 })}</span>`;
+  if (s.type === 'favorite') {
+    return `<span class="s-icon fav" style="background:${esc(s.color || '#B45309')}">${svg(s.color ? s.icon || 'star' : 'star', { size: 18 })}</span>`;
+  }
   if (s.type === 'mylocation') return `<span class="s-icon" style="background:#2563EB">${svg('locate', { size: 18 })}</span>`;
   if (s.type === 'poi' || s.type === 'category') {
     return `<span class="s-icon" style="background:${esc(s.color || '#4B5563')}">${svg(s.icon || 'pin', { size: 18 })}</span>`;

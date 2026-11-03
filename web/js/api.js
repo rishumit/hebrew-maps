@@ -90,9 +90,10 @@ export const api = {
   trail: (id, signal) => request(`/api/trails/${encodeURIComponent(id)}`, { signal }),
   nearby: (lat, lon, opts = {}, signal) => request('/api/poi', { params: { lat, lon, ...opts }, signal }),
   reverse: (lat, lon, signal) => request('/api/reverse', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6) }, signal }),
-  route: (from, to, mode, signal) =>
+  route: (from, to, mode, signal, avoid = []) =>
     request('/api/route', {
-      params: { from: `${from.lat.toFixed(6)},${from.lon.toFixed(6)}`, to: `${to.lat.toFixed(6)},${to.lon.toFixed(6)}`, mode },
+      params: { from: `${from.lat.toFixed(6)},${from.lon.toFixed(6)}`, to: `${to.lat.toFixed(6)},${to.lon.toFixed(6)}`, mode,
+        avoid: avoid.length ? avoid.join(',') : undefined },
       signal,
       timeout: 25000,
     }),

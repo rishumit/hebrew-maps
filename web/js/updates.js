@@ -9,6 +9,7 @@
 // (hmaps/api/appupdate.py). Data packages may come as deltas ("עדכון חלקי": only what changed).
 
 import { svg } from './icons.js';
+import { resumeSatellite, satelliteHtml, wireSatellite } from './satellite-offline.js';
 import { $, announce, bus, esc, store, toast } from './util.js';
 import { head, loadingView, wireHead } from './views.js';
 
@@ -279,6 +280,7 @@ function render(body, app) {
         <span>לבדוק אוטומטית פעם בשבוע ולהודיע כשיש עדכון</span></label>
     </div>
     ${appHtml()}
+    ${satelliteHtml()}
     <section class="p-section upd-offline" aria-labelledby="upd-off-h">
       <h3 id="upd-off-h">מחשב בלי אינטרנט?</h3>
       <p>במחשב עם אינטרנט מורידים מאתר ההורדה
@@ -296,6 +298,7 @@ function render(body, app) {
     <p class="upd-foot">אפשר לעדכן גם בלי לפתוח את המפה: <code>update-online-windows.cmd</code> או <code>python -m hmaps update</code>
       (התוכנה עצמה: <code>update-online-windows.cmd /app</code>).</p>`;
   wireHead(body, app);
+  wireSatellite(body, app);
   body.querySelector('[data-act="refresh"]').addEventListener('click', () => refresh(app, true));
   body.querySelector('[data-act="all"]').addEventListener('click', () => install(app, 'all'));
   body.querySelector('[data-act="app"]')?.addEventListener('click', () => installApp(app));
@@ -511,7 +514,7 @@ function startPolling(app) {
 
 // ------------------------------------------------------------------ entry points
 
-export async function openUpdates(app) {
+export async function openUpdates(app, { section } = {}) {
   hideNotice();
   app.panel.show(loadingView(KEY, 'בודק עדכונים…'));
   try {
@@ -522,7 +525,14 @@ export async function openUpdates(app) {
   }
   if (app.panel.current?.key !== KEY) return; // the user moved on meanwhile
   app.panel.update(view(app));
-  app.panel.body.querySelector('h2')?.focus({ preventScroll: true });
+  const sec = section === 'satellite' && app.panel.body.querySelector('.upd-sat');
+  if (sec) {
+    sec.scrollIntoView({ block: 'start' });
+    sec.querySelector('button')?.focus({ preventScroll: true });
+  } else {
+    app.panel.body.querySelector('h2')?.focus({ preventScroll: true });
+  }
+  resumeSatellite(app);
   if (info.busy) startPolling(app);
   if (info.app?.job && APP_ACTIVE.includes(info.app.job.state)) pollApp(app);
 }
