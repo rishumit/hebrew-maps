@@ -92,8 +92,20 @@ export class PrintManager {
   }
 
   _capture(options) {
-    if (!this.app.map?.map?.loaded()) throw new Error('המפה עדיין נטענת. נסו שוב בעוד רגע.');
-    return this.app.map.capturePrintMap(options);
+    const m = this.app.map?.map;
+    if (!m) throw new Error('המפה אינה זמינה.');
+    // Wait for the map to be fully idle (handles post-jumpTo / style-change states
+    // where loaded() may transiently return false).
+    if (m.loaded() && !m.isMoving() && !m.isZooming() && !m.isRotating()) {
+      return this.app.map.capturePrintMap(options);
+    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('המפה עדיין נטענת. נסו שוב בעוד רגע.')), 8000);
+      m.once('idle', () => {
+        clearTimeout(timeout);
+        this.app.map.capturePrintMap(options).then(resolve, reject);
+      });
+    });
   }
 
   _show({ title, image, landscape, caption = '', details = '' }) {

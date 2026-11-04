@@ -412,8 +412,15 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
   .panel {
     top: auto; right: 0; left: 0; bottom: 0; width: 100%; height: var(--sheet-h, 45vh); border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     transition: height .25s var(--ease-out); animation: sheetIn .25s var(--ease-out); padding-bottom: env(safe-area-inset-bottom);
+    /* Allow pinch-to-zoom on the map through the transparent area above the sheet content.
+       The sheet-handle and panel-body restore pointer-events so all UI remains interactive. */
+    pointer-events: none;
   }
   .panel.dragging { transition: none; }
+  /* Re-enable interaction on every direct child so buttons, scrolling and the
+     drag handle keep working; the transparent gap above the content stays
+     pass-through for map touch gestures. */
+  .panel > * { pointer-events: auto; }
   .panel[data-snap="peek"] { --sheet-h: 30vh; }
   .panel[data-snap="half"] { --sheet-h: 55vh; }
   .panel[data-snap="full"] { --sheet-h: calc(100% - 66px); }
