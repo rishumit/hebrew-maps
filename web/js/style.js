@@ -117,8 +117,10 @@ const GOVMAP_ATTRIBUTION = 'תצלומי אוויר © <a href="https://www.govm
   + ' · <a href="https://cloudless.eox.at" target="_blank" rel="noopener">Sentinel-2 cloudless © EOX</a>'
   + ' (Contains modified Copernicus Sentinel data)';
 
-/** Opaque area fills that would hide the photo; in "hybrid" mode they only draw below zoom 7. */
-const SATELLITE_HIDES = new Set(['landcover', 'landuse', 'park', 'water', 'aeroway-area', 'building']);
+/** Opaque area fills that would hide the photo; in "hybrid" mode they only draw below zoom 7.
+ *  world-land / world-lake are the Natural Earth fill layers added by addWorld(); they must
+ *  also be capped so they don't cover the satellite layer when the world map is enabled. */
+const SATELLITE_HIDES = new Set(['landcover', 'landuse', 'park', 'water', 'aeroway-area', 'building', 'world-land', 'world-lake']);
 
 /** MapLibre raster source for the govmap orthophotos (through our caching proxy). */
 export function satelliteSource() {
