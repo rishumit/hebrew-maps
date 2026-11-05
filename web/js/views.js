@@ -3,6 +3,7 @@
 import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './gallery.js';
 import { svg } from './icons.js';
 import { operatorBadge } from './logos.js';
+import { eruvPointHtml, wireEruvPoint } from './eruv.js';
 import { minyanimHtml, wireMinyanim } from './minyanim.js';
 import { favoriteButton, wireFavorite } from './saved.js';
 import { poiTransitHtml, wirePoiTransit } from './transit.js';
@@ -272,8 +273,10 @@ export function placeView(app, place) {
           ${place.settlement_code ? `<li class="info-row">${svg('info')}<div class="ir-body">סמל יישוב (למ״ס): ${esc(place.settlement_code)}</div></li>` : ''}
         </ul>
         <h3 class="subtitle">מה יש ב${esc(place.name)}?</h3>
-        <div class="mini-chips">${quick.map(([id, label]) => `<button type="button" class="chip" data-sub="${id}">${esc(label)}</button>`).join('')}</div>`;
+        <div class="mini-chips">${quick.map(([id, label]) => `<button type="button" class="chip" data-sub="${id}">${esc(label)}</button>`).join('')}</div>
+        ${eruvPointHtml(NaN, NaN, place.name)}`;
       wireHead(body, app);
+      wireEruvPoint(body, app);
       wireActions(body, place, app);
       body.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', () =>
         app.search(`${b.textContent} ב${place.name}`, {})));
@@ -322,6 +325,7 @@ export function pointView(app, item, nearbyItems = null) {
           <li class="info-row">${svg('locate')}<div class="ir-body" dir="ltr" style="text-align:right">${esc(coords)}</div>
             <button type="button" class="ir-btn" data-copy="${esc(coords)}" data-copy-label="הקואורדינטות הועתקו" aria-label="העתקת הקואורדינטות">${svg('copy', { size: 18 })}</button></li>
         </ul>
+        ${eruvPointHtml(loc.lat, loc.lon, item.city)}
         <h3 class="subtitle">בסביבה</h3>
         <div id="nearby-list">${nearbyItems == null ? '<div class="skeleton"><div class="sk-line w80"></div><div class="sk-line w60"></div></div>'
           : nearbyItems.length ? `<ul class="results">${nearbyItems.map((r, i) => `<li class="result"><button type="button" data-index="${i}">
@@ -330,6 +334,7 @@ export function pointView(app, item, nearbyItems = null) {
           : '<p class="p-empty">לא נמצאו מקומות בקרבת הנקודה.</p>'}</div>`;
       wireHead(body, app);
       wireActions(body, item, app);
+      wireEruvPoint(body, app);
       body.querySelectorAll('#nearby-list .result button').forEach((b) =>
         b.addEventListener('click', () => app.openItem(nearbyItems[Number(b.dataset.index)])));
     },

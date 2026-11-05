@@ -12,6 +12,7 @@ import { Panel } from './panel.js';
 import { PrintManager } from './printing.js';
 import { Saved } from './saved.js';
 import { trailView } from './trails.js';
+import { eruvHomeView, eruvMapView, loadEruv } from './eruv.js';
 import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
@@ -267,7 +268,7 @@ const app = {
     this.panel.show(loadingView('point:' + base.id, 'מאתר כתובת'));
     try {
       const rev = await api.reverse(lat, lon);
-      const item = { ...base, name: rev.address || 'נקודה במפה', secondary: rev.neighbourhood || (rev.address ? '' : rev.city || '') };
+      const item = { ...base, name: rev.address || 'נקודה במפה', secondary: rev.neighbourhood || (rev.address ? '' : rev.city || ''), city: rev.city || '' };
       this.panel.show({ ...pointView(this, item), replace: true });
       this._loadNearby(item);
     } catch (e) {
@@ -561,6 +562,7 @@ const app = {
       else if (act === 'directions') this.directions.open({});
       else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
+      else if (act === 'eruv') loadEruv().then(() => this.panel.show(eruvHomeView(this)));
       else if (act === 'recent') this._recentDialog();
       else if (act === 'saved') this.saved.open();
       else if (act === 'settings') openSettings(this);
@@ -676,6 +678,7 @@ const app = {
         <li><strong>OpenStreetMap</strong> – מפת הבסיס, הרחובות, הכתובות ונקודות העניין (רישיון ODbL).</li>
         <li><strong>data.gov.il</strong> – רשימת היישובים ומאגר הרחובות הרשמיים (רישיון ממשלתי פתוח).</li>
         <li><strong>Wikidata / ויקיפדיה / Wikimedia Commons</strong> – תיאורים ותמונות (CC0 / CC BY-SA).</li>
+        <li><strong>מוקד העירוב</strong> (hiruv.com) – מפות העירובין, האחראים ומאמרי תחום שבת, באישורם. קווי העירוב במפה משורטטים בקירוב.</li>
       </ul>
       <h3>מצב הנתונים</h3>
       <ul>
@@ -692,6 +695,7 @@ const app = {
   // ------------------------------------------------------------------ events & keyboard
   _initEvents() {
     bus.on('select', (item) => this.openItem(item));
+    bus.on('eruv:select', ({ map }) => this.panel.show(eruvMapView(this, map)));
     bus.on('panel:close', (view) => this._onPanelClosed(view));
     bus.on('panel:view', () => this.updateTitle());
     bus.on('panel:close', () => this.updateTitle());
