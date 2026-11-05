@@ -23,6 +23,7 @@ export const AVOID = [
   { id: 'unpaved', label: 'דרכי עפר ארוכות', modes: ['car', 'bike', 'foot'] },
   { id: 'junctions', label: 'צמתים מאתגרים', modes: ['car'] },
   { id: 'pa', label: 'שטחי A/B של הרשות הפלסטינית', modes: ['car', 'bike', 'foot'] },
+  { id: 'kohen', label: 'מצב כהן – הימנעות מקברים', modes: ['car', 'bike', 'foot'] },
 ];
 
 export class Directions {

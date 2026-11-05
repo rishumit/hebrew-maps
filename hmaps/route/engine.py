@@ -105,6 +105,8 @@ class Router:
         self._junctions: np.ndarray | None = None
         self._areas_loaded = False
         self.areas: avoid_mod.Areas | None = None
+        self._kohen_loaded = False
+        self.kohen: avoid_mod.KohenAreas | None = None
         self._lock = threading.Lock()
         self._grid = None
         # vertex degree (all profiles) – used to decide whether a junction is a real choice
@@ -142,6 +144,8 @@ class Router:
         if m is None:
             if what == "pa":
                 m = avoid_mod.pa_mask(self.g, self.pa_areas())
+            elif what == "kohen":
+                m = avoid_mod.kohen_mask(self.g, self.kohen_areas())
             else:
                 m = avoid_mod.masks(self.g, self.names, frozenset([what]), None).get(what)
             if m is None:
@@ -160,9 +164,16 @@ class Router:
             self._areas_loaded = True
         return self.areas
 
+    def kohen_areas(self) -> "avoid_mod.KohenAreas | None":
+        if not self._kohen_loaded:
+            self.kohen = avoid_mod.KohenAreas.load(avoid_mod.areas_path(self.path))
+            self._kohen_loaded = True
+        return self.kohen
+
     def avoid_available(self) -> dict[str, bool]:
-        """Which avoid options can be honoured with this graph (``pa`` needs the areas file)."""
-        return {a: (a != "pa" or self.pa_areas() is not None) for a in avoid_mod.AVOID}
+        """Which avoid options can be honoured with this graph (``pa`` / ``kohen`` need the areas file)."""
+        have = {"pa": self.pa_areas, "kohen": self.kohen_areas}
+        return {a: (a not in have or have[a]() is not None) for a in avoid_mod.AVOID}
 
     def _unmet(self, path: list[tuple], avoid: frozenset[str]) -> list[str]:
         """Avoid options the found route could not keep (it still uses such roads)."""

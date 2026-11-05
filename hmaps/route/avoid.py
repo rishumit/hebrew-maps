@@ -5,7 +5,7 @@ exists when there is no other way (the client is told which avoidances could not
 met).  Costs only ever grow, so the A* heuristic of :mod:`hmaps.route.engine` stays
 admissible.
 
-Options (``?avoid=toll,motorway,unpaved,junctions,pa``):
+Options (``?avoid=toll,motorway,unpaved,junctions,pa,kohen``):
 
 ``toll``       Highway 6, the Carmel Tunnels, the Fast Lane … (OSM ``toll=yes``; older graphs
                without the ``flags`` array fall back to the well-known roads by number / name)
@@ -14,6 +14,8 @@ Options (``?avoid=toll,motorway,unpaved,junctions,pa``):
 ``junctions``  busy junctions: crossings of several roads without a roundabout (a time penalty per junction)
 ``pa``         Areas A / B of the Palestinian Authority (approximate areas around Palestinian
                localities, ``routing/avoid_areas.json`` built by the ETL – see :func:`build_pa_areas`)
+``kohen``      "Kohen mode": cemetery / grave areas (polygons from gps.hakohanim.org, the ``"kohen"`` key of
+               ``routing/avoid_areas.json`` – see :mod:`hmaps.etl.kohen_areas` and :mod:`hmaps.route.kohen`)
 """
 
 from __future__ import annotations
@@ -27,22 +29,24 @@ from pathlib import Path
 import numpy as np
 
 from .graph import CLASS_ID, FLAG_TOLL, FLAG_UNPAVED
+from .kohen import KohenAreas
 
 log = logging.getLogger(__name__)
 
-AVOID = ("toll", "motorway", "unpaved", "junctions", "pa")
+AVOID = ("toll", "motorway", "unpaved", "junctions", "pa", "kohen")
 LABELS_HE = {
     "toll": "כבישי אגרה",
     "motorway": "כבישים מהירים",
     "unpaved": "דרכי עפר ארוכות",
     "junctions": "צמתים מאתגרים",
     "pa": "שטחי A/B של הרשות הפלסטינית",
+    "kohen": "אזורי קברים (מצב כהן)",
 }
 #: which options make sense for which profile
 FOR_PROFILE = {
     "car": AVOID,
-    "bike": ("unpaved", "pa"),
-    "foot": ("unpaved", "pa"),
+    "bike": ("unpaved", "pa", "kohen"),
+    "foot": ("unpaved", "pa", "kohen"),
 }
 
 TOLL_FACTOR = 40.0
@@ -52,6 +56,7 @@ UNPAVED_SHORT_FACTOR = 1.5
 UNPAVED_LONG_M = 250.0
 JUNCTION_PENALTY_S = 25.0
 PA_FACTOR = 60.0
+KOHEN_FACTOR = 100.0
 
 _MOTORWAY_CLASSES = [CLASS_ID[c] for c in ("motorway", "motorway_link", "trunk", "trunk_link")]
 _TRACK = CLASS_ID["track"]
@@ -192,6 +197,13 @@ def pa_mask(g: dict, areas: "Areas | None") -> np.ndarray:
     return areas.contains(lon, lat)
 
 
+def kohen_mask(g: dict, areas: "KohenAreas | None") -> np.ndarray:
+    """Edges whose full shape touches a grave area (see :meth:`KohenAreas.edge_mask`)."""
+    if areas is None:
+        return np.zeros(len(g["u"]), dtype=bool)
+    return areas.edge_mask(g)
+
+
 # ---------------------------------------------------------------------------- costs
 
 def masks(g: dict, names: list[str], avoid: frozenset[str], areas: "Areas | None") -> dict[str, np.ndarray]:
@@ -221,6 +233,8 @@ def apply(g: dict, cf: np.ndarray, cb: np.ndarray, m: dict[str, np.ndarray], avo
         factor[m["unpaved"] & ~long_] *= UNPAVED_SHORT_FACTOR
     if "pa" in m:
         factor[m["pa"]] *= PA_FACTOR
+    if "kohen" in m:
+        factor[m["kohen"]] *= KOHEN_FACTOR
     cf2 = cf.astype(np.float64) * factor
     cb2 = cb.astype(np.float64) * factor
     if "junctions" in avoid and junctions is not None:
