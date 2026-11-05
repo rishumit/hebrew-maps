@@ -6,7 +6,7 @@ import { svg } from './icons.js';
 import { head, wireHead } from './views.js';
 import { announce, esc } from './util.js';
 
-const CREDIT = 'מתוך "מדריך מקומות בתנ״ך" (תוסף לאוצריא) – חד בדרא ונתנאל26';
+const CREDIT = 'מתוך "מדריך מקומות בתנ״ך" (תוסף לאוצריא) – חד בדרא מפתחי אוצריא';
 export const CAT_COLORS = {
   cities: '#B45309', villages: '#A16207', mountains: '#7C5E3C', water: '#2563EB', valleys: '#15803D',
   deserts: '#C2410C', lands: '#7C3AED', stations: '#DB2777', regions: '#0F766E',
