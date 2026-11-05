@@ -243,6 +243,8 @@ def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: froz
     ignored = frozenset()
     if "pa" in avoid and router.pa_areas() is None:
         ignored = frozenset({"pa"})  # the areas file is not installed yet (older data package)
+    if "kohen" in avoid and router.kohen_areas() is None:
+        ignored |= frozenset({"kohen"})  # no grave areas in the installed data package
     try:
         data = router.route(mode, points, avoid - ignored)
     except NoRoute as e:

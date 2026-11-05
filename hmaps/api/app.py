@@ -12,7 +12,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/place/{id}  /api/street/{id}
     GET  /api/geocode?address=           forward geocoding
     GET  /api/reverse?lat=&lon=          reverse geocoding
-    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa]
+    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa,kohen]
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
     GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
     GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)

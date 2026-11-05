@@ -146,12 +146,20 @@ def _write_avoid_areas(graph_path: Path) -> None:
     import json
 
     from ..route.avoid import areas_path
+    from . import kohen_areas
 
     b = builder.LAST_BUILDER[0]
     data = b.avoid_areas() if b is not None else None
-    if not data:
-        return
     out = areas_path(graph_path)
+    kohen = kohen_areas.get(out)  # grave areas for "Kohen mode"; the previous file is the fallback
+    if not data and not kohen:
+        return
+    if not data:
+        data = {"version": 1, "source": "OpenStreetMap (approximation)", "pa": []}
+    if kohen:
+        data["version"] = 2
+        data["source"] += " + gps.hakohanim.org"
+        data["kohen"] = kohen
     tmp = out.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     tmp.replace(out)
