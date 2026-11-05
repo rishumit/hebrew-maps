@@ -13,6 +13,7 @@ import { PrintManager } from './printing.js';
 import { Saved } from './saved.js';
 import { trailView } from './trails.js';
 import { eruvHomeView, eruvMapView, loadEruv } from './eruv.js';
+import { bibleHomeView, loadBible, openBiblePlace } from './bible.js';
 import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
@@ -263,6 +264,7 @@ const app = {
   },
 
   async whatsHere(lat, lon) {
+    loadBible(); // for the "מקומות מהתנ״ך בסביבה" section (ready by the time the address arrives)
     this.map.setSelection({ lat, lon });
     const base = { id: `coord-${lat.toFixed(6)},${lon.toFixed(6)}`, type: 'coordinate', name: 'נקודה במפה', location: { lat, lon } };
     this.panel.show(loadingView('point:' + base.id, 'מאתר כתובת'));
@@ -563,6 +565,7 @@ const app = {
       else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'eruv') loadEruv().then(() => this.panel.show(eruvHomeView(this)));
+      else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
       else if (act === 'saved') this.saved.open();
       else if (act === 'settings') openSettings(this);
@@ -678,6 +681,7 @@ const app = {
         <li><strong>OpenStreetMap</strong> – מפת הבסיס, הרחובות, הכתובות ונקודות העניין (רישיון ODbL).</li>
         <li><strong>data.gov.il</strong> – רשימת היישובים ומאגר הרחובות הרשמיים (רישיון ממשלתי פתוח).</li>
         <li><strong>Wikidata / ויקיפדיה / Wikimedia Commons</strong> – תיאורים ותמונות (CC0 / CC BY-SA).</li>
+        <li><strong>מדריך מקומות בתנ״ך</strong> (תוסף לאוצריא, חד בדרא ונתנאל26) – מקומות מהתנ״ך ומדברי חז״ל ושיטות הזיהוי שלהם.</li>
         <li><strong>מוקד העירוב</strong> (hiruv.com) – מפות העירובין, האחראים ומאמרי תחום שבת, באישורם. קווי העירוב במפה משורטטים בקירוב.</li>
       </ul>
       <h3>מצב הנתונים</h3>
@@ -696,6 +700,7 @@ const app = {
   _initEvents() {
     bus.on('select', (item) => this.openItem(item));
     bus.on('eruv:select', ({ map }) => this.panel.show(eruvMapView(this, map)));
+    bus.on('bible:select', ({ id, m }) => openBiblePlace(this, id, m, { fly: false }));
     bus.on('panel:close', (view) => this._onPanelClosed(view));
     bus.on('panel:view', () => this.updateTitle());
     bus.on('panel:close', () => this.updateTitle());

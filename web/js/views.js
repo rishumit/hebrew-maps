@@ -3,6 +3,7 @@
 import { galleryHtml, michlolHtml, textsHtml, wireGallery, wireTexts } from './gallery.js';
 import { svg } from './icons.js';
 import { operatorBadge } from './logos.js';
+import { biblePointHtml, wireBiblePoint } from './bible.js';
 import { eruvPointHtml, wireEruvPoint } from './eruv.js';
 import { minyanimHtml, wireMinyanim } from './minyanim.js';
 import { favoriteButton, wireFavorite } from './saved.js';
@@ -326,6 +327,7 @@ export function pointView(app, item, nearbyItems = null) {
             <button type="button" class="ir-btn" data-copy="${esc(coords)}" data-copy-label="הקואורדינטות הועתקו" aria-label="העתקת הקואורדינטות">${svg('copy', { size: 18 })}</button></li>
         </ul>
         ${eruvPointHtml(loc.lat, loc.lon, item.city)}
+        ${biblePointHtml(loc.lat, loc.lon)}
         <h3 class="subtitle">בסביבה</h3>
         <div id="nearby-list">${nearbyItems == null ? '<div class="skeleton"><div class="sk-line w80"></div><div class="sk-line w60"></div></div>'
           : nearbyItems.length ? `<ul class="results">${nearbyItems.map((r, i) => `<li class="result"><button type="button" data-index="${i}">
@@ -335,6 +337,7 @@ export function pointView(app, item, nearbyItems = null) {
       wireHead(body, app);
       wireActions(body, item, app);
       wireEruvPoint(body, app);
+      wireBiblePoint(body, app);
       body.querySelectorAll('#nearby-list .result button').forEach((b) =>
         b.addEventListener('click', () => app.openItem(nearbyItems[Number(b.dataset.index)])));
     },

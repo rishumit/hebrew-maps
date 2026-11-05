@@ -10,7 +10,7 @@ const SHELL = [
   '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js', '/js/hscroll.js',
   '/vendor/maplibre-gl.js', '/vendor/maplibre-gl.css', '/vendor/mapbox-gl-rtl-text.js',
   '/js/transit.js', '/css/transit.css',
-  '/js/minyanim.js', '/js/logos.js', '/js/eruv.js', '/eruv/eruv.json',
+  '/js/minyanim.js', '/js/logos.js', '/js/eruv.js', '/eruv/eruv.json', '/js/bible.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
   '/js/updates.js', '/css/updates.css',
   // desktop shell (tabs): the map iframes register this worker with scope /, so it serves the shell too
