@@ -7,7 +7,7 @@ const SHELL = [
   '/', '/map.html', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
   '/js/app.js', '/js/api.js', '/js/combobox.js', '/js/directions.js', '/js/icons.js', '/js/map.js',
   '/js/panel.js', '/js/style.js', '/js/util.js', '/js/views.js', '/js/trails.js',
-  '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js',
+  '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js', '/js/hscroll.js',
   '/vendor/maplibre-gl.js', '/vendor/maplibre-gl.css', '/vendor/mapbox-gl-rtl-text.js',
   '/js/transit.js', '/css/transit.css',
   '/js/minyanim.js', '/js/logos.js',

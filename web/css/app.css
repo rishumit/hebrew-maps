@@ -635,3 +635,53 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 .set-msg.set-ok { color: var(--success); }
 .set-msg.set-error { color: var(--error); }
 .sat-offline-hint { margin: 6px 0 0; }
+
+/* ---------------------------------------------------------------- horizontal rows: no scrollbar, arrow + fade (js/hscroll.js) */
+/* שורות גלילה אופקיות (תמונות, כפתורי פעולה): בלי פס גלילה, עם חץ וטשטוש בקצה */
+.hs { position: relative; min-width: 0; }
+.hs > .hs-track {
+  overflow-x: auto;
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+.hs > .hs-track::-webkit-scrollbar { display: none; }
+
+.hs-next {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  /* הטשטוש: שקוף בצד התוכן, צבע הרקע של הכרטיס (--surface, גם במצב כהה) בקצה */
+  background: linear-gradient(to right, transparent, var(--surface, #fff) 60%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+}
+[dir="rtl"] .hs-next {
+  background: linear-gradient(to left, transparent, var(--surface, #fff) 60%);
+}
+.hs.hs-more > .hs-next { opacity: 1; pointer-events: auto; }
+
+.hs-next > span {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 4px rgb(0 0 0 / .3);
+  font-size: 18px; line-height: 1;
+}
+.hs-next:hover > span { box-shadow: 0 1px 6px rgb(0 0 0 / .45); }
+.hs-next:focus-visible > span { outline: 2px solid currentColor; outline-offset: 2px; }
+/* החץ מצביע לכיוון שבו נמצא המשך התוכן */
+.hs-next > span::before { content: "\203A"; }                       /* › */
+[dir="rtl"] .hs-next > span::before { content: "\2039"; } /* ‹ */
+@media (prefers-reduced-motion: reduce) { .hs > .hs-track { scroll-behavior: auto; } .hs-next { transition: none; } }
+@media print { .hs-next { display: none; } }

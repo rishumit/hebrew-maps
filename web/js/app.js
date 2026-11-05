@@ -5,6 +5,7 @@ import { Combobox } from './combobox.js';
 import { Directions } from './directions.js';
 import { initGuide, openGuide, openHikesNear } from './guide.js';
 import { PoiHoverCard } from './hovercard.js';
+import { initHScroll } from './hscroll.js';
 import { svg } from './icons.js';
 import { LAYER_GROUPS, MapView } from './map.js';
 import { Panel } from './panel.js';
@@ -15,6 +16,9 @@ import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
 import { errorView, loadingView, placeView, pointView, poiView, resultsView, streetView, visibleListView } from './views.js';
+
+// card rows that scroll sideways (action buttons, photo strip): no scrollbar, arrow + fade at the end
+initHScroll('.actions, .g-strip');
 
 const CHIPS = [
   ['restaurant', 'מסעדות'], ['cafe', 'בתי קפה'], ['supermarket', 'סופרמרקטים'], ['synagogue', 'בתי כנסת'],
