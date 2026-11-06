@@ -1,7 +1,8 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.5.9';
+const VERSION = 'hmaps-1.5.10';
 const SHELL_CACHE = `${VERSION}-shell`;
-const TILE_CACHE = 'hmaps-tiles-v1';
+// v2: v1 is full of copies of the same tiles (their ?v= changed on every server start until 1.2.5)
+const TILE_CACHE = 'hmaps-tiles-v2';
 const MAX_TILES = 4000;
 const SHELL = [
   '/', '/map.html', '/js/boot.js', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
@@ -47,6 +48,8 @@ let writes = 0;
 async function tileStrategy(request) {
   const cache = await caches.open(TILE_CACHE);
   const cached = await cache.match(request);
+  // a versioned tile URL (…?v=<data version>) never changes: no need to ask the server again
+  if (cached && new URL(request.url).searchParams.has('v')) return cached;
   const network = fetch(request).then((resp) => {
     if (resp.ok && resp.status === 200) {
       cache.put(request, resp.clone());

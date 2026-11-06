@@ -288,6 +288,22 @@ class UiTest(unittest.TestCase):
         self.assertNotIn("kosher=1", page.evaluate("window.__poiTiles[0]"))
         self.assert_clean(page)
 
+    def test_popover_escape_keeps_the_panel(self):
+        """Escape in the map-type / layers popover closes only the popover, not the open place card."""
+        page = self.new_page()
+        page.locator("#q").fill("בתי קפה")
+        page.locator("#q").press("Enter")
+        page.locator(".results .result button").first.click()
+        expect(page.locator("#panel-title")).to_have_text("ארומה")
+        for btn, pop in (("#btn-layers", "#layers-pop"), ("#btn-maptype", "#maptype-pop")):
+            page.locator(btn).click()
+            expect(page.locator(pop)).to_be_visible()
+            page.keyboard.press("Escape")
+            expect(page.locator(pop)).to_be_hidden()
+            expect(page.locator(btn)).to_be_focused()
+            expect(page.locator("#panel-title")).to_have_text("ארומה")
+        self.assert_clean(page)
+
     def test_satellite_whole_country_download(self):
         """Layers popover: level choice with estimates, start, progress, stop (API mocked: no imagery server)."""
         import json as _json

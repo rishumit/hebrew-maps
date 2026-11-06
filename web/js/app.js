@@ -407,6 +407,7 @@ const app = {
       });
       p.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
+          e.preventDefault(); // handled: the global Escape (below) must not also step the info panel back
           closePop(p, b);
           b.focus();
         }
@@ -459,6 +460,13 @@ const app = {
         this.map.setTheme(effectiveMapTheme());
         drawThemeBtn();
       }
+    });
+    // day / night switched in another tab (desktop shell) or window: follow it here too
+    window.addEventListener('storage', (e) => {
+      if (e.key !== 'hmaps:uitheme') return;
+      applyUiTheme(store.get('uitheme', 'auto'));
+      this.map.setTheme(effectiveMapTheme());
+      drawThemeBtn();
     });
     this._initLayerChecks();
     // downloading aerial photos for offline use lives in the updates panel (web/js/satellite-offline.js)

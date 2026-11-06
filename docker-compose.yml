@@ -17,6 +17,8 @@ x-app: &app
     HMAPS_LOG_LEVEL: ${HMAPS_LOG_LEVEL:-INFO}
     HMAPS_RATE_PER_SEC: ${HMAPS_RATE_PER_SEC:-20}
     HMAPS_RATE_BURST: ${HMAPS_RATE_BURST:-80}
+    # a public server (any domain, see the caddy service); the desktop app accepts only localhost / IPs
+    HMAPS_ALLOWED_HOSTS: ${HMAPS_ALLOWED_HOSTS:-*}
 
 services:
   api:

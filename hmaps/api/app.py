@@ -30,6 +30,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -67,7 +68,7 @@ from . import userdata as userdata_api
 from . import minyanim as minyanim_api
 from .search import SearchEngine, nearby, reverse
 from .settings import settings
-from .store import Basemap, Dataset
+from .store import Basemap, Dataset, stable_hash
 
 log = logging.getLogger("hmaps.api")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -500,7 +501,7 @@ async def tile_base_json(req: Request) -> Response:
     except json.JSONDecodeError:
         vector_layers = []
     bounds = [float(v) for v in md.get("bounds", "34.15,29.40,35.95,33.45").split(",")]
-    v = str(abs(hash(md.get("mtime", "") + str(st.basemap.path.stat().st_mtime_ns))) % 10**8)
+    v = stable_hash(md.get("mtime", "") + str(st.basemap.path.stat().st_mtime_ns), 10**8)
     return cached(JSONResponse({
         "tilejson": "3.0.0", "name": md.get("name", "basemap"), "scheme": "xyz",
         "tiles": [f"{base}/tiles/base/{{z}}/{{x}}/{{y}}.pbf?v={v}"],
@@ -737,7 +738,15 @@ class ServiceMiddleware:
         rid = uuid.uuid4().hex[:12]
         t0 = time.perf_counter()
         client = (scope.get("client") or ("?", 0))[0]
-        status_holder = {"status": 500}
+        status_holder = {"status": 500, "started": False}
+
+        if not host_allowed(_header(scope, b"host"), settings.allowed_hosts):
+            # DNS rebinding: a web site whose name points at 127.0.0.1 would otherwise be "same origin"
+            # with this server and could read / change the user's data (favorites, data folder, updates)
+            resp = PlainTextResponse("Invalid Host header", status_code=400)
+            await resp(scope, receive, send)
+            self._done(path, 400, t0, rid)
+            return
 
         if path.startswith("/api/") and not path.startswith("/api/health"):
             if not self._allow(client):
@@ -750,6 +759,7 @@ class ServiceMiddleware:
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
+                status_holder["started"] = True
                 headers = list(message.get("headers", []))
                 names = {h[0].lower() for h in headers}
                 extra = [
@@ -774,12 +784,16 @@ class ServiceMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         except ApiError as e:
-            status_holder["status"] = e.status
-            await error_response(e.status, e.code, e.message)(scope, receive, send_wrapper)
+            if status_holder["started"]:  # too late for an error response – the client gets a cut answer
+                log.warning("error after the response started rid=%s path=%s: %s", rid, path, e.message)
+            else:
+                status_holder["status"] = e.status
+                await error_response(e.status, e.code, e.message)(scope, receive, send_wrapper)
         except Exception:  # noqa: BLE001
             log.exception("unhandled error rid=%s path=%s", rid, path)
-            status_holder["status"] = 500
-            await error_response(500, "internal_error", "אירעה שגיאה בשרת")(scope, receive, send_wrapper)
+            if not status_holder["started"]:
+                status_holder["status"] = 500
+                await error_response(500, "internal_error", "אירעה שגיאה בשרת")(scope, receive, send_wrapper)
         self._done(path, status_holder["status"], t0, rid)
 
     def _done(self, path: str, status: int, t0: float, rid: str) -> None:
@@ -790,6 +804,41 @@ class ServiceMiddleware:
             # query strings are deliberately not logged (search terms are user data)
             log.info(json.dumps({"rid": rid, "route": route, "path": path, "status": status, "ms": round(dt * 1000, 1)},
                                 ensure_ascii=False))
+
+
+def _header(scope, name: bytes) -> str:
+    for k, v in scope.get("headers") or []:
+        if k == name:
+            return v.decode("latin-1")
+    return ""
+
+
+#: host names that always reach this server (the desktop app, a browser on the same computer, tests)
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "testserver"})
+
+
+def host_allowed(host_header: str, allowed: tuple[str, ...]) -> bool:
+    """The Host header must name this computer (or an IP address), unless HMAPS_ALLOWED_HOSTS lists the name.
+
+    An IP address is safe: a DNS-rebinding page always has a domain name of its own. "*" allows any host
+    (docker-compose.yml – a public server, where the user-data endpoints are closed anyway)."""
+    if "*" in allowed:
+        return True
+    h = host_header.strip().lower()
+    if h.startswith("["):  # [::1]:8080
+        h = h[1:h.find("]")] if "]" in h else h[1:]
+    elif h.count(":") == 1:
+        h = h.rsplit(":", 1)[0]
+    h = h.rstrip(".")
+    if not h:
+        return False  # HTTP/1.1 requires Host; every browser sends it
+    if h in LOCAL_HOSTS or h in allowed:
+        return True
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        return False
 
 
 def _route_name(path: str) -> str:
