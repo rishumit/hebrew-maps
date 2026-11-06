@@ -234,7 +234,8 @@ def any_value(d: dict[str, Any]) -> bool:
 
 # ---------------------------------------------------------------------------- back-end selection
 
-def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset()) -> dict:
+def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset(),
+           kohen_levels: frozenset[str] | None = None) -> dict:
     from ..route.engine import NoRoute, get_router
 
     router = get_router(graph_path)
@@ -243,10 +244,10 @@ def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: froz
     ignored = frozenset()
     if "pa" in avoid and router.pa_areas() is None:
         ignored = frozenset({"pa"})  # the areas file is not installed yet (older data package)
-    if "kohen" in avoid and router.kohen_areas() is None:
-        ignored |= frozenset({"kohen"})  # no grave areas in the installed data package
+    if "kohen" in avoid and router.kohen_areas(kohen_levels) is None:
+        ignored |= frozenset({"kohen"})  # no grave areas (of these levels) in the installed data package
     try:
-        data = router.route(mode, points, avoid - ignored)
+        data = router.route(mode, points, avoid - ignored, kohen_levels)
     except NoRoute as e:
         if e.code == "NoSegment":
             raise RoutingError(404, "אחת הנקודות רחוקה מדי מדרך – נסו לבחור נקודה קרובה יותר לכביש או לשביל") from e
@@ -255,7 +256,7 @@ def _local(graph_path, mode: str, points: list[tuple[float, float]], avoid: froz
 
 
 def route_any(settings, mode: str, points: list[tuple[float, float]], alternatives: bool = True,
-              avoid: frozenset[str] = frozenset()) -> dict:
+              avoid: frozenset[str] = frozenset(), kohen_levels: frozenset[str] | None = None) -> dict:
     """Route with OSRM and/or the built-in router according to ``HMAPS_ROUTER``.
 
     *avoid* (:mod:`hmaps.route.avoid`): OSRM only knows toll / motorway, so other options go to
@@ -266,15 +267,15 @@ def route_any(settings, mode: str, points: list[tuple[float, float]], alternativ
         raise RoutingError(400, "אמצעי תחבורה לא נתמך")
     avoid = frozenset(a for a in avoid if a in FOR_PROFILE.get(mode, ()))
     if settings.router == "local":
-        return _local(settings.graph_path, mode, points, avoid)
+        return _local(settings.graph_path, mode, points, avoid, kohen_levels)
     local_ok = settings.router == "auto" and settings.graph_path.exists()
     if local_ok and avoid - set(OSRM_EXCLUDE.get(mode, {})):
-        return _local(settings.graph_path, mode, points, avoid)
+        return _local(settings.graph_path, mode, points, avoid, kohen_levels)
     try:
         return route(settings.osrm, mode, points, alternatives, avoid=avoid)
     except RoutingError as e:
         if local_ok and e.status == 503:
-            return _local(settings.graph_path, mode, points, avoid)
+            return _local(settings.graph_path, mode, points, avoid, kohen_levels)
         raise
 
 

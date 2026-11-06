@@ -304,6 +304,41 @@ class UiTest(unittest.TestCase):
             expect(page.locator("#panel-title")).to_have_text("ארומה")
         self.assert_clean(page)
 
+    def test_kohen_mode_levels(self):
+        """Kohen mode: the grave-area levels to avoid are chosen under its check-box and sent as kohen_levels."""
+        page = self.new_page()
+        routes = []
+        page.on("request", lambda r: routes.append(r.url) if "/api/route" in r.url else None)
+        page.evaluate("window.__map.__clickPoi({id: 2, name: 'x'}, [34.7752, 32.0753])")
+        page.locator('#panel [data-act="route"]').click()
+        frm = page.locator("#dir-from")
+        frm.fill("")
+        frm.type("רוטש", delay=30)
+        page.locator("#dir-from-list [role=option]").first.click()
+        expect(page.locator(".steps .step").first).to_be_visible()
+        page.locator(".dir-avoid summary").click()
+        expect(page.locator("[data-kohen-level]")).to_have_count(0)  # only with Kohen mode on
+        page.locator('[data-avoid="kohen"]').check()
+        expect(page.locator("[data-kohen-level]")).to_have_count(3)
+        page.wait_for_timeout(300)
+        self.assertIn("avoid=kohen", routes[-1])
+        self.assertNotIn("kohen_levels", routes[-1])  # all levels = the server's default
+        n = len(routes)
+        page.locator('[data-kohen-level="ב"]').uncheck()
+        expect(page.locator('[data-kohen-level="ב"]')).not_to_be_checked()
+        page.wait_for_timeout(300)
+        self.assertGreater(len(routes), n)
+        self.assertIn("kohen_levels=%D7%90%D7%92", routes[-1])  # אג
+        # the last level cannot be unchecked
+        page.locator('[data-kohen-level="ג"]').uncheck()
+        page.wait_for_timeout(200)
+        page.locator('[data-kohen-level="א"]').click()
+        expect(page.locator('[data-kohen-level="א"]')).to_be_checked()
+        page.screenshot(path=str(SHOTS / "kohen-levels.png"))
+        # remembered for the next visit
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('hmaps:route:kohen-levels'))"), ["א"])
+        self.assert_clean(page)
+
     def test_satellite_whole_country_download(self):
         """Layers popover: level choice with estimates, start, progress, stop (API mocked: no imagery server)."""
         import json as _json

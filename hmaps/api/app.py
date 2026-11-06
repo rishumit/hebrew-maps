@@ -12,7 +12,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/place/{id}  /api/street/{id}
     GET  /api/geocode?address=           forward geocoding
     GET  /api/reverse?lat=&lon=          reverse geocoding
-    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa,kohen]
+    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa,kohen][&kohen_levels=אבג]
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
     GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
     GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)
@@ -451,9 +451,12 @@ async def route_ep(req: Request) -> Response:
     pts.append(_latlon(req.query_params.get("to"), "to"))
     alts = req.query_params.get("alternatives", "1") not in ("0", "false")
     from ..route.avoid import parse as parse_avoid
+    from ..route.kohen import parse_levels
     avoid = parse_avoid(req.query_params.get("avoid"), mode)
+    # Kohen mode: which grave-area levels to avoid (א ודאי, ב ספק, ג חשש קל); default all
+    kohen_levels = parse_levels(req.query_params.get("kohen_levels")) if "kohen" in avoid else None
     try:
-        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts, avoid)
+        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts, avoid, kohen_levels)
     except routing.RoutingError as e:
         return error_response(e.status, "routing_error", e.message)
     return cached(JSONResponse(res), 300)

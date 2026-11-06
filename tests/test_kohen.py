@@ -158,6 +158,35 @@ class KohenRoutingTest(unittest.TestCase):
         res = r.route("foot", [(32.000, 35.000), (32.010, 35.000)], frozenset({"kohen"}))["routes"][0]
         self.assertEqual(res["avoid_unmet"], [])
 
+    def test_parse_levels(self):
+        from hmaps.route.kohen import parse_levels
+        self.assertEqual(parse_levels("א"), frozenset({"א"}))
+        self.assertEqual(parse_levels("א,ב"), frozenset({"א", "ב"}))
+        self.assertEqual(parse_levels("A"), frozenset({"א"}))
+        for everything in ("", None, "אבג", "xyz"):  # all levels (the default)
+            self.assertIsNone(parse_levels(everything), everything)
+
+    def test_levels_choose_the_areas(self):
+        r = self._router()
+        pts = [(32.000, 35.000), (32.000, 35.020)]
+        plain = r.route("car", pts)["routes"][0]["distance"]
+        # the area is level א: avoiding only "ספק" (ב) keeps the direct road
+        self.assertIsNone(r.kohen_areas(frozenset({"ב"})))
+        only_b = r.route("car", pts, frozenset({"kohen"}), frozenset({"ב"}))["routes"][0]
+        self.assertAlmostEqual(only_b["distance"], plain, delta=1)
+        # א + ב: the detour, and the all-levels profile is still cached separately
+        ab = r.route("car", pts, frozenset({"kohen"}), frozenset({"א", "ב"}))["routes"][0]
+        self.assertGreater(ab["distance"], plain)
+        self.assertGreater(r.route("car", pts, frozenset({"kohen"}))["routes"][0]["distance"], plain)
+
+    def test_api_reports_levels_without_areas(self):
+        from hmaps.api import routing
+        pts = [(32.000, 35.000), (32.000, 35.020)]
+        res = routing._local(self.path, "car", pts, frozenset({"kohen"}), frozenset({"ג"}))
+        self.assertEqual([a["id"] for a in res.get("avoid_ignored", [])], ["kohen"])
+        res = routing._local(self.path, "car", pts, frozenset({"kohen"}), frozenset({"א"}))
+        self.assertEqual(res.get("avoid_ignored", []), [])
+
     def test_no_file_means_unavailable(self):
         with tempfile.TemporaryDirectory() as d:
             from hmaps.route.graph import GraphBuilder

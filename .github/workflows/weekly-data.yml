@@ -197,6 +197,24 @@ jobs:
           key: rich-http-${{ github.run_id }}
           restore-keys: rich-http-
 
+      # Kohen mode: if gps.hakohanim.org does not answer during the build, hmaps/etl/kohen_areas.py keeps
+      # the grave areas of the previous data package – restore its routing/avoid_areas.json for that
+      # (optional: skipped on the first run; a failure here only loses the fallback)
+      - uses: actions/download-artifact@v7
+        if: needs.plan.outputs.previous == 'true'
+        with:
+          name: previous-manifest
+          path: prev
+
+      - name: Restore last week's grave areas (Kohen mode fallback)
+        if: needs.plan.outputs.previous == 'true'
+        continue-on-error: true
+        run: |
+          python -m hmaps update --component maps --force --manifest prev/manifest.json --data prev-data
+          mkdir -p data/routing
+          cp prev-data/routing/avoid_areas.json data/routing/avoid_areas.json
+          rm -rf prev-data
+
       - name: Build maps database (OSM core + routing graph)
         run: python -m hmaps.etl build --engine pyosmium --no-enrich
 
