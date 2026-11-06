@@ -324,7 +324,7 @@ class DesktopTabsTest(unittest.TestCase):
         self.wait_map(page)
         # theme follows the map's "מראה הממשק" (shared localStorage)
         f = self.active_frame(page)
-        f.locator("#btn-layers").click()
+        f.locator("#btn-maptype").click()
         f.locator('input[name="uitheme"][value="dark"]').check(force=True)
         expect(page.locator("html")).to_have_attribute("data-theme", "dark")
         f.locator("#q").fill("מסעדות בתל אביב")

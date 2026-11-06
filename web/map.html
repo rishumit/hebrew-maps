@@ -55,7 +55,8 @@
     </aside>
 
     <div class="map-controls" role="group" aria-label="פקדי מפה">
-      <button type="button" id="btn-layers" class="ctrl-btn" aria-label="סוג מפה ושכבות" aria-haspopup="dialog" aria-controls="layers-pop" aria-expanded="false"><span data-icon="layers"></span></button>
+      <button type="button" id="btn-maptype" class="ctrl-btn ctrl-maptype" aria-label="סוג מפה" title="סוג מפה" aria-haspopup="dialog" aria-controls="maptype-pop" aria-expanded="false"><span class="swatch maptype-thumb swatch-light" aria-hidden="true"></span><span class="maptype-cap" aria-hidden="true">סוג מפה</span></button>
+      <button type="button" id="btn-layers" class="ctrl-btn" aria-label="שכבות" title="שכבות" aria-haspopup="dialog" aria-controls="layers-pop" aria-expanded="false"><span data-icon="layers"></span></button>
       <button type="button" id="btn-3d" class="ctrl-btn ctrl-3d" aria-pressed="false" aria-label="תצוגה בתלת-ממד" title="תלת-ממד (T)"><span aria-hidden="true">3D</span></button>
       <button type="button" id="btn-north" class="ctrl-btn" aria-label="איפוס כיוון המפה לצפון" hidden><span class="compass" aria-hidden="true"></span></button>
       <button type="button" id="btn-locate" class="ctrl-btn" aria-label="הצגת המיקום שלי" aria-pressed="false"><span data-icon="locate"></span></button>
@@ -65,9 +66,9 @@
       </div>
     </div>
 
-    <div id="layers-pop" class="popover" role="dialog" aria-labelledby="layers-title" hidden>
-      <h2 id="layers-title" class="popover-title">סוג מפה</h2>
-      <div class="map-types" role="radiogroup" aria-labelledby="layers-title">
+    <div id="maptype-pop" class="popover" role="dialog" aria-labelledby="maptype-title" hidden>
+      <h2 id="maptype-title" class="popover-title">סוג מפה</h2>
+      <div class="map-types" role="radiogroup" aria-labelledby="maptype-title">
         <label class="map-type"><input type="radio" name="maptype" value="light"><span class="swatch swatch-light" aria-hidden="true"></span><span>רגילה</span></label>
         <label class="map-type"><input type="radio" name="maptype" value="nature"><span class="swatch swatch-nature" aria-hidden="true"></span><span>טבע וטיולים</span></label>
         <label class="map-type"><input type="radio" name="maptype" value="topo"><span class="swatch swatch-topo" aria-hidden="true"></span><span>טופוגרפית</span></label>
@@ -77,16 +78,17 @@
       <p class="sat-offline-hint" id="sat-offline" hidden>
         <button type="button" class="btn btn-secondary btn-sm popover-btn" id="btn-sat-offline"><span data-icon="download"></span>הורדת תצלומי אוויר לשימוש בלי אינטרנט…</button>
       </p>
-      <fieldset class="layer-checks">
-        <legend class="popover-sub">שכבות</legend>
-        <div id="layer-checks"></div>
-      </fieldset>
       <h3 class="popover-sub">מראה הממשק</h3>
       <div class="segmented" role="radiogroup" aria-label="מראה הממשק">
         <label><input type="radio" name="uitheme" value="auto"><span>אוטומטי</span></label>
         <label><input type="radio" name="uitheme" value="light"><span>בהיר</span></label>
         <label><input type="radio" name="uitheme" value="dark"><span>כהה</span></label>
       </div>
+    </div>
+
+    <div id="layers-pop" class="popover" role="dialog" aria-labelledby="layers-title" hidden>
+      <h2 id="layers-title" class="popover-title">שכבות</h2>
+      <div id="layer-checks" class="layer-checks" role="group" aria-labelledby="layers-title"></div>
     </div>
 
     <div id="ctx-menu" class="ctx-menu" role="menu" aria-label="פעולות בנקודה במפה" hidden>

@@ -380,32 +380,43 @@ const app = {
     $('#btn-locate').addEventListener('click', () => this.toggleLocate());
     $('#btn-directions').addEventListener('click', () => this.directions.open({}));
 
-    const pop = $('#layers-pop');
-    const btn = $('#btn-layers');
-    const closePop = () => {
-      pop.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
+    // two popovers like Google Maps: "סוג מפה" (map type + UI theme) and "שכבות" (overlay layers)
+    const pops = [[$('#maptype-pop'), $('#btn-maptype')], [$('#layers-pop'), $('#btn-layers')]];
+    const closePop = (p, b) => {
+      p.hidden = true;
+      b.setAttribute('aria-expanded', 'false');
     };
-    btn.addEventListener('click', () => {
-      const open = pop.hidden;
-      pop.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-      if (open) pop.querySelector('input:checked')?.focus();
-    });
-    pop.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closePop();
-        btn.focus();
-      }
-    });
+    this._closePops = () => {
+      for (const [p, b] of pops) if (!p.hidden) { closePop(p, b); return b; }
+      return null;
+    };
+    for (const [p, b] of pops) {
+      b.addEventListener('click', () => {
+        const open = p.hidden;
+        for (const [q, c] of pops) if (q !== p) closePop(q, c);
+        p.hidden = !open;
+        b.setAttribute('aria-expanded', String(open));
+        if (open) p.querySelector('input:checked, input')?.focus();
+      });
+      p.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closePop(p, b);
+          b.focus();
+        }
+      });
+    }
     document.addEventListener('pointerdown', (e) => {
-      if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) closePop();
+      for (const [p, b] of pops) if (!p.hidden && !p.contains(e.target) && !b.contains(e.target)) closePop(p, b);
     });
+    const pop = $('#maptype-pop');
+    const thumb = $('#btn-maptype .maptype-thumb');
+    const setThumb = (type) => { thumb.className = `swatch maptype-thumb swatch-${type}`; };
     const satellite = !!store.get('satellite', false);
     const mapType = satellite ? 'satellite' : store.get('maptype', 'light');
     const selectedType = pop.querySelector(`input[name="maptype"][value="${mapType}"]`)
       || pop.querySelector('input[name="maptype"][value="light"]');
     selectedType.checked = true;
+    setThumb(selectedType.value);
     const satTools = $('#sat-offline');
     satTools.hidden = !satellite;
     pop.querySelectorAll('input[name="maptype"]').forEach((r) => r.addEventListener('change', () => {
@@ -413,6 +424,7 @@ const app = {
       satTools.hidden = !useSatellite;
       store.set('satellite', useSatellite);
       if (!useSatellite) store.set('maptype', r.value);
+      setThumb(r.value);
       this.map.setMapType(effectiveMapTheme(), useSatellite);
       this._redrawLayerChecks?.();
       announce(`סוג המפה: ${r.parentElement.lastElementChild.textContent.trim()}`);
@@ -430,7 +442,7 @@ const app = {
     this._initLayerChecks();
     // downloading aerial photos for offline use lives in the updates panel (web/js/satellite-offline.js)
     $('#btn-sat-offline')?.addEventListener('click', () => {
-      closePop();
+      this._closePops();
       openUpdates(this, { section: 'satellite' });
     });
   },
@@ -735,7 +747,7 @@ const app = {
       } else if (e.key === 'Escape' && !e.defaultPrevented) {
         if (!$('#dialog').hidden) closeDialog();
         else if (!$('#ctx-menu').hidden) this._hideCtx();
-        else if (!$('#layers-pop').hidden) $('#btn-layers').click();
+        else if (this._closePops?.()) { /* closed an open map-type / layers popover */ }
         else if (this.panel.isOpen && !typing) this.panel.back();
       } else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (e.key === 'l' || e.key === 'ך') this.toggleLocate();

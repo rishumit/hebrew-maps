@@ -733,3 +733,12 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 .bible-ref { font-weight: 600; font-size: var(--text-sm); color: var(--text-muted); }
 .bible-text { font-size: var(--text-base); line-height: 1.8; }
 .bible-method .link-btn { display: inline-flex; align-items: center; gap: 3px; }
+
+/* "סוג מפה" tile button (like Google Maps): a thumbnail of the current map type with a caption */
+.ctrl-maptype { position: relative; width: 56px; height: 56px; padding: 0; overflow: hidden; border: 2px solid var(--surface); }
+.ctrl-maptype .maptype-thumb { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; border: 0; border-radius: 0; }
+.ctrl-maptype .maptype-cap { position: absolute; inset-inline: 0; bottom: 0; padding: 1px 0 2px; font-size: 11px; line-height: 1.2; font-weight: 600;
+  color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.ctrl-maptype:hover .maptype-thumb { filter: brightness(1.05); }
+.ctrl-maptype[aria-expanded="true"] { border-color: var(--primary); }
+#layers-pop .layer-checks { display: flex; flex-direction: column; }

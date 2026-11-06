@@ -49,8 +49,8 @@ class TerrainUiTest(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def _pick_topo(self, page):
-        page.locator("#btn-layers").click()
-        expect(page.locator("#layers-pop")).to_be_visible()
+        page.locator("#btn-maptype").click()
+        expect(page.locator("#maptype-pop")).to_be_visible()
         page.locator('input[name="maptype"][value="topo"] + .swatch').click()
 
     def test_topo_style_on_fallback_basemap(self):

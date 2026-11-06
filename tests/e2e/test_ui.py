@@ -275,8 +275,8 @@ class UiTest(unittest.TestCase):
 
     def test_layers_theme_switch(self):
         page = self.new_page()
-        page.locator("#btn-layers").click()
-        expect(page.locator("#layers-pop")).to_be_visible()
+        page.locator("#btn-maptype").click()
+        expect(page.locator("#maptype-pop")).to_be_visible()
         expect(page.locator("#btn-hikes-near")).to_have_count(0)
         expect(page.locator("#toggle-kosher")).to_have_count(0)
         page.locator('input[name="maptype"][value="nature"] + .swatch').click()
@@ -324,7 +324,7 @@ class UiTest(unittest.TestCase):
 
         page.route("**/api/satellite/**", handle)
         page.route("**/tiles/satellite/**", lambda r: r.fulfill(status=204, body=""))
-        page.locator("#btn-layers").click()
+        page.locator("#btn-maptype").click()
         page.locator('input[name="maptype"][value="satellite"] + .swatch').click()
         expect(page.locator("#sat-offline")).to_be_visible()
         # downloading for offline use lives in the updates panel
@@ -418,7 +418,7 @@ class UiTest(unittest.TestCase):
             self.assertGreater(n_layers, 30)
             expect(page.locator("#banner")).to_be_hidden()
             for theme in ("nature", "dark", "light"):
-                page.locator("#btn-layers").click() if page.locator("#layers-pop").is_hidden() else None
+                page.locator("#btn-maptype").click() if page.locator("#maptype-pop").is_hidden() else None
                 page.locator(f'input[name="maptype"][value="{theme}"] + .swatch').click()
                 wait_js(page, f"window.__lastStyle.name === 'hmaps-{theme}'")
             self.assert_clean(page)
