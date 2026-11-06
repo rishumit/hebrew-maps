@@ -429,15 +429,29 @@ const app = {
       this._redrawLayerChecks?.();
       announce(`סוג המפה: ${r.parentElement.lastElementChild.textContent.trim()}`);
     }));
-    const ui = store.get('uitheme', 'auto');
-    pop.querySelector(`input[name="uitheme"][value="${ui}"]`).checked = true;
-    pop.querySelectorAll('input[name="uitheme"]').forEach((r) => r.addEventListener('change', () => {
-      store.set('uitheme', r.value);
-      applyUiTheme(r.value);
+    // day / night: one icon button; the icon shows the mode a click switches to
+    const themeBtn = $('#btn-uitheme');
+    const drawThemeBtn = () => {
+      const dark = isDarkUi();
+      const label = dark ? 'מצב יום' : 'מצב לילה';
+      themeBtn.innerHTML = svg(dark ? 'sun' : 'moon', { size: 22 });
+      themeBtn.setAttribute('aria-label', label);
+      themeBtn.title = label;
+    };
+    drawThemeBtn();
+    themeBtn.addEventListener('click', () => {
+      const next = isDarkUi() ? 'light' : 'dark';
+      store.set('uitheme', next);
+      applyUiTheme(next);
       this.map.setTheme(effectiveMapTheme());
-    }));
+      drawThemeBtn();
+      announce(next === 'dark' ? 'מצב לילה' : 'מצב יום');
+    });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (store.get('uitheme', 'auto') === 'auto') this.map.setTheme(effectiveMapTheme());
+      if (store.get('uitheme', 'auto') === 'auto') {
+        this.map.setTheme(effectiveMapTheme());
+        drawThemeBtn();
+      }
     });
     this._initLayerChecks();
     // downloading aerial photos for offline use lives in the updates panel (web/js/satellite-offline.js)
@@ -893,6 +907,11 @@ function hydrateIcons(root) {
 
 function applyUiTheme(t) {
   document.documentElement.dataset.theme = t;
+}
+
+function isDarkUi() {
+  const ui = store.get('uitheme', 'auto');
+  return ui === 'dark' || (ui === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 }
 
 function effectiveMapTheme() {

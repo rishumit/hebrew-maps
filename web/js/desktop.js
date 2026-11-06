@@ -519,7 +519,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = ['light', 'dark'].includes(t) ? t : 'auto';
 }
 window.addEventListener('storage', (e) => {
-  if (e.key === 'hmaps:uitheme') applyTheme(); // changed in a map's "מראה הממשק"
+  if (e.key === 'hmaps:uitheme') applyTheme(); // changed by a map's day/night button
 });
 
 function initWindow() {

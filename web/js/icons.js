@@ -106,6 +106,7 @@ export const ICONS = {
   check: 'M5 12l5 5 9-10',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   moon: 'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z',
+  sun: 'M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   list: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01',
   keyboard: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
