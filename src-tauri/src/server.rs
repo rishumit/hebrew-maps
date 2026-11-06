@@ -47,9 +47,10 @@ pub fn candidate_ports(preferred: u16) -> Vec<u16> {
 
 pub fn port_is_free(port: u16) -> bool {
     // Something answering on the port (any program) means busy, even if bind would succeed
-    // because the other side listens on a different address.
+    // because the other side listens on a different address. A short timeout: on Windows a connect to a
+    // free port is retried instead of refused, so this wait was paid on every start.
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    if TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
+    if TcpStream::connect_timeout(&addr, Duration::from_millis(100)).is_ok() {
         return false;
     }
     TcpListener::bind(addr).is_ok()
@@ -165,7 +166,8 @@ pub fn wait_healthy(
                 None => Ok(()),
             };
         }
-        std::thread::sleep(Duration::from_millis(250));
+        // short steps: the window shows the map as soon as the server answers
+        std::thread::sleep(Duration::from_millis(40));
     }
     Err(WaitError::Timeout)
 }
@@ -174,7 +176,10 @@ pub fn wait_healthy(
 /// dataset yet – the page still loads and explains it), with a JSON `status`.
 pub fn health(port: u16) -> bool {
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    let Ok(mut s) = TcpStream::connect_timeout(&addr, Duration::from_millis(500)) else {
+    // On Windows a connect to a port nobody listens on is retried for ~2 s instead of failing at once, so a
+    // long timeout here made every poll before the server was up cost the whole timeout. A listening
+    // localhost server accepts within a millisecond or two.
+    let Ok(mut s) = TcpStream::connect_timeout(&addr, Duration::from_millis(120)) else {
         return false;
     };
     let _ = s.set_read_timeout(Some(Duration::from_secs(3)));

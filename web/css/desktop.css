@@ -252,9 +252,9 @@ html.maximized .wc-btn .i-max { display: none; }
 html.maximized .wc-btn .i-restore { display: block; }
 
 /* ------------------------------------------------------------------ views */
-.views { position: fixed; inset: var(--tb-h) 0 0 0; background: var(--tab-active); }
+.views { position: fixed; inset: var(--tb-h) 0 0 0; z-index: 1; } /* transparent: the loading screen (desktop.html) shows through */
 .view { position: absolute; inset: 0; }
-.view iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--tab-active); }
+.view iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
 /* background tabs stay alive (instant switching) but are not painted, focusable or announced */
 .view:not(.active) { visibility: hidden; pointer-events: none; }
 .noscript { padding: 24px; font-size: 16px; }

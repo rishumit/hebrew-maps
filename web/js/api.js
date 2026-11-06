@@ -41,9 +41,12 @@ async function request(path, { params, method = 'GET', body, signal, timeout = 1
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), timeout);
   if (signal) signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
+  // /api/meta and /api/categories were already requested by web/map.html (window.__early) – used once
+  const early = method === 'GET' && !params && window.__early?.[path];
+  if (early) delete window.__early[path];
   let resp;
   try {
-    resp = await fetch(url, {
+    resp = early ? await early.catch(() => fetch(url, { signal: ctrl.signal })) : await fetch(url, {
       method,
       signal: ctrl.signal,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,

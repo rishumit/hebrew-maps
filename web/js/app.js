@@ -46,6 +46,7 @@ const app = {
 
   // ------------------------------------------------------------------ boot
   async init() {
+    setTimeout(hideBoot, 15000); // never keep the loading screen forever
     applyUiTheme(store.get('uitheme', 'auto'));
     hydrateIcons(document);
     this.panel = new Panel($('#panel'));
@@ -74,6 +75,12 @@ const app = {
       zoom: hash.zoom ?? saved?.zoom,
     };
     this.map = new MapView($('#map'), this.meta, this.categories, initial);
+    // the loading screen stays until the first tiles are drawn ('idle'), or a moment after the style is ready
+    const offBoot = bus.on('map:ready', () => {
+      offBoot();
+      this.map.map?.once?.('idle', hideBoot);
+      setTimeout(hideBoot, 1200);
+    });
     this.directions = new Directions(this);
     this.printing = new PrintManager(this);
     this.saved = new Saved(this);
@@ -995,7 +1002,16 @@ function accessibilityDialog() {
     <p class="r-sub">תאריך עדכון ההצהרה: אוקטובר 2026</p>`);
 }
 
+/** Fades out the loading screen of web/map.html (once). */
+function hideBoot() {
+  const boot = document.getElementById('boot');
+  if (!boot || boot.classList.contains('done')) return;
+  boot.classList.add('done');
+  setTimeout(() => boot.remove(), 600);
+}
+
 function fatal(message, retry = false) {
+  hideBoot();
   const b = $('#banner');
   b.innerHTML = `${svg('alert', { size: 18 })}<span>${esc(message)}</span>${retry ? '<button type="button">ניסיון נוסף</button>' : ''}`;
   b.hidden = false;

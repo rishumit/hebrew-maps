@@ -813,7 +813,19 @@ async def lifespan(app):
              "ready" if st.basemap.available else "fallback")
     if st.ds.available:
         st.poi_zooms()  # start the POI declutter in the background
+    threading.Thread(target=_warm_imports, name="warm-imports", daemon=True).start()
     yield
+
+
+def _warm_imports(delay: float = 4.0) -> None:
+    """numpy and the public-transport code are imported lazily (a faster start); load them a few seconds
+    after startup – once the first map is on screen – so the first route or timetable is not slower."""
+    time.sleep(delay)
+    for name in ("numpy", "hmaps.core.dem", "hmaps.transit.planner", "hmaps.transit.fares"):
+        try:
+            __import__(name)
+        except Exception:  # noqa: BLE001 - imported again (and reported) on first real use
+            log.debug("warm import of %s failed", name, exc_info=True)
 
 
 async def openapi(req: Request) -> Response:
