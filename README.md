@@ -87,7 +87,7 @@
 - שמירת מסלולים וחיפושים, ייצוא וייבוא לקובץ – הכול נשמר רק במחשב
 - הימנעות מכבישי אגרה, כבישים מהירים, דרכי עפר ארוכות, צמתים מאתגרים ושטחי A/B (בקירוב)
 - בחירת תיקיית הנתונים (תפריט ← הגדרות ותיקיית נתונים)
-- בהתרחקות – מפת כל העולם בפירוט נמוך (Natural Earth; נבנית ב-`build-world.cmd`)
+- בהתרחקות – מפת כל העולם בפירוט נמוך (Natural Earth; נבנית ב-`scripts/windows/build-world.cmd`)
 
 </details>
 
@@ -134,15 +134,17 @@ setup-windows.cmd
 <details>
 <summary>קבצי ניהול</summary>
 
+כלי הבנייה והתחזוקה המתקדמים נמצאים ב-`scripts/windows/`. פקודות ה-CMD שבשורש נשמרו כקיצורי תאימות.
+
 | קובץ | תפקיד |
 |------|-------|
 | `start-windows.cmd` | הפעלה |
 | `stop-windows.cmd` | עצירה |
 | `update-online-windows.cmd` | עדכון נתונים מקוון (מומלץ) |
 | `update-online-windows.cmd /schedule` | עדכון אוטומטי שבועי |
-| `update-windows.cmd` | בנייה מקומית מחדש (למתקדמים) |
-| `build-terrain.cmd` | בניית קווי גובה והצללה |
-| `download-satellite.cmd` | הורדת תצלומי אוויר לכל הארץ |
+| `scripts/windows/update-windows.cmd` | בנייה מקומית מחדש (למתקדמים) |
+| `scripts/windows/build-terrain.cmd` | בניית קווי גובה והצללה |
+| `scripts/windows/download-satellite.cmd` | הורדת תצלומי אוויר לכל הארץ |
 
 </details>
 

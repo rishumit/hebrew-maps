@@ -1,4 +1,3 @@
 @echo off
-cd /d "%~dp0"
-set PYTHONUTF8=1
-.venv\Scripts\python.exe tools\michlol_diag.py
+call "%~dp0scripts\windows\michlol-diag.cmd" %*
+exit /b %ERRORLEVEL%
