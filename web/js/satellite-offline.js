@@ -100,7 +100,7 @@ function finish(job) {
     done: `נשמר: ${fmt(job.fetched)} אריחים חדשים (${mb(job.bytes)}), ${fmt(job.skipped)} כבר היו שמורים. התצלומים יוצגו גם בלי אינטרנט.`,
     cancelled: `ההורדה נעצרה (${fmt(job.done)} מתוך ${fmt(job.total)}). אפשר להמשיך מאותה נקודה בלחיצה נוספת.`,
     error: 'ההורדה נעצרה: אין חיבור לשרת תצלומי האוויר (או שהסינון חוסם אותו). מה שכבר ירד נשמר – נסו שוב '
-      + 'כשיש אינטרנט; לבדיקה: download-satellite.cmd --test',
+      + 'כשיש אינטרנט; לבדיקה: scripts/windows/download-satellite.cmd --test',
   }[job.state] || '';
   st.status = msg;
   if (msg) announce(msg);

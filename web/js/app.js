@@ -545,7 +545,7 @@ const app = {
   toggle3DNotice() {
     if (!this.map.has3dTerrain && !this._warned3d) {
       this._warned3d = true;
-      toast('תלת-ממד: מבנים והטיית המפה. הרים ועמקים בתלת-ממד יופיעו אחרי התקנת נתוני הגובה (build-terrain.cmd).', { ms: 6500 });
+      toast('תלת-ממד: מבנים והטיית המפה. הרים ועמקים בתלת-ממד יופיעו אחרי התקנת נתוני הגובה (scripts/windows/build-terrain.cmd).', { ms: 6500 });
     }
   },
 

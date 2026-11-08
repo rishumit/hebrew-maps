@@ -1,6 +1,6 @@
 """Build the low-zoom world map (web/world/world.json) from Natural Earth.
 
-    python -m tools.world            (or build-world.cmd)
+    python -m tools.world            (or scripts/windows/build-world.cmd)
 
 When the map is zoomed out it shows the whole globe – countries with their borders and
 Hebrew names, capitals and big cities, oceans and seas – under the detailed map of Israel.

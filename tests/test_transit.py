@@ -595,7 +595,7 @@ class TransitApiTest(unittest.TestCase):
         s, body, _ = self.api_empty.get("/api/transit", **{"from": "32.0,34.8", "to": "32.01,34.83"})
         self.assertEqual(s, 503)
         self.assertEqual(body["error"]["code"], "transit_not_ready")
-        self.assertIn("update-windows.cmd", body["error"]["message"])
+        self.assertIn("scripts/windows/update-windows.cmd", body["error"]["message"])
         s, body, _ = self.api_empty.get("/api/transit/status")
         self.assertEqual(s, 200)
         self.assertFalse(body["available"])

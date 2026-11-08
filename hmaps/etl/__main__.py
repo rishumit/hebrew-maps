@@ -266,7 +266,7 @@ def main(argv: list[str] | None = None) -> None:
         except (AttributeError, ValueError):
             pass
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
-    if os.environ.get("HMAPS_LOG_FILE"):  # also keep a UTF-8 log (enrich-content.cmd)
+    if os.environ.get("HMAPS_LOG_FILE"):  # also keep a UTF-8 log (scripts/windows/enrich-content.cmd)
         fh = logging.FileHandler(os.environ["HMAPS_LOG_FILE"], encoding="utf-8")
         fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
         logging.getLogger().addHandler(fh)

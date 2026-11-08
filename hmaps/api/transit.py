@@ -33,7 +33,7 @@ from .settings import settings
 
 log = logging.getLogger("hmaps.api.transit")
 
-NOT_READY = ("נתוני התחבורה הציבורית עדיין לא הותקנו. כדי להוסיף אותם הריצו את update-windows.cmd "
+NOT_READY = ("נתוני התחבורה הציבורית עדיין לא הותקנו. כדי להוסיף אותם הריצו את scripts/windows/update-windows.cmd "
              "(או: python -m hmaps.etl gtfs).")
 
 

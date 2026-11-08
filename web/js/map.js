@@ -253,7 +253,7 @@ export class MapView {
   }
 
   // ----------------------------------------------------------------- 3D mode
-  /** Real relief needs the DEM (data/tiles/terrain.mbtiles, built by build-terrain.cmd). */
+  /** Real relief needs the DEM (data/tiles/terrain.mbtiles, built by scripts/windows/build-terrain.cmd). */
   get has3dTerrain() {
     return !!this.meta?.terrain?.dem?.tiles;
   }

@@ -2,7 +2,7 @@ name: Aerial photos (offline package)
 run-name: "Aerial photos z${{ inputs.maxzoom }} · round ${{ inputs.round }}"
 
 # Downloads the govmap orthophoto for all of Israel up to zoom 16 (~158,000 tiles, ~4 GB, ~9 h at
-# govmap's pace) into data/tiles/satellite.mbtiles – the same download as `download-satellite.cmd
+# govmap's pace) into data/tiles/satellite.mbtiles – the same download as `scripts/windows/download-satellite.cmd`
 # --level full` on a PC – and publishes it as a DRAFT release "satellite-z<maxzoom>".
 #
 # Why a draft: the aerial photos are © Survey of Israel / govmap and licensed for personal use only,

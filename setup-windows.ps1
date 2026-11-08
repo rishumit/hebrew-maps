@@ -96,7 +96,7 @@ if (-not $env:HMAPS_SKIP_TRANSIT) {
   if ($Update) { $gt += "--force" }
   & $py @gt
   if ($LASTEXITCODE -eq 0) { Ok "public transport ready (timetables are valid for about a month - update weekly)" }
-  else { Warn "public transport timetables were not built - everything else works. Retry: update-transit-windows.cmd" }
+  else { Warn "public transport timetables were not built - everything else works. Retry: scripts/windows/update-transit-windows.cmd" }
 }
 
 # ------------------------------------------------------------------ 6. basemap (optional)
@@ -104,7 +104,7 @@ if (-not $SkipBasemap) {
   Step 6 6 "Building the full basemap (portable Java; 15-40 minutes)"
   & $py tools\basemap.py
   if ($LASTEXITCODE -eq 0) { Ok "basemap ready" }
-  else { Warn "basemap was not built - the map keeps working with the simple basemap. You can retry later: update-windows.cmd" }
+  else { Warn "basemap was not built - the map keeps working with the simple basemap. You can retry later: scripts/windows/update-windows.cmd" }
 }
 
 # ------------------------------------------------------------------ extra: topographic layers (optional, built once)
@@ -113,7 +113,7 @@ if (-not $env:HMAPS_SKIP_TERRAIN) {
   & $uv pip install --python $py -r requirements-terrain.txt
   if ($LASTEXITCODE -eq 0) { & $py -m tools.terrain build --if-missing --clean }
   if ($LASTEXITCODE -eq 0) { Ok "topographic layers ready" }
-  else { Warn "topographic layers were not built - everything else works. You can retry later: build-terrain.cmd" }
+  else { Warn "topographic layers were not built - everything else works. You can retry later: scripts/windows/build-terrain.cmd" }
 }
 
 $mins = [math]::Round(((Get-Date) - $started).TotalMinutes)
