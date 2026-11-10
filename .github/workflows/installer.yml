@@ -257,6 +257,16 @@ jobs:
           retention-days: 30
 
       # -----------------------------------------------------------------------
+      # 9b. Upload PROGRAM-only installer as a separate artifact
+      # -----------------------------------------------------------------------
+      - name: Upload PROGRAM-only installer artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}
+          path: installer/HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}.exe
+          retention-days: 30
+
+      # -----------------------------------------------------------------------
       # 10. Version-less copy for a stable download link (the product site links to
       #     https://github.com/<repo>/releases/latest/download/HebrewMaps-Setup.exe).
       #     The weekly data releases are created with --latest=false, so "latest" is
