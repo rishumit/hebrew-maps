@@ -699,7 +699,7 @@ REMOTE_IMG_HOSTS = "https://commons.wikimedia.org https://upload.wikimedia.org h
 def _csp() -> str:
     """Photos may come from Wikimedia / Mapillary unless the map runs fully offline (HMAPS_REMOTE_IMAGES=0)."""
     img = "'self' data: blob:" + (" " + REMOTE_IMG_HOSTS if settings.remote_images else "")
-    return (f"default-src 'self'; img-src {img}; "
+    return (f"default-src 'self' tel:; img-src {img}; "
             "style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; "
             "child-src 'self' blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; "
             "form-action 'self'")
