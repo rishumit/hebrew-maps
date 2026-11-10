@@ -45,6 +45,7 @@
   <link rel="modulepreload" href="/js/satellite-offline.js">
   <link rel="modulepreload" href="/js/updates.js">
   <link rel="modulepreload" href="/js/settings.js">
+  <link rel="modulepreload" href="/js/measure.js">
   <style>
     /* loading screen until the map is drawn (removed by web/js/app.js); same look as src-tauri/ui/index.html */
     .boot { --boot-bg: #F2F5F9; --boot-glow: #FFFFFF; --boot-line: rgba(37,99,235,.13); --boot-fg: #0F172A; --boot-muted: #64748B;
@@ -166,6 +167,7 @@
       <button type="button" role="menuitem" data-act="from"><span data-icon="m_depart"></span>מסלול מכאן</button>
       <button type="button" role="menuitem" data-act="to"><span data-icon="m_arrive"></span>מסלול לכאן</button>
       <button type="button" role="menuitem" data-act="nearby"><span data-icon="search"></span>מה יש בסביבה</button>
+      <button type="button" role="menuitem" data-act="measure"><span data-icon="ruler"></span>מדידת מרחק</button>
       <button type="button" role="menuitem" data-act="fav"><span data-icon="star"></span>שמירה במועדפים</button>
       <button type="button" role="menuitem" data-act="copy"><span data-icon="copy"></span>העתקת קואורדינטות</button>
       <button type="button" role="menuitem" data-act="print"><span data-icon="print"></span>הדפסת המפה</button>

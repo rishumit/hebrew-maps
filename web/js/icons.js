@@ -113,6 +113,7 @@ export const ICONS = {
   alert: 'M12 3l10 18H2zM12 10v5M12 18h.01',
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
   filter: 'M4 5h16l-6 8v6l-4-2v-4z',
+  ruler: 'M4 4h16v4L4 20V4zM8 4v16M12 4v16M16 4v16',
 
   // --- maneuvers ----------------------------------------------------------------
   m_straight: 'M12 20V5M6 11l6-6 6 6',

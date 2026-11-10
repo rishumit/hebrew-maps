@@ -18,6 +18,7 @@ import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
 import { errorView, loadingView, placeView, pointView, poiView, resultsView, streetView, visibleListView } from './views.js';
+import { MeasureTool } from './measure.js';
 
 // card rows that scroll sideways (action buttons, photo strip): no scrollbar, arrow + fade at the end
 initHScroll('.actions, .g-strip');
@@ -85,6 +86,7 @@ const app = {
     this.printing = new PrintManager(this);
     this.saved = new Saved(this);
     this.hoverCard = new PoiHoverCard(this, $('#map'));
+    this.measureTool = new MeasureTool(this.map);
 
     this._initSearch();
     this._initChips();
@@ -630,6 +632,7 @@ const app = {
         case 'from': this.directions.open({ from: pt }); break;
         case 'to': this.directions.open({ to: pt }); break;
         case 'nearby': this._nearbyResults(lat, lon); break;
+        case 'measure': this.measureTool.start({ lat, lon }); break;
         case 'copy': copyText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'הקואורדינטות הועתקו'); break;
         case 'fav': this._favoriteAt(lat, lon); break;
         case 'print':

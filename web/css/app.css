@@ -748,3 +748,59 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 .ctrl-maptype:hover .maptype-thumb { filter: brightness(1.05); }
 .ctrl-maptype[aria-expanded="true"] { border-color: var(--primary); }
 #layers-pop .layer-checks { display: flex; flex-direction: column; }
+/* =====================================================
+   Measurement Tool
+   ===================================================== */
+
+.measure-display {
+  position: absolute;
+  bottom: 24px;
+  right: 50%;
+  transform: translateX(50%);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  min-width: 300px;
+  max-width: 500px;
+  pointer-events: none;
+}
+
+.measure-total,
+.measure-area {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.measure-total strong,
+.measure-area strong {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.measure-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  line-height: 1.4;
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+  .measure-display {
+    right: 12px;
+    left: 12px;
+    transform: none;
+    min-width: unset;
+  }
+  
+  .measure-hint {
+    font-size: 12px;
+  }
+}
