@@ -4,7 +4,7 @@
  */
 
 import { svg } from './icons.js';
-import bus from './util.js';
+import { bus } from './util.js';
 
 /**
  * Calculate great-circle distance between two points (Haversine formula).
