@@ -804,3 +804,66 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
     font-size: 12px;
   }
 }
+
+/* =====================================================
+   Tabs for History Dialog
+   ===================================================== */
+
+.tabs-container {
+  margin: -1rem -1.5rem 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  background: var(--surface-2);
+  padding: 0 1rem;
+}
+
+.tabs [role="tab"] {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s, background 0.2s;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.tabs [role="tab"]:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tabs [role="tab"][aria-selected="true"] {
+  color: var(--primary);
+  background: var(--bg);
+}
+
+.tabs [role="tab"][aria-selected="true"]::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--primary);
+}
+
+.tab-content {
+  padding: 1rem 1.5rem;
+  min-height: 200px;
+}
+
+.tab-content .results {
+  margin: 0;
+}
+
+.tab-content .r-sub {
+  color: var(--text-muted);
+}

@@ -698,19 +698,98 @@ const app = {
   },
 
   _recentDialog() {
-    const items = this.recent();
-    openDialog('חיפושים אחרונים', items.length
-      ? `<ul class="results">${items.map((r, i) => `<li class="result"><button type="button" data-i="${i}">
-          <span class="r-icon neutral" aria-hidden="true">${svg('history', { size: 18 })}</span><span class="r-body"><span class="r-name">${esc(r.name)}</span>
-          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>
-         <p><button type="button" class="btn btn-secondary btn-sm" data-clear>ניקוי ההיסטוריה</button></p>`
-      : '<p>אין חיפושים אחרונים.</p>', (dlg) => {
-      dlg.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => {
-        closeDialog();
-        this.openItem(items[Number(b.dataset.i)]);
-      }));
+    const searches = this.recentSearches();
+    const destinations = this.recentDestinations();
+    const routes = this.recentRoutes();
+    
+    const modeIcon = { car: 'car', foot: 'walk', bike: 'bike' };
+    const modeLabel = { car: 'רכב', foot: 'הליכה', bike: 'אופניים' };
+    
+    const searchesHtml = searches.length
+      ? `<ul class="results">${searches.map((r, i) => `<li class="result"><button type="button" data-search="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg('search', { size: 18 })}</span>
+          <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין חיפושים אחרונים</p>';
+    
+    const destinationsHtml = destinations.length
+      ? `<ul class="results">${destinations.map((r, i) => `<li class="result"><button type="button" data-dest="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg('pin', { size: 18 })}</span>
+          <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין יעדים אחרונים</p>';
+    
+    const routesHtml = routes.length
+      ? `<ul class="results">${routes.map((r, i) => `<li class="result"><button type="button" data-route="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg(modeIcon[r.mode] || 'directions', { size: 18 })}</span>
+          <span class="r-body">
+            <span class="r-name">${esc(r.from.name)} ${svg('back', { size: 14 })} ${esc(r.to.name)}</span>
+            <span class="r-sub" style="display:block">${esc(modeLabel[r.mode])}</span>
+          </span></button></li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין מסלולים אחרונים</p>';
+    
+    const hasAny = searches.length || destinations.length || routes.length;
+    
+    openDialog('היסטוריה', `
+      <div class="tabs-container">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-tab="searches" aria-selected="true" aria-controls="tab-searches">חיפושים${searches.length ? ` (${searches.length})` : ''}</button>
+          <button type="button" role="tab" data-tab="destinations" aria-selected="false" aria-controls="tab-destinations">יעדים${destinations.length ? ` (${destinations.length})` : ''}</button>
+          <button type="button" role="tab" data-tab="routes" aria-selected="false" aria-controls="tab-routes">מסלולים${routes.length ? ` (${routes.length})` : ''}</button>
+        </div>
+        <div id="tab-searches" class="tab-content" role="tabpanel" aria-labelledby="tab-searches">${searchesHtml}</div>
+        <div id="tab-destinations" class="tab-content" role="tabpanel" aria-labelledby="tab-destinations" hidden>${destinationsHtml}</div>
+        <div id="tab-routes" class="tab-content" role="tabpanel" aria-labelledby="tab-routes" hidden>${routesHtml}</div>
+      </div>
+      ${hasAny ? '<p><button type="button" class="btn btn-secondary btn-sm" data-clear>ניקוי כל ההיסטוריה</button></p>' : ''}
+    `, (dlg) => {
+      // Tab switching
+      const tabs = dlg.querySelectorAll('[role="tab"]');
+      const panels = dlg.querySelectorAll('[role="tabpanel"]');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const targetId = tab.dataset.tab;
+          tabs.forEach((t) => t.setAttribute('aria-selected', t === tab ? 'true' : 'false'));
+          panels.forEach((p) => {
+            const show = p.id === `tab-${targetId}`;
+            p.hidden = !show;
+          });
+        });
+      });
+      
+      // Search clicks
+      dlg.querySelectorAll('[data-search]').forEach((b) => {
+        const item = searches[Number(b.dataset.search)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.openItem(item);
+        });
+      });
+      
+      // Destination clicks
+      dlg.querySelectorAll('[data-dest]').forEach((b) => {
+        const item = destinations[Number(b.dataset.dest)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.openItem(item);
+        });
+      });
+      
+      // Route clicks
+      dlg.querySelectorAll('[data-route]').forEach((b) => {
+        const route = routes[Number(b.dataset.route)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.directions.open({ from: route.from, to: route.to, mode: route.mode });
+        });
+      });
+      
+      // Clear all
       dlg.querySelector('[data-clear]')?.addEventListener('click', () => {
-        store.set('recent', []);
+        store.set('recentSearches', []);
+        store.set('recentDestinations', []);
+        store.set('recentRoutes', []);
+        store.set('recent', []); // backward compatibility
         closeDialog();
         toast('ההיסטוריה נוקתה');
       });
@@ -773,6 +852,9 @@ const app = {
         e.preventDefault();
         $('#q').focus();
         $('#q').select();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h' && !typing) {
+        e.preventDefault();
+        this._recentDialog();
       } else if (e.key === '?' && !typing) {
         e.preventDefault();
         shortcutsDialog();
@@ -814,9 +896,28 @@ const app = {
     return store.get('recent', []);
   },
 
+  recentSearches() {
+    return store.get('recentSearches', []);
+  },
+
+  recentDestinations() {
+    return store.get('recentDestinations', []);
+  },
+
+  recentRoutes() {
+    return store.get('recentRoutes', []);
+  },
+
   remember(item) {
     if (!item?.id || item.type === 'category' || item.type === 'history') return;
     const entry = { id: item.id, type: item.type, name: item.name, secondary: item.secondary, location: item.location };
+    
+    // Save to destinations
+    const destinations = this.recentDestinations().filter((r) => r.id !== entry.id);
+    destinations.unshift(entry);
+    store.set('recentDestinations', destinations.slice(0, 15));
+    
+    // Keep old 'recent' for backward compatibility
     const list = this.recent().filter((r) => r.id !== entry.id);
     list.unshift(entry);
     store.set('recent', list.slice(0, 12));
@@ -824,9 +925,36 @@ const app = {
 
   _rememberQuery(q) {
     const entry = { id: `q:${q}`, type: 'category', name: q, query: q, secondary: 'חיפוש' };
+    
+    // Save to searches
+    const searches = this.recentSearches().filter((r) => r.id !== entry.id);
+    searches.unshift(entry);
+    store.set('recentSearches', searches.slice(0, 12));
+    
+    // Keep old 'recent' for backward compatibility
     const list = this.recent().filter((r) => r.id !== entry.id);
     list.unshift(entry);
     store.set('recent', list.slice(0, 12));
+  },
+
+  _rememberRoute(from, to, mode) {
+    if (!from?.lat || !to?.lat) return;
+    const entry = {
+      from: { name: from.name, lat: from.lat, lon: from.lon },
+      to: { name: to.name, lat: to.lat, lon: to.lon },
+      mode: mode || 'car',
+      timestamp: Date.now()
+    };
+    
+    // Check if identical route already exists
+    const routes = this.recentRoutes().filter((r) => 
+      !(r.from.lat === entry.from.lat && r.from.lon === entry.from.lon &&
+        r.to.lat === entry.to.lat && r.to.lon === entry.to.lon &&
+        r.mode === entry.mode)
+    );
+    
+    routes.unshift(entry);
+    store.set('recentRoutes', routes.slice(0, 10));
   },
 
   // ------------------------------------------------------------------ url state & sharing
@@ -981,7 +1109,7 @@ function closeDialog() {
 
 function shortcutsDialog() {
   const rows = [
-    ['/', 'מעבר לתיבת החיפוש'], ['Ctrl + K', 'מעבר לתיבת החיפוש'], ['↑ ↓', 'מעבר בין הצעות החיפוש'], ['Enter', 'בחירה / חיפוש'],
+    ['/', 'מעבר לתיבת החיפוש'], ['Ctrl + K', 'מעבר לתיבת החיפוש'], ['Ctrl + H', 'פתיחת היסטוריה'], ['↑ ↓', 'מעבר בין הצעות החיפוש'], ['Enter', 'בחירה / חיפוש'],
     ['Esc', 'סגירה / חזרה'], ['D (ג)', 'תכנון מסלול'], ['L (ך)', 'הצגת המיקום שלי'], ['N (מ)', 'איפוס כיוון לצפון'], ['T (א)', 'תצוגה בתלת-ממד'],
     ['?', 'הצגת קיצורי המקלדת'],
   ];

@@ -142,6 +142,12 @@ export class Directions {
       this.selected = 0;
       this.loading = false;
       if (!this.routes.length) this.error = 'לא נמצא מסלול';
+      
+      // Save to recent routes
+      if (this.routes.length) {
+        this.app._rememberRoute(this.from, this.to, this.mode);
+      }
+      
       this._draw(true);
       this._refresh();
       if (this.routes.length) {
