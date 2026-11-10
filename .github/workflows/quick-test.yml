@@ -1,0 +1,114 @@
+name: Quick Test Build (Program Only)
+
+# Fast build workflow for testing - builds PROGRAM-only installer without data
+# Triggered manually only - for quick testing of code changes
+
+on:
+  workflow_dispatch:
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  quick-build:
+    name: Quick Test Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (python tools/set_version.py).Trim()
+          echo "value=$v-test" >> $env:GITHUB_OUTPUT
+          Write-Host "Test version: $v-test"
+
+      - name: Set version
+        shell: pwsh
+        run: python tools/set_version.py ${{ steps.version.outputs.value }}
+
+      - name: Create venv and install dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .venv\Scripts\pip.exe install --upgrade pip
+          .venv\Scripts\pip.exe install -r requirements.txt
+          .venv\Scripts\pip.exe install "pyinstaller==6.10.0" -r requirements-icons.txt
+
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            Write-Host "Inno Setup already present"
+          } else {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Generate icons
+        shell: pwsh
+        run: .venv\Scripts\python.exe tools\make_icons.py
+
+      - name: PyInstaller bundle
+        shell: pwsh
+        run: |
+          .venv\Scripts\pyinstaller.exe installer\hebrew-maps.spec `
+            --distpath installer\dist `
+            --workpath installer\build `
+            --noconfirm
+
+      - name: Smoke test
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File installer\smoke-test.ps1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build Tauri desktop exe
+        shell: pwsh
+        run: |
+          cargo build --release --locked --manifest-path src-tauri\Cargo.toml
+          Copy-Item src-tauri\target\release\hebrew-maps-desktop.exe installer\dist\hebrew-maps\ -Force
+
+      - name: Fetch web assets
+        shell: pwsh
+        run: .venv\Scripts\python.exe tools\fetch_assets.py
+
+      - name: World map
+        shell: pwsh
+        run: |
+          if (-not (Test-Path web\world\world.json)) { 
+            .venv\Scripts\python.exe -m tools.world 
+          }
+
+      # SKIP data download for quick testing
+
+      - name: Build PROGRAM-only installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          Push-Location installer
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.value }} /DProgramOnly=1 hebrew-maps.iss
+          Pop-Location
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload test installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: HebrewMaps-QuickTest-${{ steps.version.outputs.value }}
+          path: installer/HebrewMaps-Setup-Program-${{ steps.version.outputs.value }}.exe
+          retention-days: 7
