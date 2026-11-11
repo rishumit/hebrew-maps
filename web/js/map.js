@@ -4,7 +4,6 @@
 import { logoMarkerImage, markerImage, shieldImage } from './icons.js';
 import { fallbackStyle, omtStyle, outdoorLayers, addSatellite, THEMES } from './style.js';
 import { bus, prefersReducedMotion } from './util.js';
-import { ERUV_CLICK_LAYERS, eruvLayers, eruvLines, loadEruv } from './eruv.js';
 import { BIBLE_CLICK_LAYERS, bibleGeo, bibleLayers, loadBible } from './bible.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -30,7 +29,6 @@ export const LAYER_GROUPS = {
   pois: { label: 'נקודות עניין', test: (l) => ['pois', 'pois-cluster', 'pois-cluster-count'].includes(l.id) },
   trails: { label: 'שבילים מסומנים', test: (l) => l.id.startsWith('trails-') },
   parks: { label: 'שמורות טבע וגנים לאומיים', test: (l) => l.id === 'parks-fill' || l.id === 'parks-outline' },
-  eruv: { label: 'קווי עירוב (בקירוב)', test: (l) => l.id.startsWith('eruv-') },
   bible: { label: 'מקומות בתנ״ך', test: (l) => l.id.startsWith('bible-') },
   labels: { label: 'שמות ותוויות', test: (l) => l.type === 'symbol' && ['openmaptiles', 'fallback', 'world', 'contours'].includes(l.source) },
   buildings: { label: 'מבנים', test: (l) => l.id === 'building' || l.id === 'building-3d' },
@@ -107,7 +105,6 @@ export class MapView {
 
     this.map.on('style.load', () => this._installOverlays());
     // the eruv lines arrive after the map was created (small static file)
-    loadEruv().then(() => this.map.getSource('eruv')?.setData(eruvLines()));
     this.map.on('styleimagemissing', (e) => this._missingImage(e.id));
     this.map.on('error', (e) => {
       const msg = e?.error?.message || '';
@@ -390,7 +387,6 @@ export class MapView {
     }
     if (!m.getSource('pois')) m.addSource('pois', { type: 'vector', tiles: [this._poiTilesUrl()], minzoom: 6, maxzoom: 18 });
     this._installOutdoor();
-    this._installEruv();
     this._installBible();
 
     this._addLayerSafe({ id: 'highlight-fill', type: 'fill', source: 'highlight',
@@ -498,16 +494,6 @@ export class MapView {
     // lines and areas go under the basemap labels; trail names stay on top
     const firstLabel = (m.getStyle().layers || []).find((l) => l.type === 'symbol')?.id;
     for (const layer of outdoorLayers(this._resolvedTheme())) {
-      this._addLayerSafe(layer, layer.type === 'symbol' ? undefined : firstLabel);
-    }
-  }
-
-  /** Approximate eruv lines (web/eruv/eruv.json, see web/js/eruv.js) – under the labels. */
-  _installEruv() {
-    const m = this.map;
-    if (!m.getSource('eruv')) m.addSource('eruv', { type: 'geojson', data: eruvLines() });
-    const firstLabel = (m.getStyle().layers || []).find((l) => l.type === 'symbol')?.id;
-    for (const layer of eruvLayers(this._resolvedTheme() === 'dark')) {
       this._addLayerSafe(layer, layer.type === 'symbol' ? undefined : firstLabel);
     }
   }
@@ -799,7 +785,7 @@ export class MapView {
       m.on('mouseenter', layer, () => (m.getCanvas().style.cursor = 'pointer'));
       m.on('mouseleave', layer, () => (m.getCanvas().style.cursor = ''));
     };
-    ['pois', 'pois-cluster', 'results', ...ERUV_CLICK_LAYERS, ...BIBLE_CLICK_LAYERS].forEach(pointer);
+    ['pois', 'pois-cluster', 'results', ...BIBLE_CLICK_LAYERS].forEach(pointer);
     // hover preview of a POI card (rendered by hovercard.js)
     let hovered = null;
     const hoverEnd = (immediate = false) => {
@@ -841,12 +827,6 @@ export class MapView {
         ? m.queryRenderedFeatures(box, { layers: BIBLE_CLICK_LAYERS.filter((l) => m.getLayer(l)) })[0] : null;
       if (bible) {
         bus.emit('bible:select', { id: bible.properties.id, m: bible.properties.m });
-        return;
-      }
-      const eruv = this.layerOn('eruv')
-        ? m.queryRenderedFeatures(box, { layers: ERUV_CLICK_LAYERS.filter((l) => m.getLayer(l)) })[0] : null;
-      if (eruv) {
-        bus.emit('eruv:select', { map: eruv.properties.map });
         return;
       }
       const trail = this.showOutdoor

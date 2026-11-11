@@ -12,7 +12,6 @@ import { Panel } from './panel.js';
 import { PrintManager } from './printing.js';
 import { Saved } from './saved.js';
 import { trailView } from './trails.js';
-import { eruvHomeView, eruvMapView, loadEruv } from './eruv.js';
 import { bibleHomeView, loadBible, openBiblePlace } from './bible.js';
 import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
@@ -607,7 +606,6 @@ const app = {
       else if (act === 'directions') this.directions.open({});
       else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
-      else if (act === 'eruv') loadEruv().then(() => this.panel.show(eruvHomeView(this)));
       else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
       else if (act === 'saved') this.saved.open();
@@ -822,7 +820,6 @@ const app = {
   // ------------------------------------------------------------------ events & keyboard
   _initEvents() {
     bus.on('select', (item) => this.openItem(item));
-    bus.on('eruv:select', ({ map }) => this.panel.show(eruvMapView(this, map)));
     bus.on('bible:select', ({ id, m }) => openBiblePlace(this, id, m, { fly: false }));
     bus.on('panel:close', (view) => this._onPanelClosed(view));
     bus.on('panel:view', () => this.updateTitle());

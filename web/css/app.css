@@ -689,31 +689,6 @@ kbd { display: inline-block; min-width: 26px; padding: 1px 7px; border: 1px soli
 @media (prefers-reduced-motion: reduce) { .hs > .hs-track { scroll-behavior: auto; } .hs-next { transition: none; } }
 @media print { .hs-next { display: none; } }
 
-/* ---------------------------------------------------------------- eruvin (web/js/eruv.js) */
-.eruv-notice { display: flex; gap: var(--space-2); align-items: flex-start; margin: var(--space-2) var(--space-4); padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md); background: color-mix(in srgb, var(--warning) 10%, transparent); color: var(--text-strong); font-size: var(--text-sm); }
-.eruv-notice .icon { color: var(--warning); flex: none; margin-top: 2px; }
-.eruv-tabs { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-4); }
-.eruv-tabs .filter-btn { display: inline-flex; align-items: center; gap: 6px; }
-.eruv-filter { display: block; padding: var(--space-2) var(--space-4); }
-.eruv-filter input { width: 100%; height: 36px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-full);
-  background: var(--surface); color: var(--text-strong); font: inherit; }
-.eruv-list { list-style: none; margin: 0; padding: 0 var(--space-4); }
-.eruv-area, .eruv-map { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
-.eruv-n { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; margin-inline-end: 6px; border-radius: var(--radius-full);
-  background: var(--surface-3); color: var(--text-muted); font-size: var(--text-xs); font-weight: 600; }
-.eruv-phones, .eruv-links, .eruv-contact { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-3); margin-top: 4px; font-size: var(--text-sm); }
-.eruv-phone { display: inline-flex; align-items: center; gap: 2px; }
-.eruv-phone .ir-btn { background: none; border: 0; cursor: pointer; color: var(--text-muted); padding: 2px; border-radius: var(--radius-md); }
-.eruv-links a, .eruv-src a { display: inline-flex; align-items: center; gap: 3px; }
-.eruv-txt { font-size: var(--text-sm); margin: 4px 0 0; }
-.eruv-pad { padding: var(--space-1) var(--space-4); margin: 0; }
-.eruv-src { padding: var(--space-4); font-size: var(--text-sm); color: var(--text-muted); }
-.eruv-sum { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); margin: 4px 0 0; font-size: var(--text-sm); }
-.eruv-sum dt { color: var(--text-muted); } .eruv-sum dd { margin: 0; }
-.eruv-here-list { list-style: none; margin: 0; padding: 0 var(--space-4); display: grid; gap: var(--space-2); font-size: var(--text-sm); }
-.eruv-links .link-btn, .eruv-here .link-btn { display: inline-flex; align-items: center; gap: 3px; }
-
 /* ---------------------------------------------------------------- places of the Tanach (web/js/bible.js) */
 .bible-pad { padding: var(--space-1) var(--space-4); margin: 0; }
 .bible-tools { padding: var(--space-2) var(--space-4); }
