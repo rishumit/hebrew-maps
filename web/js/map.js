@@ -110,8 +110,9 @@ export class MapView {
       const msg = e?.error?.message || '';
       if (!/Failed to fetch|AbortError|404|204/.test(msg)) console.warn('map error:', msg);
     });
-    this.map.on('moveend', () => bus.emit('map:moved', this.view()));
-    this.map.on('rotate', () => bus.emit('map:rotate', this.map.getBearing()));
+    // `quiet`: game mode (web/js/game.js) moves the camera every frame; the app must not follow it
+    this.map.on('moveend', () => { if (!this.quiet) bus.emit('map:moved', this.view()); });
+    this.map.on('rotate', () => { if (!this.quiet) bus.emit('map:rotate', this.map.getBearing()); });
     this._bindInteractions();
     const canvas = this.map.getCanvas();
     canvas.setAttribute('aria-label', 'מפה אינטראקטיבית של ישראל. חיצים להזזה, פלוס ומינוס לשינוי גודל');

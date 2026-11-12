@@ -1,0 +1,132 @@
+/* Game mode ("מצב משחק") – the dashboard over the map (web/js/game.js). */
+
+/* the regular interface steps aside while driving */
+body.game-on .topbar, body.game-on .map-controls, body.game-on #panel, body.game-on #banner, body.game-on .popover,
+body.game-on #ctx-menu, body.game-on .hover-card, body.game-on .maplibregl-ctrl-bottom-left, body.game-on .maplibregl-ctrl-bottom-right { display: none !important; }
+body.game-on #map { cursor: default; }
+
+.ctrl-game svg { display: block; }
+.game [hidden] { display: none !important; }
+
+.game { position: absolute; inset: 0; z-index: 40; font-family: 'Heebo', 'Segoe UI', system-ui, sans-serif; color: #F4F6FA;
+  user-select: none; -webkit-user-select: none; touch-action: none; overflow: hidden;
+  --g-glass: rgba(14, 19, 28, .78); --g-line: rgba(255, 255, 255, .14); --g-accent: #35E08A; --g-bad: #FF4D4F; --g-warn: #FFC21A; }
+.game::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 0 rgba(255, 60, 60, 0); transition: box-shadow .25s; }
+.game.speeding::after { box-shadow: inset 0 0 90px 10px rgba(255, 50, 50, .45); }
+
+.game-card, .game-btn, .game-speedo, .game-street, .game-panel, .game-msg { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.game-card { background: var(--g-glass); border: 1px solid var(--g-line); border-radius: 16px; box-shadow: 0 10px 30px -12px rgba(0, 0, 0, .6); }
+
+.game-top { position: absolute; top: 14px; inset-inline: 14px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.game-score { padding: 10px 16px 9px; min-width: 150px; }
+.gs-main { display: flex; align-items: baseline; gap: 10px; }
+.gs-label { font-size: 13px; color: #A9B4C4; }
+.gs-main b { font-size: 34px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; direction: ltr; }
+.gs-row { display: flex; gap: 12px; margin-top: 6px; font-size: 13px; color: #C9D2DF; white-space: nowrap; }
+.gs-row b { color: #fff; font-variant-numeric: tabular-nums; }
+
+.game-mission { display: flex; align-items: center; gap: 12px; padding: 9px 18px 9px 16px; border-color: rgba(53, 224, 138, .5); }
+.gm-arrow { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(53, 224, 138, .16); color: var(--g-accent); transition: transform .12s linear; }
+.gm-kind { font-size: 13px; color: #A9E9C8; }
+.gm-dist { font-size: 15px; color: #DDE5EF; max-width: 46vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-dist b { font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
+
+.game-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 280px; }
+.game-btn { height: 38px; padding: 0 13px; border-radius: 11px; border: 1px solid var(--g-line); background: var(--g-glass); color: #EEF2F7;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.game-btn:hover { background: rgba(40, 50, 66, .9); }
+.game-btn:focus-visible, .game-start:focus-visible { outline: 3px solid #7CC4FF; outline-offset: 2px; }
+.game-btn[aria-pressed="false"] { opacity: .55; text-decoration: line-through; }
+.game-exit { background: rgba(170, 30, 38, .88); border-color: rgba(255, 255, 255, .25); }
+.game-exit:hover { background: rgba(200, 40, 48, .95); }
+
+.game-msgs { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; pointer-events: none; width: min(92vw, 560px); }
+.game-msg { padding: 9px 20px; border-radius: 999px; background: var(--g-glass); border: 1px solid var(--g-line); font-size: 17px; font-weight: 700;
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, .7); animation: game-pop .28s cubic-bezier(.2, 1.4, .4, 1); transition: opacity .45s, transform .45s; text-align: center; }
+.game-msg.bad { background: rgba(160, 22, 30, .92); border-color: rgba(255, 150, 150, .5); }
+.game-msg.good { background: rgba(14, 110, 66, .92); border-color: rgba(140, 255, 200, .45); }
+.game-msg.out { opacity: 0; transform: translateY(-8px); }
+@keyframes game-pop { from { opacity: 0; transform: scale(.85) translateY(10px); } to { opacity: 1; transform: none; } }
+
+.game-dash { position: absolute; bottom: 18px; left: 18px; display: flex; align-items: flex-end; gap: 14px; direction: ltr; }
+.game-speedo { position: relative; width: 190px; height: 190px; border-radius: 50%; }
+.game-speedo svg { width: 100%; height: 100%; display: block; }
+.sp-bg { fill: rgba(12, 16, 24, .84); stroke: rgba(255, 255, 255, .2); stroke-width: 2; }
+.sp-arc { fill: none; stroke: rgba(255, 255, 255, .22); stroke-width: 5; stroke-linecap: round; }
+.sp-over { fill: none; stroke: var(--g-bad); stroke-width: 5; stroke-linecap: round; opacity: .9; }
+.tk { stroke: rgba(255, 255, 255, .5); stroke-width: 1.4; }
+.tk.big { stroke: #fff; stroke-width: 2.4; }
+.tl { fill: #D8DFE9; font-size: 12px; font-weight: 600; text-anchor: middle; }
+.sp-needle { fill: #FF5A3C; transition: transform .08s linear; filter: drop-shadow(0 0 3px rgba(255, 90, 60, .8)); }
+.sp-hub { fill: #E8ECF2; }
+.sp-num { position: absolute; inset-inline: 0; bottom: 30px; text-align: center; line-height: 1; }
+.sp-num b { display: block; font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sp-num span { font-size: 12px; color: #A9B4C4; direction: rtl; }
+.game.speeding .sp-num b { color: #FF6B6B; }
+.sp-gear { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  font-size: 13px; font-weight: 800; background: rgba(255, 255, 255, .12); color: #CFE6FF; }
+
+/* the speed limit, drawn like the road sign */
+.game-limit { width: 74px; height: 74px; border-radius: 50%; background: #fff; border: 9px solid #D81E2C; display: grid; place-items: center;
+  box-shadow: 0 8px 22px -8px rgba(0, 0, 0, .7); margin-bottom: 8px; }
+.game-limit b { color: #111; font-size: 25px; font-weight: 800; font-family: Arial, sans-serif; }
+.game.speeding .game-limit { animation: game-limit .5s ease-in-out infinite alternate; }
+@keyframes game-limit { to { transform: scale(1.14); box-shadow: 0 0 0 8px rgba(255, 60, 60, .35); } }
+
+.game-light { display: grid; gap: 5px; padding: 8px 7px; border-radius: 14px; background: #101216; border: 2px solid #2B2F37; margin-bottom: 8px; }
+.game-light i { width: 22px; height: 22px; border-radius: 50%; background: #2A2D33; }
+.game-light[data-s="r"] .r { background: #FF2A1F; box-shadow: 0 0 14px #FF2A1F; }
+.game-light[data-s="y"] .y { background: #FFC21A; box-shadow: 0 0 14px #FFC21A; }
+.game-light[data-s="g"] .g { background: #22E06A; box-shadow: 0 0 14px #22E06A; }
+
+.game-street { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); padding: 6px 16px; border-radius: 9px; white-space: nowrap; direction: rtl;
+  background: rgba(20, 78, 160, .9); border: 2px solid rgba(255, 255, 255, .85); font-size: 15px; font-weight: 700; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; }
+
+/* touch pedals */
+.game-touch { position: absolute; inset-inline: 14px; bottom: 18px; display: none; justify-content: space-between; pointer-events: none; direction: ltr; }
+.gt-side { display: flex; gap: 10px; pointer-events: auto; }
+.game-touch button { width: 68px; height: 68px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); background: rgba(14, 19, 28, .6); color: #fff; font: inherit; font-size: 20px; font-weight: 700; touch-action: none; }
+.game-touch button:active { background: rgba(53, 224, 138, .5); }
+.game-touch .gt-gas { height: 96px; border-radius: 20px; background: rgba(20, 120, 70, .65); }
+.game-touch .gt-brake { border-radius: 20px; background: rgba(150, 30, 36, .65); }
+@media (pointer: coarse) {
+  .game-touch { display: flex; }
+  .game-dash { bottom: 128px; transform: scale(.72); transform-origin: bottom left; }
+  .game-street { bottom: 132px; }
+}
+
+.game-intro, .game-paused, .game-loading { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6, 9, 14, .55); padding: 16px; }
+.game-loading { background: rgba(6, 9, 14, .78); text-align: center; font-size: 17px; }
+.gl-spin { width: 46px; height: 46px; margin: 0 auto 14px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, .2); border-top-color: var(--g-accent); animation: game-spin .8s linear infinite; }
+@keyframes game-spin { to { transform: rotate(360deg); } }
+.game-panel { width: min(680px, 100%); max-height: 100%; overflow: auto; padding: 24px 28px; border-radius: 22px; background: rgba(14, 19, 28, .93);
+  border: 1px solid var(--g-line); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .8); text-align: start; user-select: text; }
+.game-panel h2 { margin: 0 0 6px; font-size: 27px; font-weight: 800; }
+.game-panel h3 { margin: 0 0 6px; font-size: 15px; color: var(--g-accent); }
+.gi-sub { margin: 0 0 16px; color: #C4CDDA; font-size: 15.5px; line-height: 1.55; }
+.gi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.gi-grid ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14.5px; color: #DFE5EE; line-height: 1.45; }
+.game-panel kbd { display: inline-block; min-width: 24px; padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25);
+  font: 600 12.5px/1.5 'Heebo', system-ui, sans-serif; text-align: center; direction: ltr; }
+.gi-best { margin: 14px 0 0; color: var(--g-warn); font-weight: 700; min-height: 1em; }
+.game-start { margin-top: 14px; width: 100%; height: 54px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #3BE894, #1FB870); color: #06281A;
+  font: inherit; font-size: 20px; font-weight: 800; cursor: pointer; box-shadow: 0 10px 26px -10px rgba(53, 224, 138, .8); }
+.game-start:hover { filter: brightness(1.07); }
+
+@media (max-width: 720px) {
+  .gi-grid { grid-template-columns: 1fr; }
+  .game-btns { max-width: 150px; }
+  .game-btn { height: 34px; padding: 0 9px; font-size: 13px; }
+  .game-score { min-width: 0; padding: 8px 12px; }
+  .gs-main b { font-size: 26px; }
+  .gs-row { gap: 8px; font-size: 12px; }
+  .game-mission { position: absolute; top: 92px; inset-inline-start: 0; }
+  .game-msgs { top: 160px; }
+  .game-speedo { width: 150px; height: 150px; }
+  .sp-num { bottom: 20px; }
+  .sp-num b { font-size: 27px; }
+  .sp-gear { top: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-msg, .game.speeding .game-limit, .gl-spin { animation: none; }
+}

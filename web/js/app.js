@@ -374,6 +374,7 @@ const app = {
     $('#btn-zoom-out').addEventListener('click', () => this.map.zoomBy(-1));
     $('#btn-north').addEventListener('click', () => this.map.resetNorth());
     $('#btn-3d')?.addEventListener('click', () => this.toggle3D());
+    $('#btn-game')?.addEventListener('click', () => this.startGame());
     bus.on('map:3d', (on) => {
       const b = $('#btn-3d');
       if (b) b.setAttribute('aria-pressed', String(on));
@@ -529,6 +530,30 @@ const app = {
     });
   },
 
+  /**
+   * Game mode: drive a car through the map in 3D (web/js/game.js, loaded on first use).
+   * `at` = { lng, lat } to start there; default: the centre of the map.
+   */
+  async startGame(at = null) {
+    if (this.game?.on || this._gameLoading) return;
+    this._gameLoading = true;
+    try {
+      if (!this.game) {
+        const { DriveGame } = await import('./game.js');
+        this.game = new DriveGame(this);
+      }
+      this._closePops?.();
+      if (this.panel.isOpen) this.panel.close?.();
+      await this.game.start(at);
+    } catch (e) {
+      console.warn('game', e);
+      document.body.classList.remove('game-on');
+      toast('לא ניתן להפעיל את מצב המשחק.', { kind: 'error' });
+    } finally {
+      this._gameLoading = false;
+    }
+  },
+
   toggle3D(force) {
     const on = force ?? !this.map.is3d;
     this.map.set3D(on);
@@ -606,6 +631,7 @@ const app = {
       else if (act === 'directions') this.directions.open({});
       else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
+      else if (act === 'game') this.startGame();
       else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
       else if (act === 'saved') this.saved.open();
@@ -631,6 +657,7 @@ const app = {
         case 'to': this.directions.open({ to: pt }); break;
         case 'nearby': this._nearbyResults(lat, lon); break;
         case 'measure': this.measureTool.start({ lat, lon }); break;
+        case 'game': this.startGame({ lng: lon, lat }); break;
         case 'copy': copyText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'הקואורדינטות הועתקו'); break;
         case 'fav': this._favoriteAt(lat, lon); break;
         case 'print':
@@ -844,6 +871,7 @@ const app = {
       }
     });
     document.addEventListener('keydown', (e) => {
+      if (document.body.classList.contains('game-on')) return; // the keys drive the car (web/js/game.js)
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
       if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
         e.preventDefault();
@@ -865,6 +893,7 @@ const app = {
         else if (e.key === 'd' || e.key === 'ג') this.directions.open({});
         else if (e.key === 'n' || e.key === 'מ') this.map.resetNorth();
         else if (e.key === 't' || e.key === 'א') this.toggle3D();
+        else if (e.key === 'g' || e.key === 'ע') this.startGame();
       }
     });
     window.addEventListener('hashchange', () => {
@@ -1111,7 +1140,7 @@ function shortcutsDialog() {
     ['?', 'הצגת קיצורי המקלדת'],
   ];
   const mapRows = [['חיצים', 'הזזת המפה (כשהמפה בפוקוס)'], ['+ / -', 'הגדלה / הקטנה'], ['Shift + חיצים', 'סיבוב והטיית המפה'],
-    ['גרירה בלחצן ימני', 'סיבוב והטיה (בתלת-ממד)']];
+    ['גרירה בלחצן ימני', 'סיבוב והטיה (בתלת-ממד)'], ['G', 'מצב משחק – נהיגה במפה (חיצים / WASD לנהיגה, Esc ליציאה)']];
   const table = (rs) => `<table class="kbd-table"><tbody>${rs.map(([k, d]) => `<tr><td><kbd>${esc(k)}</kbd></td><td>${esc(d)}</td></tr>`).join('')}</tbody></table>`;
   openDialog('קיצורי מקלדת', `<h3>כללי</h3>${table(rows)}<h3>במפה</h3>${table(mapRows)}
     <p class="r-sub">לחיצה ימנית (או לחיצה ארוכה במגע) על המפה פותחת תפריט: "מה יש כאן?", "מסלול מכאן/לכאן" ועוד.</p>`);

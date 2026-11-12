@@ -14,6 +14,7 @@ const SHELL = [
   '/js/minyanim.js', '/js/logos.js', '/js/bible.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
   '/js/updates.js', '/css/updates.css',
+  '/js/game.js', '/js/game-world.js', '/js/game-gl.js', '/css/game.css',
   // desktop shell (tabs): the map iframes register this worker with scope /, so it serves the shell too
   '/desktop.html', '/css/desktop.css', '/js/desktop.js',
 ];
