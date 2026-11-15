@@ -18,7 +18,8 @@ name: Weekly data release
 #                       versions (hmaps/core/delta.py: changed images only / zstd binary patch of maps.db,
 #                       tiles, transit.npz); skipped – with a notice – when not worth it (≥ 60 % of the full
 #                       package), the old release is gone, the runner disk is short or the time budget is used
-#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the full offline update (split into -partN above ~2 GB)
+#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the full offline update without media
+#                       (split into -partN above ~2 GB)
 #                     + HebrewMaps-Update-YYYY-MM-DD-<component>.zip: a single-component offline update
 #                       for smaller USB transfers; full packages only, no deltas
 #   data-latest       rolling pointer release: the newest manifest.json + full and per-component offline files
@@ -556,12 +557,13 @@ jobs:
         if: steps.manifest.outputs.new != 'none'
         run: |
           mkdir -p old offline latest
-          python tools/release.py bundle --manifest dist/manifest.json --dist dist --list-missing > missing.txt
+          python tools/release.py bundle --manifest dist/manifest.json --dist dist --list-missing \
+            --exclude-components media > missing.txt
           while read -r rel file; do
             [ -n "$file" ] && gh release download "$rel" -p "$file" -D old --clobber
           done < missing.txt
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
-            --date "$DATE" --out offline --stable latest
+            --date "$DATE" --out offline --stable latest --exclude-components media
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
             --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,media,zmanim
           gh release upload "$TAG" offline/*.zip --clobber

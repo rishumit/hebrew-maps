@@ -486,6 +486,28 @@ class UpdaterTest(unittest.TestCase):
         self.assertIn("terrain", updates.bundle_plan(updates.read_bundle(bundle), self.data))
         self.assertFalse(any((self.data / "updates" / "downloads").iterdir()))
 
+    def test_offline_bundle_can_exclude_media_without_affecting_component_download(self):
+        m = release.build_manifest(self.rel, TAG, VERSION, DATE, None, repo="o/r")
+        out = Path(tempfile.mkdtemp(prefix="without-media-", dir=self.root))
+        (bundle,) = release.bundle(m, [self.rel], out, DATE, exclude_components=["media"])
+        manifest = updates.read_bundle(bundle)
+        self.assertNotIn("media", manifest["components"])
+        with zipfile.ZipFile(bundle) as zf:
+            self.assertNotIn(f"hmaps-media-{VERSION}.zip", zf.namelist())
+        missing = {filename for _, filename in
+                   release.bundle_missing(m, [self.root / "nowhere"], exclude_components=["media"])}
+        self.assertNotIn(f"hmaps-media-{VERSION}.zip", missing)
+        manifest_path = out / "manifest.json"
+        manifest_path.write_text(json.dumps(m), encoding="utf-8")
+        missing_output = io.StringIO()
+        with contextlib.redirect_stdout(missing_output):
+            release.main(["bundle", "--manifest", str(manifest_path), "--dist", str(self.root / "nowhere"),
+                          "--list-missing", "--exclude-components", "media"])
+        self.assertNotIn(f"hmaps-media-{VERSION}.zip", missing_output.getvalue())
+
+        (media_bundle,) = release.bundle(m, [self.rel], out, DATE, components=["media"])
+        self.assertEqual(set(updates.read_bundle(media_bundle)["components"]), {"media"})
+
     def test_offline_single_component_bundles(self):
         m = release.build_manifest(self.rel, TAG, VERSION, DATE, None, repo="o/r")
         out = Path(tempfile.mkdtemp(prefix="single-bundle-", dir=self.root))

@@ -521,11 +521,16 @@ def _find(dirs: list[Path], name: str) -> Path | None:
     return None
 
 
-def bundle_missing(manifest: dict, dirs: list[Path]) -> list[tuple[str, str]]:
-    """(release, file) of every component ZIP of the manifest that is not in *dirs* yet."""
+def bundle_missing(manifest: dict, dirs: list[Path],
+                   exclude_components: list[str] | None = None) -> list[tuple[str, str]]:
+    """(release, file) of each included component ZIP that is not in *dirs* yet."""
+    excluded = set(exclude_components or [])
+    unknown = excluded - set(catalog.IDS)
+    if unknown:
+        raise SystemExit("bundle: unknown component(s): " + ", ".join(sorted(unknown)))
     out = []
-    for e in manifest["components"].values():
-        if e.get("file") and not _find(dirs, e["file"]):
+    for cid, e in manifest["components"].items():
+        if cid not in excluded and e.get("file") and not _find(dirs, e["file"]):
             out.append((e.get("release") or manifest.get("release"), e["file"]))
     return out
 
@@ -542,20 +547,25 @@ def stable_name(name: str) -> str:
 
 
 def bundle(manifest: dict, dirs: list[Path], out: Path, date: str, limit: int = BUNDLE_LIMIT,
-           components: list[str] | None = None) -> list[Path]:
-    """Every component ZIP of *manifest* in one (or, above *limit*, a few) offline update file(s).
+           components: list[str] | None = None,
+           exclude_components: list[str] | None = None) -> list[Path]:
+    """Bundle manifest components into one (or, above *limit*, a few) offline update file(s).
 
     Each file is self-contained: a manifest.json listing only the components inside it, the component
-    ZIPs (stored – they are compressed already) and a Hebrew README.txt."""
+    ZIPs (stored – they are compressed already) and a Hebrew README.txt. Components can be selected
+    or excluded; without either option, all components are included."""
     selected = set(components or [])
-    unknown = selected - set(catalog.IDS)
+    excluded = set(exclude_components or [])
+    unknown = (selected | excluded) - set(catalog.IDS)
     if unknown:
         raise SystemExit("bundle: unknown component(s): " + ", ".join(sorted(unknown)))
+    if selected & excluded:
+        raise SystemExit("bundle: a component cannot be both included and excluded")
     entries = [(cid, e) for cid, e in manifest["components"].items()
-               if e.get("file") and (not selected or cid in selected)]
+               if e.get("file") and (not selected or cid in selected) and cid not in excluded]
     if not entries:
         raise SystemExit("bundle: the manifest lists no component files")
-    missing = [f for _, f in bundle_missing(manifest, dirs)]
+    missing = [f for _, f in bundle_missing(manifest, dirs, exclude_components=exclude_components)]
     if missing:
         raise SystemExit("bundle: missing component files: " + ", ".join(missing))
     paths = {cid: _find(dirs, e["file"]) for cid, e in entries}
@@ -604,14 +614,15 @@ def cmd_bundle(args) -> int:
     if not m:
         raise SystemExit("bundle: no manifest")
     dirs = [Path(d) for d in (args.dist or ["dist"])]
+    excluded = [c.strip() for c in args.exclude_components.split(",") if c.strip()] if args.exclude_components else None
     if args.list_missing:
-        for rel, f in bundle_missing(m, dirs):
+        for rel, f in bundle_missing(m, dirs, exclude_components=excluded):
             print(rel, f)
         return 0
     if not args.date or not args.out:
         raise SystemExit("bundle: --date and --out are required")
     selected = [c.strip() for c in args.components.split(",") if c.strip()] if args.components else None
-    files = bundle(m, dirs, Path(args.out), args.date, components=selected)
+    files = bundle(m, dirs, Path(args.out), args.date, components=selected, exclude_components=excluded)
     if args.stable:
         st = Path(args.stable)
         st.mkdir(parents=True, exist_ok=True)
@@ -742,6 +753,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--date", help="YYYY-MM-DD")
     p.add_argument("--out", help="folder for the offline update file(s)")
     p.add_argument("--components", help="comma-separated component ids; emit one offline ZIP per component")
+    p.add_argument("--exclude-components", help="comma-separated component ids to omit from the bundle")
     p.add_argument("--stable", help="also link them here under the stable names of the data-latest release")
     p.add_argument("--list-missing", action="store_true", help="only print '<release> <file>' of absent ZIPs")
     args = ap.parse_args(argv)
