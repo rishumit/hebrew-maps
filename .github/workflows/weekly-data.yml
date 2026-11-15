@@ -551,14 +551,13 @@ jobs:
               --notes "מצביע לגרסת הנתונים העדכנית ביותר: $TAG. התוכנה קוראת מכאן את manifest.json. HebrewMaps-Update.zip – קובץ עדכון למחשב בלי אינטרנט."
           fi
 
-      # a full offline update plus one small, self-contained offline ZIP per component. This lets
-      # computers without internet carry only the component they need on a USB stick.
+      # a full offline update without media plus one small, self-contained ZIP per component.
+      # Fetch all component ZIPs for the individual packages; media is omitted only from the full bundle.
       - name: Offline update file
         if: steps.manifest.outputs.new != 'none'
         run: |
           mkdir -p old offline latest
-          python tools/release.py bundle --manifest dist/manifest.json --dist dist --list-missing \
-            --exclude-components media > missing.txt
+          python tools/release.py bundle --manifest dist/manifest.json --dist dist --list-missing > missing.txt
           while read -r rel file; do
             [ -n "$file" ] && gh release download "$rel" -p "$file" -D old --clobber
           done < missing.txt
