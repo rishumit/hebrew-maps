@@ -66,9 +66,9 @@ on:
         type: boolean
         default: true
       media:
-        description: "תמונות ותוכן (ויקישיתוף)"
+        description: "תמונות ותוכן (ויקישיתוף) – מושהה: לא נבנה בעדכון השבועי, רק בהרצה ידנית כשמסמנים"
         type: boolean
-        default: true
+        default: false
       zmanim:
         description: "זמני תפילות (נדרים פלוס)"
         type: boolean
@@ -401,7 +401,8 @@ jobs:
     name: Images (Wikimedia Commons)
     needs: [plan, maps]
     # also runs when maps was not requested / failed: it then uses the previous release's maps.db
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
+    # PAUSED: the weekly (scheduled) run skips images + content; only a manual run with "media" ticked builds it
+    if: always() && github.event_name == 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
     runs-on: ubuntu-latest
     # ~37k images at Wikimedia's pace take ~20 h, far more than one job may run (360 min max).
     # media.py therefore stops by itself after --max-minutes, the partial set is packaged and
@@ -552,7 +553,7 @@ jobs:
           fi
 
       # a full offline update without media plus one small, self-contained ZIP per component.
-      # Fetch all component ZIPs for the individual packages; media is omitted only from the full bundle.
+      # Media is PAUSED: no offline media file is built or published (the site offers no media download).
       - name: Offline update file
         if: steps.manifest.outputs.new != 'none'
         run: |
@@ -564,7 +565,7 @@ jobs:
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
             --date "$DATE" --out offline --stable latest --exclude-components media
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
-            --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,media,zmanim
+            --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,zmanim
           gh release upload "$TAG" offline/*.zip --clobber
           gh release upload data-latest latest/*.zip --clobber
 
