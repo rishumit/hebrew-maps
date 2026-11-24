@@ -282,7 +282,7 @@
   if (!box) return;
   const REPO = 'rishumit/hebrew-maps';
   const FULL = /^HebrewMaps-Update(?:-part(\d+))?\.zip$/;
-  const SINGLE = /^HebrewMaps-Update-(maps|basemap|terrain|transit|media|zmanim)\.zip$/;
+  const SINGLE = /^HebrewMaps-Update-(maps|basemap|terrain|transit|zmanim)\.zip$/;
   const COMPONENTS = { maps: 'מפה ונקודות עניין', basemap: 'מפת בסיס', terrain: 'טופוגרפיה',
     transit: 'תחבורה ציבורית', media: 'תמונות ותוכן', zmanim: 'זמני תפילות' };
   const fmtSize = (b) => (b >= 1e9

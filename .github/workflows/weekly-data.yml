@@ -18,7 +18,8 @@ name: Weekly data release
 #                       versions (hmaps/core/delta.py: changed images only / zstd binary patch of maps.db,
 #                       tiles, transit.npz); skipped – with a notice – when not worth it (≥ 60 % of the full
 #                       package), the old release is gone, the runner disk is short or the time budget is used
-#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the full offline update (split into -partN above ~2 GB)
+#                     + HebrewMaps-Update-YYYY-MM-DD.zip: the full offline update without media
+#                       (split into -partN above ~2 GB)
 #                     + HebrewMaps-Update-YYYY-MM-DD-<component>.zip: a single-component offline update
 #                       for smaller USB transfers; full packages only, no deltas
 #   data-latest       rolling pointer release: the newest manifest.json + full and per-component offline files
@@ -65,9 +66,9 @@ on:
         type: boolean
         default: true
       media:
-        description: "תמונות ותוכן (ויקישיתוף)"
+        description: "תמונות ותוכן (ויקישיתוף) – מושהה: לא נבנה בעדכון השבועי, רק בהרצה ידנית כשמסמנים"
         type: boolean
-        default: true
+        default: false
       zmanim:
         description: "זמני תפילות (נדרים פלוס)"
         type: boolean
@@ -196,6 +197,24 @@ jobs:
           path: data/cache
           key: rich-http-${{ github.run_id }}
           restore-keys: rich-http-
+
+      # Kohen mode: if gps.hakohanim.org does not answer during the build, hmaps/etl/kohen_areas.py keeps
+      # the grave areas of the previous data package – restore its routing/avoid_areas.json for that
+      # (optional: skipped on the first run; a failure here only loses the fallback)
+      - uses: actions/download-artifact@v7
+        if: needs.plan.outputs.previous == 'true'
+        with:
+          name: previous-manifest
+          path: prev
+
+      - name: Restore last week's grave areas (Kohen mode fallback)
+        if: needs.plan.outputs.previous == 'true'
+        continue-on-error: true
+        run: |
+          python -m hmaps update --component maps --force --manifest prev/manifest.json --data prev-data
+          mkdir -p data/routing
+          cp prev-data/routing/avoid_areas.json data/routing/avoid_areas.json
+          rm -rf prev-data
 
       - name: Build maps database (OSM core + routing graph)
         run: python -m hmaps.etl build --engine pyosmium --no-enrich
@@ -382,7 +401,8 @@ jobs:
     name: Images (Wikimedia Commons)
     needs: [plan, maps]
     # also runs when maps was not requested / failed: it then uses the previous release's maps.db
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
+    # PAUSED: the weekly (scheduled) run skips images + content; only a manual run with "media" ticked builds it
+    if: always() && github.event_name == 'workflow_dispatch' && needs.plan.result == 'success' && needs.plan.outputs.media == 'true' && needs.maps.result != 'cancelled'
     runs-on: ubuntu-latest
     # ~37k images at Wikimedia's pace take ~20 h, far more than one job may run (360 min max).
     # media.py therefore stops by itself after --max-minutes, the partial set is packaged and
@@ -532,8 +552,8 @@ jobs:
               --notes "מצביע לגרסת הנתונים העדכנית ביותר: $TAG. התוכנה קוראת מכאן את manifest.json. HebrewMaps-Update.zip – קובץ עדכון למחשב בלי אינטרנט."
           fi
 
-      # a full offline update plus one small, self-contained offline ZIP per component. This lets
-      # computers without internet carry only the component they need on a USB stick.
+      # a full offline update without media plus one small, self-contained ZIP per component.
+      # Media is PAUSED: no offline media file is built or published (the site offers no media download).
       - name: Offline update file
         if: steps.manifest.outputs.new != 'none'
         run: |
@@ -543,9 +563,9 @@ jobs:
             [ -n "$file" ] && gh release download "$rel" -p "$file" -D old --clobber
           done < missing.txt
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
-            --date "$DATE" --out offline --stable latest
+            --date "$DATE" --out offline --stable latest --exclude-components media
           python tools/release.py bundle --manifest dist/manifest.json --dist dist --dist old \
-            --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,media,zmanim
+            --date "$DATE" --out offline --stable latest --components maps,basemap,terrain,transit,zmanim
           gh release upload "$TAG" offline/*.zip --clobber
           gh release upload data-latest latest/*.zip --clobber
 

@@ -12,7 +12,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
     GET  /api/place/{id}  /api/street/{id}
     GET  /api/geocode?address=           forward geocoding
     GET  /api/reverse?lat=&lon=          reverse geocoding
-    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa,kohen]
+    GET  /api/route?from=lat,lon&to=lat,lon&mode=car|foot|bike[&avoid=toll,motorway,unpaved,junctions,pa,kohen][&kohen_levels=אבג]
     GET  /api/trails/{id}                trail card  (+ /tiles/trails, /tiles/parks – see outdoor.py)
     GET  /api/minyanim/near?lat=&lon=&radius=&prayer=&after=&day=   next minyanim nearby (synagogue prayer times)
     GET  /api/hikes, /api/hikes/{id}[/guide], /api/trails/{id}/guide, POST /api/guide   hiking guide (guide.py)
@@ -30,6 +30,7 @@ Endpoints (see docs/api.md and /api/openapi.json):
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -67,7 +68,7 @@ from . import userdata as userdata_api
 from . import minyanim as minyanim_api
 from .search import SearchEngine, nearby, reverse
 from .settings import settings
-from .store import Basemap, Dataset
+from .store import Basemap, Dataset, stable_hash
 
 log = logging.getLogger("hmaps.api")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -450,9 +451,12 @@ async def route_ep(req: Request) -> Response:
     pts.append(_latlon(req.query_params.get("to"), "to"))
     alts = req.query_params.get("alternatives", "1") not in ("0", "false")
     from ..route.avoid import parse as parse_avoid
+    from ..route.kohen import parse_levels
     avoid = parse_avoid(req.query_params.get("avoid"), mode)
+    # Kohen mode: which grave-area levels to avoid (א ודאי, ב ספק, ג חשש קל); default all
+    kohen_levels = parse_levels(req.query_params.get("kohen_levels")) if "kohen" in avoid else None
     try:
-        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts, avoid)
+        res = await run_in_threadpool(routing.route_any, settings, mode, pts, alts, avoid, kohen_levels)
     except routing.RoutingError as e:
         return error_response(e.status, "routing_error", e.message)
     return cached(JSONResponse(res), 300)
@@ -500,7 +504,7 @@ async def tile_base_json(req: Request) -> Response:
     except json.JSONDecodeError:
         vector_layers = []
     bounds = [float(v) for v in md.get("bounds", "34.15,29.40,35.95,33.45").split(",")]
-    v = str(abs(hash(md.get("mtime", "") + str(st.basemap.path.stat().st_mtime_ns))) % 10**8)
+    v = stable_hash(md.get("mtime", "") + str(st.basemap.path.stat().st_mtime_ns), 10**8)
     return cached(JSONResponse({
         "tilejson": "3.0.0", "name": md.get("name", "basemap"), "scheme": "xyz",
         "tiles": [f"{base}/tiles/base/{{z}}/{{x}}/{{y}}.pbf?v={v}"],
@@ -695,7 +699,7 @@ REMOTE_IMG_HOSTS = "https://commons.wikimedia.org https://upload.wikimedia.org h
 def _csp() -> str:
     """Photos may come from Wikimedia / Mapillary unless the map runs fully offline (HMAPS_REMOTE_IMAGES=0)."""
     img = "'self' data: blob:" + (" " + REMOTE_IMG_HOSTS if settings.remote_images else "")
-    return (f"default-src 'self'; img-src {img}; "
+    return (f"default-src 'self' tel:; img-src {img}; "
             "style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; "
             "child-src 'self' blob:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'self'; base-uri 'self'; "
             "form-action 'self'")
@@ -737,7 +741,15 @@ class ServiceMiddleware:
         rid = uuid.uuid4().hex[:12]
         t0 = time.perf_counter()
         client = (scope.get("client") or ("?", 0))[0]
-        status_holder = {"status": 500}
+        status_holder = {"status": 500, "started": False}
+
+        if not host_allowed(_header(scope, b"host"), settings.allowed_hosts):
+            # DNS rebinding: a web site whose name points at 127.0.0.1 would otherwise be "same origin"
+            # with this server and could read / change the user's data (favorites, data folder, updates)
+            resp = PlainTextResponse("Invalid Host header", status_code=400)
+            await resp(scope, receive, send)
+            self._done(path, 400, t0, rid)
+            return
 
         if path.startswith("/api/") and not path.startswith("/api/health"):
             if not self._allow(client):
@@ -750,6 +762,7 @@ class ServiceMiddleware:
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 status_holder["status"] = message["status"]
+                status_holder["started"] = True
                 headers = list(message.get("headers", []))
                 names = {h[0].lower() for h in headers}
                 extra = [
@@ -774,12 +787,16 @@ class ServiceMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         except ApiError as e:
-            status_holder["status"] = e.status
-            await error_response(e.status, e.code, e.message)(scope, receive, send_wrapper)
+            if status_holder["started"]:  # too late for an error response – the client gets a cut answer
+                log.warning("error after the response started rid=%s path=%s: %s", rid, path, e.message)
+            else:
+                status_holder["status"] = e.status
+                await error_response(e.status, e.code, e.message)(scope, receive, send_wrapper)
         except Exception:  # noqa: BLE001
             log.exception("unhandled error rid=%s path=%s", rid, path)
-            status_holder["status"] = 500
-            await error_response(500, "internal_error", "אירעה שגיאה בשרת")(scope, receive, send_wrapper)
+            if not status_holder["started"]:
+                status_holder["status"] = 500
+                await error_response(500, "internal_error", "אירעה שגיאה בשרת")(scope, receive, send_wrapper)
         self._done(path, status_holder["status"], t0, rid)
 
     def _done(self, path: str, status: int, t0: float, rid: str) -> None:
@@ -790,6 +807,41 @@ class ServiceMiddleware:
             # query strings are deliberately not logged (search terms are user data)
             log.info(json.dumps({"rid": rid, "route": route, "path": path, "status": status, "ms": round(dt * 1000, 1)},
                                 ensure_ascii=False))
+
+
+def _header(scope, name: bytes) -> str:
+    for k, v in scope.get("headers") or []:
+        if k == name:
+            return v.decode("latin-1")
+    return ""
+
+
+#: host names that always reach this server (the desktop app, a browser on the same computer, tests)
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "testserver"})
+
+
+def host_allowed(host_header: str, allowed: tuple[str, ...]) -> bool:
+    """The Host header must name this computer (or an IP address), unless HMAPS_ALLOWED_HOSTS lists the name.
+
+    An IP address is safe: a DNS-rebinding page always has a domain name of its own. "*" allows any host
+    (docker-compose.yml – a public server, where the user-data endpoints are closed anyway)."""
+    if "*" in allowed:
+        return True
+    h = host_header.strip().lower()
+    if h.startswith("["):  # [::1]:8080
+        h = h[1:h.find("]")] if "]" in h else h[1:]
+    elif h.count(":") == 1:
+        h = h.rsplit(":", 1)[0]
+    h = h.rstrip(".")
+    if not h:
+        return False  # HTTP/1.1 requires Host; every browser sends it
+    if h in LOCAL_HOSTS or h in allowed:
+        return True
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        return False
 
 
 def _route_name(path: str) -> str:
@@ -813,7 +865,19 @@ async def lifespan(app):
              "ready" if st.basemap.available else "fallback")
     if st.ds.available:
         st.poi_zooms()  # start the POI declutter in the background
+    threading.Thread(target=_warm_imports, name="warm-imports", daemon=True).start()
     yield
+
+
+def _warm_imports(delay: float = 4.0) -> None:
+    """numpy and the public-transport code are imported lazily (a faster start); load them a few seconds
+    after startup – once the first map is on screen – so the first route or timetable is not slower."""
+    time.sleep(delay)
+    for name in ("numpy", "hmaps.core.dem", "hmaps.transit.planner", "hmaps.transit.fares"):
+        try:
+            __import__(name)
+        except Exception:  # noqa: BLE001 - imported again (and reported) on first real use
+            log.debug("warm import of %s failed", name, exc_info=True)
 
 
 async def openapi(req: Request) -> Response:

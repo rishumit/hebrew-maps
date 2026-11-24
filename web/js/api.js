@@ -41,9 +41,12 @@ async function request(path, { params, method = 'GET', body, signal, timeout = 1
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort('timeout'), timeout);
   if (signal) signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
+  // /api/meta and /api/categories were already requested by web/map.html (window.__early) – used once
+  const early = method === 'GET' && !params && window.__early?.[path];
+  if (early) delete window.__early[path];
   let resp;
   try {
-    resp = await fetch(url, {
+    resp = early ? await early.catch(() => fetch(url, { signal: ctrl.signal })) : await fetch(url, {
       method,
       signal: ctrl.signal,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -90,10 +93,10 @@ export const api = {
   trail: (id, signal) => request(`/api/trails/${encodeURIComponent(id)}`, { signal }),
   nearby: (lat, lon, opts = {}, signal) => request('/api/poi', { params: { lat, lon, ...opts }, signal }),
   reverse: (lat, lon, signal) => request('/api/reverse', { params: { lat: lat.toFixed(6), lon: lon.toFixed(6) }, signal }),
-  route: (from, to, mode, signal, avoid = []) =>
+  route: (from, to, mode, signal, avoid = [], kohenLevels = '') =>
     request('/api/route', {
       params: { from: `${from.lat.toFixed(6)},${from.lon.toFixed(6)}`, to: `${to.lat.toFixed(6)},${to.lon.toFixed(6)}`, mode,
-        avoid: avoid.length ? avoid.join(',') : undefined },
+        avoid: avoid.length ? avoid.join(',') : undefined, kohen_levels: kohenLevels || undefined },
       signal,
       timeout: 25000,
     }),

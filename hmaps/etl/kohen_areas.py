@@ -69,4 +69,14 @@ def get(avoid_areas_path: Path) -> dict | None:
     old = load_previous(avoid_areas_path)
     if old:
         log.warning("kohen areas: using previous data")
+        _ci_warning("מצב כהן: gps.hakohanim.org לא ענה – נשארו אזורי הקברים מהגרסה הקודמת")
+    else:
+        log.error("kohen areas: no fresh and no previous data – Kohen mode will be unavailable")
+        _ci_warning("מצב כהן: אין אזורי קברים בחבילה הזו (gps.hakohanim.org לא ענה, ואין נתונים קודמים)")
     return old
+
+
+def _ci_warning(msg: str) -> None:
+    """A visible annotation on the GitHub Actions run (the build itself goes on)."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::warning title=Kohen areas::{msg}", flush=True)

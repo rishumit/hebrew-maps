@@ -187,7 +187,7 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 - הרצה חוזרת מרעננת: אריחים שכבר במטמון נשמרים. להורדה מלאה מחדש מוחקים את המטמון `satellite-z…` ב-Actions ← Caches.
 
 ### בנייה מקומית (למתקדמים)
-`update-data.cmd` (Docker) / ‏`update-windows.cmd` מורידים גרסה חדשה של OSM, בונים מאגר חדש ומחליפים אותו **בלי השבתה** (החלפה אטומית ו-hot reload). אחר כך הם בונים מפת בסיס חדשה ומפעילים מחדש את הניווט. הניווט לא זמין לכ-15 דקות, עד שהגרפים החדשים מוכנים.
+`update-data.cmd` (Docker) / ‏`scripts/windows/update-windows.cmd` מורידים גרסה חדשה של OSM, בונים מאגר חדש ומחליפים אותו **בלי השבתה** (החלפה אטומית ו-hot reload). אחר כך הם בונים מפת בסיס חדשה ומפעילים מחדש את הניווט. הניווט לא זמין לכ-15 דקות, עד שהגרפים החדשים מוכנים.
 
 ### תחבורה ציבורית: עדכון שבועי
 לוח הזמנים של משרד התחבורה (GTFS) מתפרסם מחדש כל יום, ותקף לכ-30 יום קדימה. לכן **מומלץ לעדכן אותו פעם בשבוע**. העדכון לוקח 2–5 דקות ודורש כ-1GB זיכרון פנוי, והמפה ממשיכה לעבוד בזמן העדכון. השרת עובר לנתונים החדשים לבד, דרך הקובץ `data/transit/transit.current`.
@@ -195,13 +195,13 @@ plan ─┬─ osm ─┬─ maps ── media ─┐
 | איפה | פקודה |
 |------|-------|
 | מקוון (מומלץ) | תפריט ← עדכונים, או `python -m hmaps update --component transit` |
-| Windows בלי Docker, בנייה מקומית | לחיצה כפולה על `update-transit-windows.cmd`. העדכון גם נכלל ב-`update-windows.cmd` |
+| Windows בלי Docker, בנייה מקומית | לחיצה כפולה על `scripts/windows/update-transit-windows.cmd`. העדכון גם נכלל ב-`scripts/windows/update-windows.cmd` |
 | Docker | `docker compose run --rm etl python -m hmaps.etl gtfs --force` (נכלל ב-`update-data.cmd`) |
 | מקובץ שהורד ידנית | `python -m hmaps.etl gtfs --zip israel-public-transportation.zip` |
 
 עדכון אוטומטי ב-Windows, כל יום ראשון ב-06:00 (הפקודה מורצת פעם אחת, משורת הפקודה בתיקיית הפרויקט):
 ```bat
-schtasks /create /tn "Hebrew Maps transit" /sc weekly /d SUN /st 06:00 /tr "\"%cd%\update-transit-windows.cmd\" /quiet" /f
+schtasks /create /tn "Hebrew Maps transit" /sc weekly /d SUN /st 06:00 /tr "\"%cd%\scripts\windows\update-transit-windows.cmd\" /quiet" /f
 ```
 
 **מעקב:** ‏`GET /api/transit/status` מחזיר את תאריכי התחלה וסיום של לוח הזמנים ואת `freshness`. בממשק מוצגת אזהרה כשעברו יותר מ-14 יום מהעדכון (`stale`), כשנשארו 5 ימים או פחות (`expiring`), וכשלוח הזמנים פג (`expired`). לאחר תאריך הסיום אי אפשר לתכנן נסיעות.

@@ -26,6 +26,14 @@ export const AVOID = [
   { id: 'kohen', label: 'מצב כהן – הימנעות מקברים', modes: ['car', 'bike', 'foot'] },
 ];
 
+// Kohen mode: levels of the grave areas (gps.hakohanim.org) – hmaps/route/kohen.py
+export const KOHEN_LEVELS = [
+  { id: 'א', label: 'ודאי' },
+  { id: 'ב', label: 'ספק' },
+  { id: 'ג', label: 'חשש קל' },
+];
+const ALL_KOHEN = KOHEN_LEVELS.map((l) => l.id);
+
 export class Directions {
   constructor(app) {
     this.app = app;
@@ -38,6 +46,8 @@ export class Directions {
     this.loading = false;
     this.ctrl = null;
     this.avoid = new Set(store.get('route:avoid', []).filter((a) => AVOID.some((o) => o.id === a)));
+    const kl = store.get('route:kohen-levels', ALL_KOHEN).filter((l) => ALL_KOHEN.includes(l));
+    this.kohenLevels = new Set(kl.length ? kl : ALL_KOHEN);
     this.avoidOpen = false;
     this.transit = new TransitPlanner(app, this);
   }
@@ -45,6 +55,12 @@ export class Directions {
   /** Avoid options that apply to the current mode. */
   avoidFor(mode = this.mode) {
     return AVOID.filter((o) => o.modes.includes(mode) && this.avoid.has(o.id)).map((o) => o.id);
+  }
+
+  /** Kohen-mode levels for the API ('' = all, the server's default). */
+  kohenLevelsParam() {
+    if (!this.avoidFor().includes('kohen') || this.kohenLevels.size === ALL_KOHEN.length) return '';
+    return ALL_KOHEN.filter((l) => this.kohenLevels.has(l)).join('');
   }
 
   setAvoid(list) {
@@ -120,12 +136,18 @@ export class Directions {
     this._refresh();
     if (this.mode === 'transit') return this._computeTransit(this.ctrl.signal);
     try {
-      const res = await api.route(this.from, this.to, this.mode, this.ctrl.signal, this.avoidFor());
+      const res = await api.route(this.from, this.to, this.mode, this.ctrl.signal, this.avoidFor(), this.kohenLevelsParam());
       this.routes = res.routes || [];
       this.avoidIgnored = res.avoid_ignored || [];
       this.selected = 0;
       this.loading = false;
       if (!this.routes.length) this.error = 'לא נמצא מסלול';
+      
+      // Save to recent routes
+      if (this.routes.length) {
+        this.app._rememberRoute(this.from, this.to, this.mode);
+      }
+      
       this._draw(true);
       this._refresh();
       if (this.routes.length) {
@@ -213,8 +235,9 @@ export class Directions {
             ${this._avoidNotice(r)}
             ${elevationSlot(this.app.meta, this.mode, r)}
             <div class="p-section dir-actions">
-              <button type="button" class="btn btn-secondary btn-sm" data-act="save-route">${svg('star', { size: 16 })}שמירת המסלול</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-act="print-route">${svg('print', { size: 16 })}הדפסת מסלול והוראות</button>
+              ${this._avoidCompact()}
+              <button type="button" class="icon-btn" data-act="save-route" aria-label="שמירת המסלול" title="שמירת המסלול">${svg('star', { size: 20 })}</button>
+              <button type="button" class="icon-btn" data-act="print-route" aria-label="הדפסת מסלול והוראות" title="הדפסת מסלול והוראות">${svg('print', { size: 20 })}</button>
             </div>
             ${this.mode === 'foot' ? `<div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="guide">${svg('signpost', { size: 16 })}מדריך מסלול: שלבים, מים ובטיחות</button></div>` : ''}
             <h3 class="subtitle">הוראות הגעה</h3>
@@ -241,10 +264,25 @@ export class Directions {
       <summary>${svg('filter', { size: 16 })}אפשרויות מסלול${n ? ` <span class="badge-count">הימנעות מ-${n}</span>` : ''}</summary>
       <fieldset><legend>להימנע מ:</legend>
         ${opts.map((o) => `<label class="check"><input type="checkbox" data-avoid="${o.id}" ${this.avoid.has(o.id) ? 'checked' : ''}>
-          <span>${esc(o.label)}</span></label>`).join('')}
+          <span>${esc(o.label)}</span></label>${o.id === 'kohen' && this.avoid.has('kohen') ? this._kohenLevelsHtml() : ''}`).join('')}
         ${opts.some((o) => o.id === 'pa') ? '<p class="r-sub">שטחי A/B מסומנים בקירוב, סביב יישובים פלסטיניים (לפי OpenStreetMap). אין זו מפה רשמית – הקפידו על השילוט בדרך.</p>' : ''}
       </fieldset>
     </details>`;
+  }
+
+  _avoidCompact() {
+    const opts = AVOID.filter((o) => o.modes.includes(this.mode));
+    if (!opts.length) return '';
+    const n = this.avoidFor().length;
+    return `<button type="button" class="btn btn-secondary btn-sm" data-act="avoid-opts">${svg('filter', { size: 16 })}אפשרויות מסלול${n ? ` (${n})` : ''}</button>`;
+  }
+
+  _kohenLevelsHtml() {
+    return `<div class="kohen-levels" role="group" aria-labelledby="kohen-levels-title">
+      <span class="kohen-levels-title" id="kohen-levels-title">אזורים להימנעות:</span>
+      ${KOHEN_LEVELS.map((l) => `<label class="check"><input type="checkbox" data-kohen-level="${l.id}" ${
+        this.kohenLevels.has(l.id) ? 'checked' : ''}><span>${esc(l.label)}</span></label>`).join('')}
+    </div>`;
   }
 
   _avoidNotice(r) {
@@ -271,7 +309,28 @@ export class Directions {
       this._compute();
       requestAnimationFrame(() => this.app.panel.body.querySelector(`[data-avoid="${c.dataset.avoid}"]`)?.focus({ preventScroll: true }));
     }));
+    body.querySelectorAll('[data-kohen-level]').forEach((c) => c.addEventListener('change', () => {
+      const lvl = c.dataset.kohenLevel;
+      const label = c.nextElementSibling.textContent;
+      if (!c.checked && this.kohenLevels.size === 1) {
+        c.checked = true; // at least one level – to avoid none, turn Kohen mode off
+        announce('יש לבחור לפחות רמה אחת');
+        return;
+      }
+      if (c.checked) this.kohenLevels.add(lvl); else this.kohenLevels.delete(lvl);
+      store.set('route:kohen-levels', ALL_KOHEN.filter((l) => this.kohenLevels.has(l)));
+      announce(c.checked ? `הימנעות מאזורי ${label} הופעלה` : `הימנעות מאזורי ${label} בוטלה`);
+      this._compute();
+      requestAnimationFrame(() => this.app.panel.body.querySelector(`[data-kohen-level="${lvl}"]`)?.focus({ preventScroll: true }));
+    }));
     body.querySelector('[data-act="save-route"]')?.addEventListener('click', () => app.saved?.saveRoute());
+    body.querySelector('[data-act="avoid-opts"]')?.addEventListener('click', () => {
+      const det = this.app.panel.body.querySelector('.dir-avoid');
+      if (det) {
+        det.open = true;
+        det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
     for (const which of ['from', 'to']) {
       const input = body.querySelector(`#dir-${which}`);
       const list = body.querySelector(`#dir-${which}-list`);

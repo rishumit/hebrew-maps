@@ -7,6 +7,7 @@ transparently reopen it – no API restart needed after a data refresh.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import sqlite3
@@ -17,6 +18,11 @@ from pathlib import Path
 from ..core import db
 
 log = logging.getLogger(__name__)
+
+
+def stable_hash(text: str, mod: int) -> str:
+    """A short number for *text* that is the same in every process (cache-busting versions)."""
+    return str(int(hashlib.sha1(text.encode("utf-8")).hexdigest()[:15], 16) % mod)
 
 
 class Dataset:
@@ -38,7 +44,9 @@ class Dataset:
 
     @property
     def version(self) -> str:
-        return str(abs(hash(self._version)) % 10**10) if self._version else "0"
+        # hashlib, not hash(): str hashes change with every process start (PYTHONHASHSEED), which made
+        # every tile URL (…?v=) new on each launch and the browser / service-worker tile caches useless
+        return stable_hash(repr(self._version), 10**10) if self._version else "0"
 
     def _pick(self) -> Path | None:
         primary = db.resolve(self.primary)

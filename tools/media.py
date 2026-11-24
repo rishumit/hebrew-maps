@@ -205,7 +205,7 @@ def main() -> int:
     try:
         import PIL  # noqa: F401  (needed to recognise the filter's stand-in pictures)
     except ImportError:
-        print("Pillow is missing. Run download-images.cmd (it installs it), or: pip install pillow")
+        print("Pillow is missing. Run scripts/windows/download-images.cmd (it installs it), or: pip install pillow")
         return 1
     db_path = db.resolve(DATA / "maps.db")
     if not db_path.exists():
@@ -322,7 +322,7 @@ def main() -> int:
           f" Offline now: {offline} of {len(urls)}.")
     if counts["pending"]:
         print(f"{counts['pending']} images were sent by the content filter (NetFree) for review and were not saved."
-              " Run download-images.cmd again in a day or two to fetch the approved ones.")
+              " Run scripts/windows/download-images.cmd again in a day or two to fetch the approved ones.")
     if counts["temporary"]:
         print(f"{counts['temporary']} images hit temporary errors (connection / rate limit) – run again later.")
     if failures:

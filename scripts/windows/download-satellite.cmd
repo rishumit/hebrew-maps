@@ -13,7 +13,7 @@ rem   download-satellite.cmd --source eox       - use a specific source (govmap,
 rem Already downloaded tiles are skipped: stop any time (Ctrl+C) and run it again to resume.
 rem From the map: layers button - "download aerial photos for the whole country".
 chcp 65001 >nul
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 set PYTHONUTF8=1
 if not exist ".venv\Scripts\python.exe" (
   echo Please run setup-windows.cmd first.

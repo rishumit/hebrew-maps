@@ -5,16 +5,22 @@ import { Combobox } from './combobox.js';
 import { Directions } from './directions.js';
 import { initGuide, openGuide, openHikesNear } from './guide.js';
 import { PoiHoverCard } from './hovercard.js';
+import { initHScroll } from './hscroll.js';
 import { svg } from './icons.js';
 import { LAYER_GROUPS, MapView } from './map.js';
 import { Panel } from './panel.js';
 import { PrintManager } from './printing.js';
 import { Saved } from './saved.js';
 import { trailView } from './trails.js';
+import { bibleHomeView, loadBible, openBiblePlace } from './bible.js';
 import { initUpdates, openUpdates } from './updates.js';
 import { openSettings } from './settings.js';
 import { $, $$, announce, bus, copyText, debounce, esc, isMobile, store, toast, trapFocus } from './util.js';
 import { errorView, loadingView, placeView, pointView, poiView, resultsView, streetView, visibleListView } from './views.js';
+import { MeasureTool } from './measure.js';
+
+// card rows that scroll sideways (action buttons, photo strip): no scrollbar, arrow + fade at the end
+initHScroll('.actions, .g-strip');
 
 const CHIPS = [
   ['restaurant', 'מסעדות'], ['cafe', 'בתי קפה'], ['supermarket', 'סופרמרקטים'], ['synagogue', 'בתי כנסת'],
@@ -40,6 +46,7 @@ const app = {
 
   // ------------------------------------------------------------------ boot
   async init() {
+    setTimeout(hideBoot, 15000); // never keep the loading screen forever
     applyUiTheme(store.get('uitheme', 'auto'));
     hydrateIcons(document);
     this.panel = new Panel($('#panel'));
@@ -68,10 +75,17 @@ const app = {
       zoom: hash.zoom ?? saved?.zoom,
     };
     this.map = new MapView($('#map'), this.meta, this.categories, initial);
+    // the loading screen stays until the first tiles are drawn ('idle'), or a moment after the style is ready
+    const offBoot = bus.on('map:ready', () => {
+      offBoot();
+      this.map.map?.once?.('idle', hideBoot);
+      setTimeout(hideBoot, 1200);
+    });
     this.directions = new Directions(this);
     this.printing = new PrintManager(this);
     this.saved = new Saved(this);
     this.hoverCard = new PoiHoverCard(this, $('#map'));
+    this.measureTool = new MeasureTool(this.map);
 
     this._initSearch();
     this._initChips();
@@ -258,12 +272,13 @@ const app = {
   },
 
   async whatsHere(lat, lon) {
+    loadBible(); // for the "מקומות מהתנ״ך בסביבה" section (ready by the time the address arrives)
     this.map.setSelection({ lat, lon });
     const base = { id: `coord-${lat.toFixed(6)},${lon.toFixed(6)}`, type: 'coordinate', name: 'נקודה במפה', location: { lat, lon } };
     this.panel.show(loadingView('point:' + base.id, 'מאתר כתובת'));
     try {
       const rev = await api.reverse(lat, lon);
-      const item = { ...base, name: rev.address || 'נקודה במפה', secondary: rev.neighbourhood || (rev.address ? '' : rev.city || '') };
+      const item = { ...base, name: rev.address || 'נקודה במפה', secondary: rev.neighbourhood || (rev.address ? '' : rev.city || ''), city: rev.city || '' };
       this.panel.show({ ...pointView(this, item), replace: true });
       this._loadNearby(item);
     } catch (e) {
@@ -373,32 +388,44 @@ const app = {
     $('#btn-locate').addEventListener('click', () => this.toggleLocate());
     $('#btn-directions').addEventListener('click', () => this.directions.open({}));
 
-    const pop = $('#layers-pop');
-    const btn = $('#btn-layers');
-    const closePop = () => {
-      pop.hidden = true;
-      btn.setAttribute('aria-expanded', 'false');
+    // two popovers like Google Maps: "סוג מפה" (map type + UI theme) and "שכבות" (overlay layers)
+    const pops = [[$('#maptype-pop'), $('#btn-maptype')], [$('#layers-pop'), $('#btn-layers')]];
+    const closePop = (p, b) => {
+      p.hidden = true;
+      b.setAttribute('aria-expanded', 'false');
     };
-    btn.addEventListener('click', () => {
-      const open = pop.hidden;
-      pop.hidden = !open;
-      btn.setAttribute('aria-expanded', String(open));
-      if (open) pop.querySelector('input:checked')?.focus();
-    });
-    pop.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closePop();
-        btn.focus();
-      }
-    });
+    this._closePops = () => {
+      for (const [p, b] of pops) if (!p.hidden) { closePop(p, b); return b; }
+      return null;
+    };
+    for (const [p, b] of pops) {
+      b.addEventListener('click', () => {
+        const open = p.hidden;
+        for (const [q, c] of pops) if (q !== p) closePop(q, c);
+        p.hidden = !open;
+        b.setAttribute('aria-expanded', String(open));
+        if (open) p.querySelector('input:checked, input')?.focus();
+      });
+      p.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault(); // handled: the global Escape (below) must not also step the info panel back
+          closePop(p, b);
+          b.focus();
+        }
+      });
+    }
     document.addEventListener('pointerdown', (e) => {
-      if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) closePop();
+      for (const [p, b] of pops) if (!p.hidden && !p.contains(e.target) && !b.contains(e.target)) closePop(p, b);
     });
+    const pop = $('#maptype-pop');
+    const thumb = $('#btn-maptype .maptype-thumb');
+    const setThumb = (type) => { thumb.className = `swatch maptype-thumb swatch-${type}`; };
     const satellite = !!store.get('satellite', false);
     const mapType = satellite ? 'satellite' : store.get('maptype', 'light');
     const selectedType = pop.querySelector(`input[name="maptype"][value="${mapType}"]`)
       || pop.querySelector('input[name="maptype"][value="light"]');
     selectedType.checked = true;
+    setThumb(selectedType.value);
     const satTools = $('#sat-offline');
     satTools.hidden = !satellite;
     pop.querySelectorAll('input[name="maptype"]').forEach((r) => r.addEventListener('change', () => {
@@ -406,24 +433,46 @@ const app = {
       satTools.hidden = !useSatellite;
       store.set('satellite', useSatellite);
       if (!useSatellite) store.set('maptype', r.value);
+      setThumb(r.value);
       this.map.setMapType(effectiveMapTheme(), useSatellite);
       this._redrawLayerChecks?.();
       announce(`סוג המפה: ${r.parentElement.lastElementChild.textContent.trim()}`);
     }));
-    const ui = store.get('uitheme', 'auto');
-    pop.querySelector(`input[name="uitheme"][value="${ui}"]`).checked = true;
-    pop.querySelectorAll('input[name="uitheme"]').forEach((r) => r.addEventListener('change', () => {
-      store.set('uitheme', r.value);
-      applyUiTheme(r.value);
+    // day / night: one icon button; the icon shows the mode a click switches to
+    const themeBtn = $('#btn-uitheme');
+    const drawThemeBtn = () => {
+      const dark = isDarkUi();
+      const label = dark ? 'מצב יום' : 'מצב לילה';
+      themeBtn.innerHTML = svg(dark ? 'sun' : 'moon', { size: 22 });
+      themeBtn.setAttribute('aria-label', label);
+      themeBtn.title = label;
+    };
+    drawThemeBtn();
+    themeBtn.addEventListener('click', () => {
+      const next = isDarkUi() ? 'light' : 'dark';
+      store.set('uitheme', next);
+      applyUiTheme(next);
       this.map.setTheme(effectiveMapTheme());
-    }));
+      drawThemeBtn();
+      announce(next === 'dark' ? 'מצב לילה' : 'מצב יום');
+    });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (store.get('uitheme', 'auto') === 'auto') this.map.setTheme(effectiveMapTheme());
+      if (store.get('uitheme', 'auto') === 'auto') {
+        this.map.setTheme(effectiveMapTheme());
+        drawThemeBtn();
+      }
+    });
+    // day / night switched in another tab (desktop shell) or window: follow it here too
+    window.addEventListener('storage', (e) => {
+      if (e.key !== 'hmaps:uitheme') return;
+      applyUiTheme(store.get('uitheme', 'auto'));
+      this.map.setTheme(effectiveMapTheme());
+      drawThemeBtn();
     });
     this._initLayerChecks();
     // downloading aerial photos for offline use lives in the updates panel (web/js/satellite-offline.js)
     $('#btn-sat-offline')?.addEventListener('click', () => {
-      closePop();
+      this._closePops();
       openUpdates(this, { section: 'satellite' });
     });
   },
@@ -497,7 +546,7 @@ const app = {
   toggle3DNotice() {
     if (!this.map.has3dTerrain && !this._warned3d) {
       this._warned3d = true;
-      toast('תלת-ממד: מבנים והטיית המפה. הרים ועמקים בתלת-ממד יופיעו אחרי התקנת נתוני הגובה (build-terrain.cmd).', { ms: 6500 });
+      toast('תלת-ממד: מבנים והטיית המפה. הרים ועמקים בתלת-ממד יופיעו אחרי התקנת נתוני הגובה (scripts/windows/build-terrain.cmd).', { ms: 6500 });
     }
   },
 
@@ -555,8 +604,8 @@ const app = {
       const act = b.dataset.menu;
       if (act === 'nearby-list') this.panel.show(visibleListView(this, this.map.visiblePois(), this.map.visibleTrails()));
       else if (act === 'directions') this.directions.open({});
-      else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
+      else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
       else if (act === 'saved') this.saved.open();
       else if (act === 'settings') openSettings(this);
@@ -580,6 +629,7 @@ const app = {
         case 'from': this.directions.open({ from: pt }); break;
         case 'to': this.directions.open({ to: pt }); break;
         case 'nearby': this._nearbyResults(lat, lon); break;
+        case 'measure': this.measureTool.start({ lat, lon }); break;
         case 'copy': copyText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`, 'הקואורדינטות הועתקו'); break;
         case 'fav': this._favoriteAt(lat, lon); break;
         case 'print':
@@ -645,22 +695,150 @@ const app = {
   },
 
   _recentDialog() {
-    const items = this.recent();
-    openDialog('חיפושים אחרונים', items.length
-      ? `<ul class="results">${items.map((r, i) => `<li class="result"><button type="button" data-i="${i}">
-          <span class="r-icon neutral" aria-hidden="true">${svg('history', { size: 18 })}</span><span class="r-body"><span class="r-name">${esc(r.name)}</span>
-          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>
-         <p><button type="button" class="btn btn-secondary btn-sm" data-clear>ניקוי ההיסטוריה</button></p>`
-      : '<p>אין חיפושים אחרונים.</p>', (dlg) => {
-      dlg.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => {
-        closeDialog();
-        this.openItem(items[Number(b.dataset.i)]);
-      }));
-      dlg.querySelector('[data-clear]')?.addEventListener('click', () => {
-        store.set('recent', []);
+    const searches = this.recentSearches();
+    const destinations = this.recentDestinations();
+    const routes = this.recentRoutes();
+    
+    const modeIcon = { car: 'car', foot: 'walk', bike: 'bike' };
+    const modeLabel = { car: 'רכב', foot: 'הליכה', bike: 'אופניים' };
+    
+    const searchesHtml = searches.length
+      ? `<ul class="results">${searches.map((r, i) => `<li class="result">
+          <button type="button" data-search="${i}" style="flex:1">
+            <span class="r-icon neutral" aria-hidden="true">${svg('search', { size: 18 })}</span>
+            <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+            ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span>
+          </button>
+          <button type="button" class="icon-btn" data-delete-search="${i}" aria-label="מחיקת חיפוש" title="מחיקת חיפוש" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
+        </li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין חיפושים אחרונים</p>';
+    
+    const destinationsHtml = destinations.length
+      ? `<ul class="results">${destinations.map((r, i) => `<li class="result">
+          <button type="button" data-dest="${i}" style="flex:1">
+            <span class="r-icon neutral" aria-hidden="true">${svg('pin', { size: 18 })}</span>
+            <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+            ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span>
+          </button>
+          <button type="button" class="icon-btn" data-delete-dest="${i}" aria-label="מחיקת יעד" title="מחיקת יעד" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
+        </li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין יעדים אחרונים</p>';
+    
+    const routesHtml = routes.length
+      ? `<ul class="results">${routes.map((r, i) => `<li class="result">
+          <button type="button" data-route="${i}" style="flex:1">
+            <span class="r-icon neutral" aria-hidden="true">${svg(modeIcon[r.mode] || 'directions', { size: 18 })}</span>
+            <span class="r-body">
+              <span class="r-name">${esc(r.from.name)} ${svg('back', { size: 14 })} ${esc(r.to.name)}</span>
+              <span class="r-sub" style="display:block">${esc(modeLabel[r.mode])}</span>
+            </span>
+          </button>
+          <button type="button" class="icon-btn" data-delete-route="${i}" aria-label="מחיקת מסלול" title="מחיקת מסלול" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
+        </li>`).join('')}</ul>`
+      : '<p class="r-sub" style="text-align:center;padding:2rem">אין מסלולים אחרונים</p>';
+    
+    const hasAny = searches.length || destinations.length || routes.length;
+    
+    openDialog('היסטוריה', `
+      <div class="tabs-container">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-tab="searches" aria-selected="true" aria-controls="tab-searches">חיפושים${searches.length ? ` (${searches.length})` : ''}</button>
+          <button type="button" role="tab" data-tab="destinations" aria-selected="false" aria-controls="tab-destinations">יעדים${destinations.length ? ` (${destinations.length})` : ''}</button>
+          <button type="button" role="tab" data-tab="routes" aria-selected="false" aria-controls="tab-routes">מסלולים${routes.length ? ` (${routes.length})` : ''}</button>
+        </div>
+        <div id="tab-searches" class="tab-content" role="tabpanel" aria-labelledby="tab-searches">${searchesHtml}</div>
+        <div id="tab-destinations" class="tab-content" role="tabpanel" aria-labelledby="tab-destinations" hidden>${destinationsHtml}</div>
+        <div id="tab-routes" class="tab-content" role="tabpanel" aria-labelledby="tab-routes" hidden>${routesHtml}</div>
+      </div>
+    `, (dlg) => {
+      // Tab switching
+      const tabs = dlg.querySelectorAll('[role="tab"]');
+      const panels = dlg.querySelectorAll('[role="tabpanel"]');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const targetId = tab.dataset.tab;
+          tabs.forEach((t) => t.setAttribute('aria-selected', t === tab ? 'true' : 'false'));
+          panels.forEach((p) => {
+            const show = p.id === `tab-${targetId}`;
+            p.hidden = !show;
+          });
+        });
+      });
+      
+      // Search clicks
+      dlg.querySelectorAll('[data-search]').forEach((b) => {
+        const item = searches[Number(b.dataset.search)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.openItem(item);
+        });
+      });
+      
+      // Destination clicks
+      dlg.querySelectorAll('[data-dest]').forEach((b) => {
+        const item = destinations[Number(b.dataset.dest)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.openItem(item);
+        });
+      });
+      
+      // Route clicks
+      dlg.querySelectorAll('[data-route]').forEach((b) => {
+        const route = routes[Number(b.dataset.route)];
+        b.addEventListener('click', () => {
+          closeDialog();
+          this.directions.open({ from: route.from, to: route.to, mode: route.mode });
+        });
+      });
+      
+      // Delete individual search
+      dlg.querySelectorAll('[data-delete-search]').forEach((b) => {
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = Number(b.dataset.deleteSearch);
+          const updated = this.recentSearches().filter((_, i) => i !== idx);
+          store.set('recentSearches', updated);
+          closeDialog();
+          this._recentDialog();
+        });
+      });
+      
+      // Delete individual destination
+      dlg.querySelectorAll('[data-delete-dest]').forEach((b) => {
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = Number(b.dataset.deleteDest);
+          const updated = this.recentDestinations().filter((_, i) => i !== idx);
+          store.set('recentDestinations', updated);
+          closeDialog();
+          this._recentDialog();
+        });
+      });
+      
+      // Delete individual route
+      dlg.querySelectorAll('[data-delete-route]').forEach((b) => {
+        b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = Number(b.dataset.deleteRoute);
+          const updated = this.recentRoutes().filter((_, i) => i !== idx);
+          store.set('recentRoutes', updated);
+          closeDialog();
+          this._recentDialog();
+        });
+      });
+      
+      // Clear all from header button
+      dlg.querySelector('[data-clear-all]')?.addEventListener('click', () => {
+        store.set('recentSearches', []);
+        store.set('recentDestinations', []);
+        store.set('recentRoutes', []);
+        store.set('recent', []); // backward compatibility
         closeDialog();
         toast('ההיסטוריה נוקתה');
       });
+    }, {
+      headerActions: hasAny ? `<button type="button" class="icon-btn" data-clear-all aria-label="ניקוי כל ההיסטוריה" title="ניקוי כל ההיסטוריה" style="color:#EF4444">${svg('trash', { size: 20 })}</button>` : ''
     });
   },
 
@@ -672,6 +850,8 @@ const app = {
         <li><strong>OpenStreetMap</strong> – מפת הבסיס, הרחובות, הכתובות ונקודות העניין (רישיון ODbL).</li>
         <li><strong>data.gov.il</strong> – רשימת היישובים ומאגר הרחובות הרשמיים (רישיון ממשלתי פתוח).</li>
         <li><strong>Wikidata / ויקיפדיה / Wikimedia Commons</strong> – תיאורים ותמונות (CC0 / CC BY-SA).</li>
+        <li><strong>מדריך מקומות בתנ״ך</strong> (תוסף לאוצריא, חד בדרא מפתחי אוצריא) – מקומות מהתנ״ך ומדברי חז״ל ושיטות הזיהוי שלהם.</li>
+        <li><strong>מוקד העירוב</strong> (hiruv.com) – מפות העירובין, האחראים ומאמרי תחום שבת, באישורם. קווי העירוב במפה משורטטים בקירוב.</li>
       </ul>
       <h3>מצב הנתונים</h3>
       <ul>
@@ -688,6 +868,7 @@ const app = {
   // ------------------------------------------------------------------ events & keyboard
   _initEvents() {
     bus.on('select', (item) => this.openItem(item));
+    bus.on('bible:select', ({ id, m }) => openBiblePlace(this, id, m, { fly: false }));
     bus.on('panel:close', (view) => this._onPanelClosed(view));
     bus.on('panel:view', () => this.updateTitle());
     bus.on('panel:close', () => this.updateTitle());
@@ -716,13 +897,16 @@ const app = {
         e.preventDefault();
         $('#q').focus();
         $('#q').select();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h' && !typing) {
+        e.preventDefault();
+        this._recentDialog();
       } else if (e.key === '?' && !typing) {
         e.preventDefault();
         shortcutsDialog();
       } else if (e.key === 'Escape' && !e.defaultPrevented) {
         if (!$('#dialog').hidden) closeDialog();
         else if (!$('#ctx-menu').hidden) this._hideCtx();
-        else if (!$('#layers-pop').hidden) $('#btn-layers').click();
+        else if (this._closePops?.()) { /* closed an open map-type / layers popover */ }
         else if (this.panel.isOpen && !typing) this.panel.back();
       } else if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (e.key === 'l' || e.key === 'ך') this.toggleLocate();
@@ -757,9 +941,28 @@ const app = {
     return store.get('recent', []);
   },
 
+  recentSearches() {
+    return store.get('recentSearches', []);
+  },
+
+  recentDestinations() {
+    return store.get('recentDestinations', []);
+  },
+
+  recentRoutes() {
+    return store.get('recentRoutes', []);
+  },
+
   remember(item) {
     if (!item?.id || item.type === 'category' || item.type === 'history') return;
     const entry = { id: item.id, type: item.type, name: item.name, secondary: item.secondary, location: item.location };
+    
+    // Save to destinations
+    const destinations = this.recentDestinations().filter((r) => r.id !== entry.id);
+    destinations.unshift(entry);
+    store.set('recentDestinations', destinations.slice(0, 15));
+    
+    // Keep old 'recent' for backward compatibility
     const list = this.recent().filter((r) => r.id !== entry.id);
     list.unshift(entry);
     store.set('recent', list.slice(0, 12));
@@ -767,9 +970,36 @@ const app = {
 
   _rememberQuery(q) {
     const entry = { id: `q:${q}`, type: 'category', name: q, query: q, secondary: 'חיפוש' };
+    
+    // Save to searches
+    const searches = this.recentSearches().filter((r) => r.id !== entry.id);
+    searches.unshift(entry);
+    store.set('recentSearches', searches.slice(0, 12));
+    
+    // Keep old 'recent' for backward compatibility
     const list = this.recent().filter((r) => r.id !== entry.id);
     list.unshift(entry);
     store.set('recent', list.slice(0, 12));
+  },
+
+  _rememberRoute(from, to, mode) {
+    if (!from?.lat || !to?.lat) return;
+    const entry = {
+      from: { name: from.name, lat: from.lat, lon: from.lon },
+      to: { name: to.name, lat: to.lat, lon: to.lon },
+      mode: mode || 'car',
+      timestamp: Date.now()
+    };
+    
+    // Check if identical route already exists
+    const routes = this.recentRoutes().filter((r) => 
+      !(r.from.lat === entry.from.lat && r.from.lon === entry.from.lon &&
+        r.to.lat === entry.to.lat && r.to.lon === entry.to.lon &&
+        r.mode === entry.mode)
+    );
+    
+    routes.unshift(entry);
+    store.set('recentRoutes', routes.slice(0, 10));
   },
 
   // ------------------------------------------------------------------ url state & sharing
@@ -870,6 +1100,11 @@ function applyUiTheme(t) {
   document.documentElement.dataset.theme = t;
 }
 
+function isDarkUi() {
+  const ui = store.get('uitheme', 'auto');
+  return ui === 'dark' || (ui === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
 function effectiveMapTheme() {
   const mapType = store.get('maptype', 'light');
   const ui = store.get('uitheme', 'auto');
@@ -896,10 +1131,15 @@ function parseHash() {
 
 let dialogRelease = null;
 let dialogReturn = null;
-function openDialog(title, bodyHtml, wire) {
+function openDialog(title, bodyHtml, wire, { headerActions = '' } = {}) {
   const dlg = $('#dialog');
   dialogReturn = document.activeElement;
-  $('#dialog-title').textContent = title;
+  const titleEl = $('#dialog-title');
+  if (headerActions) {
+    titleEl.innerHTML = `<span style="flex:1">${esc(title)}</span>${headerActions}`;
+  } else {
+    titleEl.textContent = title;
+  }
   $('#dialog-body').innerHTML = bodyHtml;
   dlg.hidden = false;
   dialogRelease = trapFocus(dlg);
@@ -919,7 +1159,7 @@ function closeDialog() {
 
 function shortcutsDialog() {
   const rows = [
-    ['/', 'מעבר לתיבת החיפוש'], ['Ctrl + K', 'מעבר לתיבת החיפוש'], ['↑ ↓', 'מעבר בין הצעות החיפוש'], ['Enter', 'בחירה / חיפוש'],
+    ['/', 'מעבר לתיבת החיפוש'], ['Ctrl + K', 'מעבר לתיבת החיפוש'], ['Ctrl + H', 'פתיחת היסטוריה'], ['↑ ↓', 'מעבר בין הצעות החיפוש'], ['Enter', 'בחירה / חיפוש'],
     ['Esc', 'סגירה / חזרה'], ['D (ג)', 'תכנון מסלול'], ['L (ך)', 'הצגת המיקום שלי'], ['N (מ)', 'איפוס כיוון לצפון'], ['T (א)', 'תצוגה בתלת-ממד'],
     ['?', 'הצגת קיצורי המקלדת'],
   ];
@@ -951,7 +1191,16 @@ function accessibilityDialog() {
     <p class="r-sub">תאריך עדכון ההצהרה: אוקטובר 2026</p>`);
 }
 
+/** Fades out the loading screen of web/map.html (once). */
+function hideBoot() {
+  const boot = document.getElementById('boot');
+  if (!boot || boot.classList.contains('done')) return;
+  boot.classList.add('done');
+  setTimeout(() => boot.remove(), 600);
+}
+
 function fatal(message, retry = false) {
+  hideBoot();
   const b = $('#banner');
   b.innerHTML = `${svg('alert', { size: 18 })}<span>${esc(message)}</span>${retry ? '<button type="button">ניסיון נוסף</button>' : ''}`;
   b.hidden = false;

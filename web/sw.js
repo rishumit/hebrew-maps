@@ -1,16 +1,17 @@
 // Service worker: offline app shell + cached map tiles and glyphs.
-const VERSION = 'hmaps-1.5.8';
+const VERSION = 'hmaps-1.5.10';
 const SHELL_CACHE = `${VERSION}-shell`;
-const TILE_CACHE = 'hmaps-tiles-v1';
+// v2: v1 is full of copies of the same tiles (their ?v= changed on every server start until 1.2.5)
+const TILE_CACHE = 'hmaps-tiles-v2';
 const MAX_TILES = 4000;
 const SHELL = [
-  '/', '/map.html', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
+  '/', '/map.html', '/js/boot.js', '/css/app.css', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png',
   '/js/app.js', '/js/api.js', '/js/combobox.js', '/js/directions.js', '/js/icons.js', '/js/map.js',
   '/js/panel.js', '/js/style.js', '/js/util.js', '/js/views.js', '/js/trails.js',
-  '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js',
+  '/js/elevation.js', '/js/hovercard.js', '/js/gallery.js', '/js/hscroll.js',
   '/vendor/maplibre-gl.js', '/vendor/maplibre-gl.css', '/vendor/mapbox-gl-rtl-text.js',
   '/js/transit.js', '/css/transit.css',
-  '/js/minyanim.js', '/js/logos.js',
+  '/js/minyanim.js', '/js/logos.js', '/js/bible.js',
   '/js/transit.js', '/css/transit.css', '/js/guide.js', '/css/guide.css',
   '/js/updates.js', '/css/updates.css',
   // desktop shell (tabs): the map iframes register this worker with scope /, so it serves the shell too
@@ -47,6 +48,8 @@ let writes = 0;
 async function tileStrategy(request) {
   const cache = await caches.open(TILE_CACHE);
   const cached = await cache.match(request);
+  // a versioned tile URL (…?v=<data version>) never changes: no need to ask the server again
+  if (cached && new URL(request.url).searchParams.has('v')) return cached;
   const network = fetch(request).then((resp) => {
     if (resp.ok && resp.status === 200) {
       cache.put(request, resp.clone());

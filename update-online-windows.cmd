@@ -12,8 +12,9 @@ rem                                        and opens again; the data is kept)
 rem   update-online-windows.cmd /quiet     no pause at the end, output to data\reports\update-log.txt
 rem   update-online-windows.cmd /schedule  run it automatically every Friday at 06:10 (Windows Task Scheduler)
 rem
-rem Building the data yourself from the original sources (power users): update-windows.cmd,
-rem update-transit-windows.cmd, update-zmanim-windows.cmd, build-terrain.cmd.
+rem Building the data yourself from the original sources (power users): scripts\windows\update-windows.cmd,
+rem scripts\windows\update-transit-windows.cmd, scripts\windows\update-zmanim-windows.cmd,
+rem scripts\windows\build-terrain.cmd.
 chcp 65001 >nul
 cd /d "%~dp0"
 set PYTHONUTF8=1

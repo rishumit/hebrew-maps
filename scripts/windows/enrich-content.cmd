@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 set PYTHONUTF8=1
-set HMAPS_LOG_FILE=%~dp0data\reports\enrich-log.txt
+set "HMAPS_LOG_FILE=%~dp0..\..\data\reports\enrich-log.txt"
 if not exist data\reports mkdir data\reports
 echo.
 echo  Adding photos, texts and facts to trip sites and trails (Wikimedia Commons, Wikipedia, Wikidata, Wikivoyage).

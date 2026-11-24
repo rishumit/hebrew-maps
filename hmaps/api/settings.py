@@ -34,6 +34,8 @@ class Settings:
     rate_per_sec: float = float(_env("HMAPS_RATE_PER_SEC", "20"))
     rate_burst: int = int(_env("HMAPS_RATE_BURST", "80"))
     cors_origins: tuple[str, ...] = tuple(o for o in _env("HMAPS_CORS_ORIGINS", "").split(",") if o)
+    # extra host names the server answers to, besides localhost and IP addresses ("*" = any; app.host_allowed)
+    allowed_hosts: tuple[str, ...] = tuple(h.strip().lower() for h in _env("HMAPS_ALLOWED_HOSTS", "").split(",") if h.strip())
     log_level: str = _env("HMAPS_LOG_LEVEL", "INFO")
     # "1" (default) = show images that were not downloaded yet straight from Wikimedia (needs internet);
     # "0" = fully offline: only the copies downloaded by tools/media.py

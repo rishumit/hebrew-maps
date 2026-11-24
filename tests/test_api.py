@@ -35,6 +35,50 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(body["basemap"]["type"], "fallback")
         self.assertTrue(body["routing"]["car"])
 
+    def test_foreign_host_is_rejected(self):
+        """DNS rebinding: a page on another domain that resolves to 127.0.0.1 must not reach the API."""
+        import urllib.error
+        import urllib.request
+
+        def status(host):
+            req = urllib.request.Request(self.api.url("/api/user/favorites"), headers={"Host": host})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                return e.code
+
+        port = self.api.port
+        self.assertEqual(status(f"attacker.example:{port}"), 400)
+        self.assertEqual(status("attacker.example"), 400)
+        for ok in (f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}", f"192.168.1.20:{port}"):
+            self.assertEqual(status(ok), 200, ok)
+
+    def test_host_allowed(self):
+        from hmaps.api.app import host_allowed
+        self.assertTrue(host_allowed("localhost:48080", ()))
+        self.assertTrue(host_allowed("LOCALHOST.", ()))
+        self.assertTrue(host_allowed("[::1]:8080", ()))
+        self.assertTrue(host_allowed("10.0.0.5", ()))
+        self.assertFalse(host_allowed("evil.example:48080", ()))
+        self.assertFalse(host_allowed("127.0.0.1.evil.example", ()))
+        self.assertFalse(host_allowed("", ()))
+        self.assertTrue(host_allowed("maps.example.org", ("maps.example.org",)))
+        self.assertTrue(host_allowed("anything.example", ("*",)))
+
+    def test_tile_version_is_stable_across_restarts(self):
+        """The ?v= of tile URLs must not change between server starts (else every launch re-downloads all tiles)."""
+        import subprocess
+        import sys
+        code = ("import sys; from pathlib import Path; from hmaps.api.store import Dataset; "
+                "print(Dataset(Path(sys.argv[1])).version)")
+        root = Path(__file__).resolve().parents[1]
+        out = {subprocess.run([sys.executable, "-c", code, str(self.data / "maps.db")], cwd=root, capture_output=True,
+                              text=True, env={**__import__("os").environ, "PYTHONHASHSEED": seed}).stdout.strip()
+               for seed in ("1", "2", "random")}
+        self.assertEqual(len(out), 1, out)
+        self.assertNotEqual(out, {""})
+
     def test_categories(self):
         s, body, _ = self.api.get("/api/categories")
         ids = [c["id"] for c in body["categories"]]

@@ -89,7 +89,7 @@ class ThreeDTest(unittest.TestCase):
         self.assertTrue(page.evaluate("!!window.__sky"))
         self.assertEqual(page.evaluate("window.__styleErrors"), [])
         # theme change keeps 3D
-        page.locator("#btn-layers").click()
+        page.locator("#btn-maptype").click()
         page.locator('input[name="maptype"][value="dark"]').check(force=True)
         page.wait_for_timeout(150)
         self.assertIn("building-3d", self.layer_ids(page))

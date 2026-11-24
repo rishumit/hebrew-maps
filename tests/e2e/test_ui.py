@@ -275,16 +275,68 @@ class UiTest(unittest.TestCase):
 
     def test_layers_theme_switch(self):
         page = self.new_page()
-        page.locator("#btn-layers").click()
-        expect(page.locator("#layers-pop")).to_be_visible()
+        page.locator("#btn-maptype").click()
+        expect(page.locator("#maptype-pop")).to_be_visible()
         expect(page.locator("#btn-hikes-near")).to_have_count(0)
         expect(page.locator("#toggle-kosher")).to_have_count(0)
         page.locator('input[name="maptype"][value="nature"] + .swatch').click()
         wait_js(page, "window.__lastStyle.name.includes('nature')")
-        page.locator('input[name="uitheme"][value="dark"] + span').click()
+        page.locator("#maptype-pop").press("Escape")
+        page.locator("#btn-uitheme").click()
         expect(page.locator("html")).to_have_attribute("data-theme", "dark")
         page.screenshot(path=str(SHOTS / "09-layers-dark.png"))
         self.assertNotIn("kosher=1", page.evaluate("window.__poiTiles[0]"))
+        self.assert_clean(page)
+
+    def test_popover_escape_keeps_the_panel(self):
+        """Escape in the map-type / layers popover closes only the popover, not the open place card."""
+        page = self.new_page()
+        page.locator("#q").fill("בתי קפה")
+        page.locator("#q").press("Enter")
+        page.locator(".results .result button").first.click()
+        expect(page.locator("#panel-title")).to_have_text("ארומה")
+        for btn, pop in (("#btn-layers", "#layers-pop"), ("#btn-maptype", "#maptype-pop")):
+            page.locator(btn).click()
+            expect(page.locator(pop)).to_be_visible()
+            page.keyboard.press("Escape")
+            expect(page.locator(pop)).to_be_hidden()
+            expect(page.locator(btn)).to_be_focused()
+            expect(page.locator("#panel-title")).to_have_text("ארומה")
+        self.assert_clean(page)
+
+    def test_kohen_mode_levels(self):
+        """Kohen mode: the grave-area levels to avoid are chosen under its check-box and sent as kohen_levels."""
+        page = self.new_page()
+        routes = []
+        page.on("request", lambda r: routes.append(r.url) if "/api/route" in r.url else None)
+        page.evaluate("window.__map.__clickPoi({id: 2, name: 'x'}, [34.7752, 32.0753])")
+        page.locator('#panel [data-act="route"]').click()
+        frm = page.locator("#dir-from")
+        frm.fill("")
+        frm.type("רוטש", delay=30)
+        page.locator("#dir-from-list [role=option]").first.click()
+        expect(page.locator(".steps .step").first).to_be_visible()
+        page.locator(".dir-avoid summary").click()
+        expect(page.locator("[data-kohen-level]")).to_have_count(0)  # only with Kohen mode on
+        page.locator('[data-avoid="kohen"]').check()
+        expect(page.locator("[data-kohen-level]")).to_have_count(3)
+        page.wait_for_timeout(300)
+        self.assertIn("avoid=kohen", routes[-1])
+        self.assertNotIn("kohen_levels", routes[-1])  # all levels = the server's default
+        n = len(routes)
+        page.locator('[data-kohen-level="ב"]').uncheck()
+        expect(page.locator('[data-kohen-level="ב"]')).not_to_be_checked()
+        page.wait_for_timeout(300)
+        self.assertGreater(len(routes), n)
+        self.assertIn("kohen_levels=%D7%90%D7%92", routes[-1])  # אג
+        # the last level cannot be unchecked
+        page.locator('[data-kohen-level="ג"]').uncheck()
+        page.wait_for_timeout(200)
+        page.locator('[data-kohen-level="א"]').click()
+        expect(page.locator('[data-kohen-level="א"]')).to_be_checked()
+        page.screenshot(path=str(SHOTS / "kohen-levels.png"))
+        # remembered for the next visit
+        self.assertEqual(page.evaluate("JSON.parse(localStorage.getItem('hmaps:route:kohen-levels'))"), ["א"])
         self.assert_clean(page)
 
     def test_satellite_whole_country_download(self):
@@ -324,7 +376,7 @@ class UiTest(unittest.TestCase):
 
         page.route("**/api/satellite/**", handle)
         page.route("**/tiles/satellite/**", lambda r: r.fulfill(status=204, body=""))
-        page.locator("#btn-layers").click()
+        page.locator("#btn-maptype").click()
         page.locator('input[name="maptype"][value="satellite"] + .swatch').click()
         expect(page.locator("#sat-offline")).to_be_visible()
         # downloading for offline use lives in the updates panel
@@ -418,7 +470,7 @@ class UiTest(unittest.TestCase):
             self.assertGreater(n_layers, 30)
             expect(page.locator("#banner")).to_be_hidden()
             for theme in ("nature", "dark", "light"):
-                page.locator("#btn-layers").click() if page.locator("#layers-pop").is_hidden() else None
+                page.locator("#btn-maptype").click() if page.locator("#maptype-pop").is_hidden() else None
                 page.locator(f'input[name="maptype"][value="{theme}"] + .swatch').click()
                 wait_js(page, f"window.__lastStyle.name === 'hmaps-{theme}'")
             self.assert_clean(page)

@@ -10,9 +10,12 @@ import math
 import threading
 from collections import OrderedDict
 
-import numpy as np
+from ..core import geo
+from ..core.lazy import lazy_import
 
-from ..core import dem, geo
+# imported on first use: the server starts faster without numpy
+np = lazy_import("numpy")
+dem = lazy_import("hmaps.core.dem")
 from .store import Basemap
 
 ATTRIBUTION = "Copernicus DEM © DLR/Airbus, ESA"

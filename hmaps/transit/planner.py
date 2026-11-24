@@ -111,7 +111,7 @@ def _color(data: TransitData, route: int, mode: str) -> tuple[str, str]:
 def status(data: TransitData | None, today: date | None = None) -> dict:
     if data is None:
         return {"available": False,
-                "message": "נתוני התחבורה הציבורית עדיין לא הותקנו. להתקנה: update-windows.cmd "
+                "message": "נתוני התחבורה הציבורית עדיין לא הותקנו. להתקנה: scripts/windows/update-windows.cmd "
                            "(או python -m hmaps.etl gtfs)."}
     today = today or datetime.now(TZ).date()
     m = data.meta
@@ -125,7 +125,7 @@ def status(data: TransitData | None, today: date | None = None) -> dict:
     level = "ok"
     if today > data.end:
         level, warning = "expired", (f"לוח הזמנים של התחבורה הציבורית פג תוקף ב-{data.end:%d/%m/%Y}. "
-                                     "יש לעדכן את הנתונים (update-windows.cmd).")
+                                     "יש לעדכן את הנתונים (scripts/windows/update-windows.cmd).")
     elif today < data.start:
         level, warning = "future", f"לוח הזמנים מתחיל רק ב-{data.start:%d/%m/%Y}."
     elif days_left <= 5:

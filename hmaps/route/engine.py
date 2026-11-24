@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from . import avoid as avoid_mod
+from . import kohen as kohen_mod
 from .graph import MAX_SPEED_MS, PROFILES
 
 log = logging.getLogger(__name__)
@@ -106,7 +107,8 @@ class Router:
         self._areas_loaded = False
         self.areas: avoid_mod.Areas | None = None
         self._kohen_loaded = False
-        self.kohen: avoid_mod.KohenAreas | None = None
+        self._kohen_fc: dict | None = None  # the "kohen" FeatureCollection of avoid_areas.json
+        self._kohen: dict[str, avoid_mod.KohenAreas | None] = {}  # per levels_key ("" = all levels)
         self._lock = threading.Lock()
         self._grid = None
         # vertex degree (all profiles) – used to decide whether a junction is a real choice
@@ -118,16 +120,18 @@ class Router:
         log.info("router loaded: %d vertices, %d edges", n, len(g["u"]))
 
     # ------------------------------------------------------------------ setup
-    def profile(self, name: str, avoid: frozenset[str] = frozenset()) -> _Profile:
+    def profile(self, name: str, avoid: frozenset[str] = frozenset(),
+                kohen_levels: frozenset[str] | None = None) -> _Profile:
         avoid = frozenset(a for a in avoid if a in avoid_mod.FOR_PROFILE.get(name, ()))
-        key = name if not avoid else f"{name}|{avoid_mod.key(avoid)}"
+        kl = kohen_mod.levels_key(kohen_levels) if "kohen" in avoid else ""
+        key = name if not avoid else f"{name}|{avoid_mod.key(avoid)}" + (f"|{kl}" if kl else "")
         if key not in self.profiles:
             with self._lock:
                 if key not in self.profiles:
                     costs = None
                     if avoid:
                         g = self.g
-                        m = {k: self.avoid_mask(k) for k in avoid if k != "junctions"}
+                        m = {k: self.avoid_mask(k, kohen_levels) for k in avoid if k != "junctions"}
                         costs = avoid_mod.apply(g, g[f"cost_{name}_f"], g[f"cost_{name}_b"], m, avoid,
                                                 self.junctions() if "junctions" in avoid else None)
                     self.profiles[key] = _Profile(self.g, name, costs)
@@ -138,19 +142,22 @@ class Router:
         return self.profiles[key]
 
     # ------------------------------------------------------------------ avoid options
-    def avoid_mask(self, what: str) -> np.ndarray:
-        """Edges of one avoid category (cached; called with the lock held or from profile())."""
-        m = self._avoid_masks.get(what)
+    def avoid_mask(self, what: str, kohen_levels: frozenset[str] | None = None) -> np.ndarray:
+        """Edges of one avoid category (cached; called with the lock held or from profile()).
+
+        *kohen_levels*: the grave-area levels avoided in Kohen mode (None = all)."""
+        cache_key = what + (f"|{kohen_mod.levels_key(kohen_levels)}" if what == "kohen" and kohen_levels else "")
+        m = self._avoid_masks.get(cache_key)
         if m is None:
             if what == "pa":
                 m = avoid_mod.pa_mask(self.g, self.pa_areas())
             elif what == "kohen":
-                m = avoid_mod.kohen_mask(self.g, self.kohen_areas())
+                m = avoid_mod.kohen_mask(self.g, self.kohen_areas(kohen_levels))
             else:
                 m = avoid_mod.masks(self.g, self.names, frozenset([what]), None).get(what)
             if m is None:
                 m = np.zeros(len(self.g["u"]), dtype=bool)
-            self._avoid_masks[what] = m
+            self._avoid_masks[cache_key] = m
         return m
 
     def junctions(self) -> np.ndarray:
@@ -164,18 +171,23 @@ class Router:
             self._areas_loaded = True
         return self.areas
 
-    def kohen_areas(self) -> "avoid_mod.KohenAreas | None":
+    def kohen_areas(self, levels: frozenset[str] | None = None) -> "avoid_mod.KohenAreas | None":
+        """Grave areas of the given levels (None = all); None when the data package has none of them."""
         if not self._kohen_loaded:
-            self.kohen = avoid_mod.KohenAreas.load(avoid_mod.areas_path(self.path))
+            self._kohen_fc = avoid_mod.KohenAreas.load_collection(avoid_mod.areas_path(self.path))
             self._kohen_loaded = True
-        return self.kohen
+        k = kohen_mod.levels_key(levels)
+        if k not in self._kohen:
+            areas = avoid_mod.KohenAreas.from_geojson(self._kohen_fc, levels) if self._kohen_fc else None
+            self._kohen[k] = areas if areas is not None and len(areas) else None
+        return self._kohen[k]
 
     def avoid_available(self) -> dict[str, bool]:
         """Which avoid options can be honoured with this graph (``pa`` / ``kohen`` need the areas file)."""
         have = {"pa": self.pa_areas, "kohen": self.kohen_areas}
         return {a: (a not in have or have[a]() is not None) for a in avoid_mod.AVOID}
 
-    def _unmet(self, path: list[tuple], avoid: frozenset[str]) -> list[str]:
+    def _unmet(self, path: list[tuple], avoid: frozenset[str], kohen_levels: frozenset[str] | None = None) -> list[str]:
         """Avoid options the found route could not keep (it still uses such roads)."""
         out = []
         edges = [p[0] for p in path if abs(p[3] - p[2]) > 1e-9]
@@ -186,7 +198,7 @@ class Router:
         for a in sorted(avoid):
             if a == "junctions":
                 continue
-            m = self.avoid_mask(a)[ids]
+            m = self.avoid_mask(a, kohen_levels)[ids]
             used = float(lengths[m].sum())
             # a few metres at the very start / end (the point itself is on such a road) do not count
             if used > (UNPAVED_TOLERANCE_M if a == "unpaved" else 30.0):
@@ -259,16 +271,17 @@ class Router:
         raise NoRoute("NoSegment")
 
     # ------------------------------------------------------------------ search
-    def route(self, profile: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset()) -> dict:
+    def route(self, profile: str, points: list[tuple[float, float]], avoid: frozenset[str] = frozenset(),
+              kohen_levels: frozenset[str] | None = None) -> dict:
         """OSRM-style response for (lat, lon) points (origin, [via...], destination).
 
         *avoid*: options of :mod:`hmaps.route.avoid`; the route gets ``"avoid_unmet"`` with the
-        ones it could not keep."""
+        ones it could not keep. *kohen_levels*: grave-area levels for ``kohen`` (None = all)."""
         name = PROFILE_ALIASES.get(profile, profile)
         if name not in PROFILES:
             raise ValueError(profile)
         avoid = frozenset(a for a in avoid if a in avoid_mod.FOR_PROFILE.get(name, ()))
-        prof = self.profile(name, avoid)
+        prof = self.profile(name, avoid, kohen_levels)
         base = self.profile(name) if avoid else prof
         legs, coords, total_d, total_t = [], [], 0.0, 0.0
         unmet: set[str] = set()
@@ -276,7 +289,7 @@ class Router:
             leg = self._leg(prof, a, b, base=base)
             path = leg.pop("path", None)
             if avoid and path:
-                unmet.update(self._unmet(path, avoid))
+                unmet.update(self._unmet(path, avoid, kohen_levels))
             legs.append(leg)
             if coords and leg["coords"]:
                 leg["coords"] = leg["coords"][1:]

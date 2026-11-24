@@ -4,6 +4,7 @@
 import { logoMarkerImage, markerImage, shieldImage } from './icons.js';
 import { fallbackStyle, omtStyle, outdoorLayers, addSatellite, THEMES } from './style.js';
 import { bus, prefersReducedMotion } from './util.js';
+import { BIBLE_CLICK_LAYERS, bibleGeo, bibleLayers, loadBible } from './bible.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 // ring colour of the logo markers (brand colours from hmaps/core/logos.py)
@@ -28,6 +29,7 @@ export const LAYER_GROUPS = {
   pois: { label: 'נקודות עניין', test: (l) => ['pois', 'pois-cluster', 'pois-cluster-count'].includes(l.id) },
   trails: { label: 'שבילים מסומנים', test: (l) => l.id.startsWith('trails-') },
   parks: { label: 'שמורות טבע וגנים לאומיים', test: (l) => l.id === 'parks-fill' || l.id === 'parks-outline' },
+  bible: { label: 'מקומות בתנ״ך', test: (l) => l.id.startsWith('bible-') },
   labels: { label: 'שמות ותוויות', test: (l) => l.type === 'symbol' && ['openmaptiles', 'fallback', 'world', 'contours'].includes(l.source) },
   buildings: { label: 'מבנים', test: (l) => l.id === 'building' || l.id === 'building-3d' },
   contours: { label: 'קווי גובה', rebuild: true, test: (l) => l.source === 'contours', needs: (m) => !!m.terrain?.contours },
@@ -44,7 +46,7 @@ export class MapView {
     this.satellite = initial.satellite || false;
     this.poiFilter = { cats: [], kosher: false };
     this.is3d = false;
-    this.layers = { pois: true, trails: true, parks: true, labels: true, buildings: true, world: true, ...(initial.layers || {}) };
+    this.layers = { pois: true, trails: true, parks: true, labels: true, buildings: true, world: true, bible: false, ...(initial.layers || {}) };
     this.showPois = this.layers.pois;
     this.showOutdoor = this.layers.trails; // marked trails are clickable only while shown
     this.data = { results: EMPTY, selection: EMPTY, route: EMPTY, location: EMPTY, highlight: EMPTY, endpoints: EMPTY };
@@ -102,6 +104,7 @@ export class MapView {
     this.map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
 
     this.map.on('style.load', () => this._installOverlays());
+    // the eruv lines arrive after the map was created (small static file)
     this.map.on('styleimagemissing', (e) => this._missingImage(e.id));
     this.map.on('error', (e) => {
       const msg = e?.error?.message || '';
@@ -247,7 +250,7 @@ export class MapView {
   }
 
   // ----------------------------------------------------------------- 3D mode
-  /** Real relief needs the DEM (data/tiles/terrain.mbtiles, built by build-terrain.cmd). */
+  /** Real relief needs the DEM (data/tiles/terrain.mbtiles, built by scripts/windows/build-terrain.cmd). */
   get has3dTerrain() {
     return !!this.meta?.terrain?.dem?.tiles;
   }
@@ -384,6 +387,7 @@ export class MapView {
     }
     if (!m.getSource('pois')) m.addSource('pois', { type: 'vector', tiles: [this._poiTilesUrl()], minzoom: 6, maxzoom: 18 });
     this._installOutdoor();
+    this._installBible();
 
     this._addLayerSafe({ id: 'highlight-fill', type: 'fill', source: 'highlight',
       filter: ['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false],
@@ -494,6 +498,18 @@ export class MapView {
     }
   }
 
+  /** Places of the Tanach (web/bible/places.json, see web/js/bible.js) – loaded only once the layer is on. */
+  _installBible() {
+    const m = this.map;
+    if (!m.getSource('bible')) m.addSource('bible', { type: 'geojson', data: bibleGeo() });
+    for (const layer of bibleLayers(this._resolvedTheme() === 'dark')) this._addLayerSafe(layer);
+    if (this.layerOn('bible')) this._loadBible();
+  }
+
+  _loadBible() {
+    loadBible().then(() => this.map.getSource('bible')?.setData(bibleGeo()));
+  }
+
   setOutdoorVisible(visible) {
     this.setLayer('trails', visible);
     this.setLayer('parks', visible);
@@ -517,6 +533,7 @@ export class MapView {
       this.map.setStyle(this._baseStyle(), { diff: false });
       return;
     }
+    if (group === 'bible' && visible) this._loadBible();
     this._applyLayers();
   }
 
@@ -768,7 +785,7 @@ export class MapView {
       m.on('mouseenter', layer, () => (m.getCanvas().style.cursor = 'pointer'));
       m.on('mouseleave', layer, () => (m.getCanvas().style.cursor = ''));
     };
-    ['pois', 'pois-cluster', 'results'].forEach(pointer);
+    ['pois', 'pois-cluster', 'results', ...BIBLE_CLICK_LAYERS].forEach(pointer);
     // hover preview of a POI card (rendered by hovercard.js)
     let hovered = null;
     const hoverEnd = (immediate = false) => {
@@ -806,6 +823,12 @@ export class MapView {
       if (hits.length) return;
       // a marked trail under the pointer (a few pixels of tolerance: lines are thin)
       const box = [[e.point.x - 4, e.point.y - 4], [e.point.x + 4, e.point.y + 4]];
+      const bible = this.layerOn('bible')
+        ? m.queryRenderedFeatures(box, { layers: BIBLE_CLICK_LAYERS.filter((l) => m.getLayer(l)) })[0] : null;
+      if (bible) {
+        bus.emit('bible:select', { id: bible.properties.id, m: bible.properties.m });
+        return;
+      }
       const trail = this.showOutdoor
         ? m.queryRenderedFeatures(box, { layers: TRAIL_CLICK_LAYERS.filter((l) => m.getLayer(l)) })[0] : null;
       if (trail) {

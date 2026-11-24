@@ -2,14 +2,15 @@
 
 <div align="center">
 
-**מפת ישראל מלאה למחשב Windows – בחינם, בעברית, גם בלי אינטרנט**
+**מפת ישראל מלאה למחשב – בחינם, בעברית, גם בלי אינטרנט**
 
 [![הורדה](https://img.shields.io/github/v/release/rishumit/hebrew-maps?label=הורדה&color=0969da)](https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe)
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)](https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe)
+[![Linux](https://img.shields.io/badge/Linux-preview-yellow?logo=linux)](https://github.com/rishumit/hebrew-maps/actions/workflows/linux.yml)
 [![חינם](https://img.shields.io/badge/מחיר-חינם-brightgreen)](https://rishumit.github.io/hebrew-maps/)
 [![Wiki](https://img.shields.io/badge/Wiki-מדריכים-orange)](https://github.com/rishumit/hebrew-maps/wiki)
 
-[**האתר**](https://rishumit.github.io/hebrew-maps/) · [**הורדה ל-Windows**](https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe) · [**מה חדש**](https://rishumit.github.io/hebrew-maps/changelog.html) · [**Wiki**](https://github.com/rishumit/hebrew-maps/wiki)
+[**האתר**](https://rishumit.github.io/hebrew-maps/) · [**הורדה ל-Windows**](https://github.com/rishumit/hebrew-maps/releases/latest/download/HebrewMaps-Setup.exe) · [**Linux (ניסיוני)**](docs/linux.md) · [**מה חדש**](https://rishumit.github.io/hebrew-maps/changelog.html) · [**Wiki**](https://github.com/rishumit/hebrew-maps/wiki)
 
 </div>
 
@@ -87,7 +88,7 @@
 - שמירת מסלולים וחיפושים, ייצוא וייבוא לקובץ – הכול נשמר רק במחשב
 - הימנעות מכבישי אגרה, כבישים מהירים, דרכי עפר ארוכות, צמתים מאתגרים ושטחי A/B (בקירוב)
 - בחירת תיקיית הנתונים (תפריט ← הגדרות ותיקיית נתונים)
-- בהתרחקות – מפת כל העולם בפירוט נמוך (Natural Earth; נבנית ב-`build-world.cmd`)
+- בהתרחקות – מפת כל העולם בפירוט נמוך (Natural Earth; נבנית ב-`scripts/windows/build-world.cmd`)
 
 </details>
 
@@ -109,6 +110,19 @@
 3. פתחו את האפליקציה ← **תפריט ← עדכונים ← עדכן הכול** (הורדת נתוני ישראל, כ-2GB, פעם אחת)
 
 > **SmartScreen?** לחצו "מידע נוסף" ← "הפעל בכל זאת". הקובץ נבנה מקוד פתוח ב-GitHub Actions.
+
+---
+
+### 🐧 Linux — גרסת preview
+
+חבילת שולחן העבודה ל-Linux מיועדת כרגע ל-**x86_64** ונמסרת כארכיון `tar.gz` (לא כמתקין `.deb`/`.rpm`). היא נבדקת אוטומטית ב-GitHub Actions, אך עדיין לא נבדקה על מגוון הפצות Linux.
+
+1. הורידו את `HebrewMaps-Linux-*.tar.gz` מ[הגרסה האחרונה ב-GitHub Releases](https://github.com/rishumit/hebrew-maps/releases/latest). עד שתצורף חבילה לגרסה, אפשר להוריד את ה-artifact מריצת [Linux Desktop](https://github.com/rishumit/hebrew-maps/actions/workflows/linux.yml).
+2. התקינו את דרישות WebKitGTK/GTK לפי [מדריך Linux](docs/linux.md), וחלצו את הארכיון.
+3. מתוך התיקייה שחולצה הריצו `./run-hebrew-maps.sh`.
+4. בהפעלה הראשונה פתחו **תפריט ← עדכונים ← עדכן הכול** להורדת נתוני ישראל.
+
+עדכוני נתונים זמינים מתוך האפליקציה גם ב-Linux. עדכון התוכנה עצמה אינו אוטומטי שם: מורידים גרסה חדשה ומחליפים את קובצי התוכנה תוך שמירה על `data/`. פרטים, התקנה ופתרון תקלות: [docs/linux.md](docs/linux.md).
 
 ---
 
@@ -134,15 +148,17 @@ setup-windows.cmd
 <details>
 <summary>קבצי ניהול</summary>
 
+כלי הבנייה והתחזוקה המתקדמים נמצאים ב-`scripts/windows/`. פקודות ה-CMD שבשורש נשמרו כקיצורי תאימות.
+
 | קובץ | תפקיד |
 |------|-------|
 | `start-windows.cmd` | הפעלה |
 | `stop-windows.cmd` | עצירה |
 | `update-online-windows.cmd` | עדכון נתונים מקוון (מומלץ) |
 | `update-online-windows.cmd /schedule` | עדכון אוטומטי שבועי |
-| `update-windows.cmd` | בנייה מקומית מחדש (למתקדמים) |
-| `build-terrain.cmd` | בניית קווי גובה והצללה |
-| `download-satellite.cmd` | הורדת תצלומי אוויר לכל הארץ |
+| `scripts/windows/update-windows.cmd` | בנייה מקומית מחדש (למתקדמים) |
+| `scripts/windows/build-terrain.cmd` | בניית קווי גובה והצללה |
+| `scripts/windows/download-satellite.cmd` | הורדת תצלומי אוויר לכל הארץ |
 
 </details>
 
@@ -173,9 +189,12 @@ setup.cmd
 | מתוך האפליקציה | תפריט ← עדכונים ← "עדכן הכול" |
 | שורת פקודה | `update-online-windows.cmd` |
 | אוטומטי שבועי | `update-online-windows.cmd /schedule` |
+| עדכון תוכנה ב-Linux | הורדת ארכיון Linux חדש והחלפת קובצי התוכנה; שומרים את `data/` |
 | מחשב בלי אינטרנט | [HebrewMaps-Update.zip](https://github.com/rishumit/hebrew-maps/releases/tag/data-latest) ← תפריט ← "עדכון מקובץ…" |
 
 **עדכון חלקי:** כשהשתנה מעט, יורד רק השינוי (0.1–1.5MB במקום 60MB). המפה ממשיכה לעבוד בזמן העדכון.
+
+עדכון אוטומטי של התוכנה עצמה זמין כרגע רק בגרסת Windows המותקנת. ב-Linux יש להוריד את הארכיון החדש ידנית; עדכוני הנתונים נשארים זמינים מתוך האפליקציה.
 
 <details>
 <summary>חבילות הנתונים</summary>
@@ -232,7 +251,7 @@ site/        אתר המוצר (HTML/CSS סטטיים)
 
 </details>
 
-ההחלטות הטכניות: [docs/adr](docs/adr) · מסמך מימוש: [docs/11-implementation.md](docs/11-implementation.md) · תפעול: [docs/12-operations.md](docs/12-operations.md)
+ההחלטות הטכניות: [docs/adr](docs/adr) · מסמך מימוש: [docs/11-implementation.md](docs/11-implementation.md) · תפעול: [docs/12-operations.md](docs/12-operations.md) · [מדריך Linux](docs/linux.md)
 
 ---
 
@@ -276,7 +295,7 @@ git add docs/release-notes site/changelog.html && git commit -m "release notes v
 git tag -a v1.2.0 -m "גרסה 1.2.0" && git push origin v1.2.0
 ```
 
-או: Actions ← **Windows Installer** ← Run workflow.
+או: Actions ← **Windows Installer** לפרסום Windows, או **Linux Desktop** לבניית חבילת Linux.
 
 </details>
 

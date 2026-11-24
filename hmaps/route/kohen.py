@@ -26,6 +26,16 @@ def _norm_level(v) -> str:
     return LEVEL_ALIASES.get(v, v)
 
 
+def parse_levels(text: str | None) -> frozenset[str] | None:
+    """``"אב"`` / ``"א,ב"`` → the levels to avoid; None = all of them (also for empty / unknown input)."""
+    levels = frozenset(_norm_level(c) for c in str(text or "").replace(",", "") if c.strip()) & ALL_LEVELS
+    return levels if levels and levels != ALL_LEVELS else None
+
+
+def levels_key(levels: frozenset[str] | None) -> str:
+    return "".join(sorted(levels)) if levels else ""
+
+
 def _ring_arrays(ring) -> tuple[np.ndarray, np.ndarray]:
     a = np.asarray(ring, dtype=np.float64)
     return a[:, 0], a[:, 1]
@@ -101,15 +111,21 @@ class KohenAreas:
                 polys.extend(g["coordinates"])
         return cls(polys)
 
-    @classmethod
-    def load(cls, path: Path, levels: frozenset[str] | None = None) -> "KohenAreas | None":
-        """קורא את המפתח "kohen" מתוך avoid_areas.json. None אם אין."""
+    @staticmethod
+    def load_collection(path: Path) -> dict | None:
+        """ה-FeatureCollection שבמפתח "kohen" של avoid_areas.json, או None אם אין."""
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
-        fc = data.get("kohen")
-        if not fc or not fc.get("features"):
+        fc = data.get("kohen") if isinstance(data, dict) else None
+        return fc if fc and fc.get("features") else None
+
+    @classmethod
+    def load(cls, path: Path, levels: frozenset[str] | None = None) -> "KohenAreas | None":
+        """קורא את המפתח "kohen" מתוך avoid_areas.json. None אם אין."""
+        fc = cls.load_collection(path)
+        if fc is None:
             return None
         areas = cls.from_geojson(fc, levels)
         return areas if len(areas) else None

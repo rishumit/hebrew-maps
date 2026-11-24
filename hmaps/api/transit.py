@@ -23,13 +23,17 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from ..transit import data as tdata
-from ..transit import fares, planner
+from ..core.lazy import lazy_import
+
+# imported on first use (numpy, the timetable code): the server starts faster
+tdata = lazy_import("hmaps.transit.data")
+fares = lazy_import("hmaps.transit.fares")
+planner = lazy_import("hmaps.transit.planner")
 from .settings import settings
 
 log = logging.getLogger("hmaps.api.transit")
 
-NOT_READY = ("נתוני התחבורה הציבורית עדיין לא הותקנו. כדי להוסיף אותם הריצו את update-windows.cmd "
+NOT_READY = ("נתוני התחבורה הציבורית עדיין לא הותקנו. כדי להוסיף אותם הריצו את scripts/windows/update-windows.cmd "
              "(או: python -m hmaps.etl gtfs).")
 
 
