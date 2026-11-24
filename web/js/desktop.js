@@ -29,6 +29,7 @@ const KIND_ICON = {
 const $ = (sel, root = document) => root.querySelector(sel);
 const strip = $('#tabstrip');
 const views = $('#views');
+const ctxMenu = $('#tab-ctx-menu');
 const tauri = window.__TAURI_INTERNALS__?.invoke ? window.__TAURI_INTERNALS__ : null;
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const ANIM_MS = 160;
@@ -256,9 +257,13 @@ function closeTab(id, { byMouse = false } = {}) {
   tabs.delete(id);
   order.splice(i, 1);
   if (!order.length) {
-    // closing the last tab leaves a fresh map (closing the window is the window's ✕ / Alt+F4)
-    activeId = null;
-    newTab({ focusSearch: true });
+    // closing the last tab closes the app (Tauri) or window (browser)
+    if (tauri) {
+      saveNow();
+      tauri.invoke('plugin:window|close').catch(() => null);
+    } else {
+      window.close();
+    }
     return;
   }
   if (wasActive) {
@@ -283,6 +288,115 @@ function cycle(delta) {
   const i = order.indexOf(activeId);
   activate(order[(i + delta + order.length) % order.length], { focusContent: true });
 }
+
+// ------------------------------------------------------------------ tab context menu
+let ctxTabId = null;
+
+function showTabContextMenu(tabId, x, y) {
+  ctxTabId = tabId;
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+  
+  ctxMenu.hidden = false;
+  
+  // Position menu
+  const rect = ctxMenu.getBoundingClientRect();
+  const maxX = window.innerWidth - rect.width - 4;
+  const maxY = window.innerHeight - rect.height - 4;
+  ctxMenu.style.left = `${Math.min(x, maxX)}px`;
+  ctxMenu.style.top = `${Math.min(y, maxY)}px`;
+  
+  // Update menu state
+  const index = order.indexOf(tabId);
+  const hasRight = index < order.length - 1;
+  const hasOthers = order.length > 1;
+  
+  ctxMenu.querySelector('[data-act="close-right"]').disabled = !hasRight;
+  ctxMenu.querySelector('[data-act="close-others"]').disabled = !hasOthers;
+  
+  // Focus first item
+  ctxMenu.querySelector('[role="menuitem"]:not([disabled])')?.focus();
+}
+
+function hideTabContextMenu() {
+  ctxMenu.hidden = true;
+  ctxTabId = null;
+}
+
+function reloadTab(id) {
+  const tab = tabs.get(id);
+  if (!tab || !tab.frame) return;
+  try {
+    tab.frame.contentWindow.location.reload();
+  } catch {
+    // reload failed, recreate frame
+    const hash = tab.hash;
+    tab.frame.remove();
+    tab.frame = null;
+    tab.hash = hash;
+    if (id === activeId) load(tab);
+  }
+  announce(`הלשונית ${tab.title} נטענת מחדש`);
+}
+
+function duplicateTab(id) {
+  const tab = tabs.get(id);
+  if (!tab) return;
+  newTab({ hash: tab.hash, title: tab.title, kind: tab.kind, after: id, activate: false, focusSearch: false });
+}
+
+function closeOtherTabs(keepId) {
+  const toClose = order.filter((id) => id !== keepId);
+  if (!toClose.length) return;
+  freezeWidths();
+  for (const id of toClose) {
+    const tab = tabs.get(id);
+    if (!tab) continue;
+    closed.push({ hash: tab.hash, title: tab.title, kind: tab.kind, index: order.indexOf(id) });
+    tab.frame?.remove();
+    animateClose(tab.el);
+    tab.view.remove();
+    tabs.delete(id);
+  }
+  order = [keepId];
+  if (closed.length > MAX_CLOSED) closed.splice(0, closed.length - MAX_CLOSED);
+  if (activeId !== keepId) {
+    activeId = null;
+    activate(keepId, { focusContent: true });
+  } else {
+    save();
+  }
+  announce('הלשוניות האחרות נסגרו');
+  setTimeout(unfreezeWidths, ANIM_MS + 20);
+}
+
+function closeTabsToRight(fromId) {
+  const index = order.indexOf(fromId);
+  if (index === -1 || index === order.length - 1) return;
+  const toClose = order.slice(index + 1);
+  if (!toClose.length) return;
+  freezeWidths();
+  for (const id of toClose) {
+    const tab = tabs.get(id);
+    if (!tab) continue;
+    closed.push({ hash: tab.hash, title: tab.title, kind: tab.kind, index: order.indexOf(id) });
+    tab.frame?.remove();
+    animateClose(tab.el);
+    tab.view.remove();
+    tabs.delete(id);
+  }
+  order = order.slice(0, index + 1);
+  if (closed.length > MAX_CLOSED) closed.splice(0, closed.length - MAX_CLOSED);
+  if (!tabs.has(activeId)) {
+    activeId = null;
+    activate(fromId, { focusContent: true });
+  } else {
+    save();
+  }
+  announce('הלשוניות מימין נסגרו');
+  setTimeout(unfreezeWidths, ANIM_MS + 20);
+}
+
 
 // ------------------------------------------------------------------ map → shell messages
 window.addEventListener('message', (e) => {
@@ -417,6 +531,49 @@ strip.addEventListener('keydown', (e) => {
 });
 $('#btn-new-tab').addEventListener('click', () => newTab());
 
+// context menu on tabs
+strip.addEventListener('contextmenu', (e) => {
+  const el = e.target.closest('.tab');
+  if (!el || el.classList.contains('closing')) return;
+  e.preventDefault();
+  showTabContextMenu(el.dataset.id, e.clientX, e.clientY);
+});
+
+ctxMenu.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn || btn.disabled || !ctxTabId) return;
+  const act = btn.dataset.act;
+  hideTabContextMenu();
+  
+  if (act === 'reload') reloadTab(ctxTabId);
+  else if (act === 'duplicate') duplicateTab(ctxTabId);
+  else if (act === 'close-others') closeOtherTabs(ctxTabId);
+  else if (act === 'close-right') closeTabsToRight(ctxTabId);
+  else if (act === 'close') closeTab(ctxTabId);
+});
+
+ctxMenu.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    hideTabContextMenu();
+    tabs.get(ctxTabId)?.el.querySelector('.tab-main')?.focus();
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const items = [...ctxMenu.querySelectorAll('[role="menuitem"]:not([disabled])')];
+    const i = items.indexOf(document.activeElement);
+    if (i === -1) return;
+    const next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+    items[next]?.focus();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideTabContextMenu();
+});
+
+window.addEventListener('blur', hideTabContextMenu);
+
+
 // drag to reorder (live, like Chrome): the tab lifts and follows the pointer; the neighbours it passes slide
 // into its old place. Positions come from offsetLeft (layout, unaffected by the transforms of the animations).
 strip.addEventListener('pointerdown', (e) => {
@@ -484,19 +641,31 @@ strip.addEventListener('pointerdown', (e) => {
 // ------------------------------------------------------------------ keyboard shortcuts
 function onKey(e) {
   const ctrl = e.ctrlKey || e.metaKey;
-  if (!ctrl || e.altKey) return;
   const code = e.code;
   let handled = true;
-  if (code === 'KeyT' && e.shiftKey) reopenClosed();
-  else if (code === 'KeyT') newTab();
-  else if (code === 'KeyW' || code === 'F4') closeTab(activeId);
-  else if (e.key === 'Tab' || code === 'PageDown' || code === 'PageUp') {
-    cycle((e.key === 'Tab' ? e.shiftKey : code === 'PageUp') ? -1 : 1);
-  } else if (/^Digit[1-9]$/.test(code) && !e.shiftKey) {
-    const n = Number(code.slice(5));
-    const id = n === 9 ? order[order.length - 1] : order[n - 1];
-    if (id) activate(id, { focusContent: true });
+  
+  // Ctrl+R or F5: reload active tab
+  if (!e.shiftKey && !e.altKey && (code === 'KeyR' && ctrl || code === 'F5')) {
+    reloadTab(activeId);
+  }
+  // Ctrl+Alt+W: close other tabs
+  else if (ctrl && e.altKey && code === 'KeyW') {
+    closeOtherTabs(activeId);
+  }
+  // Ctrl+T/W/Shift+T, Ctrl+Tab, Ctrl+1-9
+  else if (ctrl && !e.altKey) {
+    if (code === 'KeyT' && e.shiftKey) reopenClosed();
+    else if (code === 'KeyT') newTab();
+    else if (code === 'KeyW' || code === 'F4') closeTab(activeId);
+    else if (e.key === 'Tab' || code === 'PageDown' || code === 'PageUp') {
+      cycle((e.key === 'Tab' ? e.shiftKey : code === 'PageUp') ? -1 : 1);
+    } else if (/^Digit[1-9]$/.test(code) && !e.shiftKey) {
+      const n = Number(code.slice(5));
+      const id = n === 9 ? order[order.length - 1] : order[n - 1];
+      if (id) activate(id, { focusContent: true });
+    } else handled = false;
   } else handled = false;
+  
   if (handled) {
     e.preventDefault();
     e.stopPropagation();
