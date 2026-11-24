@@ -235,8 +235,8 @@ export class Directions {
             ${this._avoidNotice(r)}
             ${elevationSlot(this.app.meta, this.mode, r)}
             <div class="p-section dir-actions">
-              <button type="button" class="btn btn-secondary btn-sm" data-act="save-route">${svg('star', { size: 16 })}שמירת המסלול</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-act="print-route">${svg('print', { size: 16 })}הדפסת מסלול והוראות</button>
+              <button type="button" class="icon-btn" data-act="save-route" aria-label="שמירת המסלול" title="שמירת המסלול">${svg('star', { size: 20 })}</button>
+              <button type="button" class="icon-btn" data-act="print-route" aria-label="הדפסת מסלול והוראות" title="הדפסת מסלול והוראות">${svg('print', { size: 20 })}</button>
             </div>
             ${this.mode === 'foot' ? `<div class="p-section"><button type="button" class="btn btn-secondary btn-sm" data-act="guide">${svg('signpost', { size: 16 })}מדריך מסלול: שלבים, מים ובטיחות</button></div>` : ''}
             <h3 class="subtitle">הוראות הגעה</h3>
