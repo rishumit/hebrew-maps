@@ -304,6 +304,8 @@ jobs:
 
             **דרישות מערכת / System requirements:** Windows 10/11 x64
 
+            Linux x86_64 preview archives are attached by the Linux Desktop workflow after this release is created.
+
             ---
             Built automatically from commit ${{ github.sha }}
           files: |

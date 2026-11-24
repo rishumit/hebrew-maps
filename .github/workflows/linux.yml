@@ -13,7 +13,7 @@ on:
         required: false
         default: ""
       release:
-        description: "Create a GitHub Release?"
+        description: "Upload this Linux package to an existing version release?"
         type: boolean
         required: false
         default: false
@@ -270,12 +270,21 @@ jobs:
             dist/*.tar.gz.sha256
           if-no-files-found: error
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') || inputs.release
-        uses: softprops/action-gh-release@v3
+      - name: Upload Linux package to version release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: |
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.version.outputs.value) }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$TAG_NAME" dist/*.tar.gz dist/*.tar.gz.sha256 \
+                --repo "$GITHUB_REPOSITORY" --clobber
+              exit 0
+            fi
+            echo "Waiting for the Windows workflow to create release $TAG_NAME ($attempt/60)"
+            sleep 30
+          done
+          echo "Release $TAG_NAME was not created; the Linux package was not published" >&2
+          exit 1
