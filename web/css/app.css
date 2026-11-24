@@ -355,7 +355,7 @@ main { position: absolute; inset: 0; }
 .scrim { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 60; animation: fade .2s; }
 @keyframes fade { from { opacity: 0; } }
 .drawer { position: fixed; z-index: 70; top: 0; bottom: 0; right: 0; width: min(340px, 88vw); background: var(--surface); box-shadow: var(--shadow-xl);
-  display: flex; flex-direction: column; animation: drawerIn .25s var(--ease-out); }
+  display: flex; flex-direction: column; overflow: hidden; animation: drawerIn .25s var(--ease-out); }
 @keyframes drawerIn { from { transform: translateX(100%); } }
 .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4); border-bottom: 1px solid var(--border); }
 .drawer-head h2 { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xl); }
