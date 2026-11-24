@@ -71,7 +71,8 @@ jobs:
           sudo apt-get install -y \
             build-essential curl wget file \
             libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev libssl-dev
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev \
+            dbus-x11 xvfb openbox scrot wmctrl
 
       - name: Install Python build dependencies
         run: |
@@ -172,6 +173,93 @@ jobs:
           chmod +x "dist/$pkg/run-hebrew-maps.sh"
           tar -C dist -czf "dist/${pkg}.tar.gz" "$pkg"
           sha256sum "dist/${pkg}.tar.gz" > "dist/${pkg}.tar.gz.sha256"
+
+      - name: Smoke test desktop GUI
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          pkg_dir="$PWD/dist/HebrewMaps-Linux-${VERSION}"
+          mkdir -p gui-smoke
+          data_dir="$(mktemp -d)"
+          export HMAPS_DATA="$data_dir"
+          export HMAPS_DESKTOP_PORT=48197
+          export XDG_CONFIG_HOME="$PWD/gui-smoke/xdg-config"
+          export XDG_DATA_HOME="$PWD/gui-smoke/xdg-data"
+          export GDK_BACKEND=x11
+          trap 'rm -rf "$data_dir"' EXIT
+
+          xvfb-run -a dbus-run-session -- bash -s -- "$pkg_dir" "$PWD/gui-smoke/desktop.png" <<'SCRIPT'
+          set -euo pipefail
+          pkg_dir="$1"
+          screenshot="$2"
+          openbox >/dev/null 2>&1 &
+          wm_pid=$!
+          cd "$pkg_dir"
+          ./hebrew-maps-desktop > "$screenshot.log" 2>&1 &
+          app_pid=$!
+          cleanup() {
+            kill "$app_pid" "$wm_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+            wait "$wm_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$app_pid" 2>/dev/null; then
+              cat "$screenshot.log"
+              echo "Desktop app exited before becoming ready" >&2
+              exit 1
+            fi
+            code="$(curl -sS -o /dev/null -w '%{http_code}' \
+              http://127.0.0.1:48197/api/health 2>/dev/null || true)"
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat "$screenshot.log"
+            echo "Desktop app did not start its map server within 60 seconds" >&2
+            exit 1
+          fi
+
+          sleep 5
+          if ! kill -0 "$app_pid" 2>/dev/null; then
+            cat "$screenshot.log"
+            echo "Desktop app exited after starting its map server" >&2
+            exit 1
+          fi
+          window_found=0
+          for _ in $(seq 1 15); do
+            if wmctrl -lp | awk -v pid="$app_pid" '$3 == pid { found=1 } END { exit !found }'; then
+              window_found=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$window_found" -ne 1 ]; then
+            wmctrl -lp
+            cat "$screenshot.log"
+            echo "Tauri did not create a visible desktop window" >&2
+            exit 1
+          fi
+          scrot "$screenshot"
+          test -s "$screenshot"
+          echo "Desktop GUI smoke test passed; window found and screenshot saved to $screenshot"
+          SCRIPT
+
+      - name: Upload GUI smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Linux-GUI-Smoke-${{ steps.version.outputs.value }}
+          path: |
+            gui-smoke/desktop.png
+            gui-smoke/desktop.png.log
+          if-no-files-found: warn
 
       - name: Upload Linux package
         uses: actions/upload-artifact@v6
