@@ -604,6 +604,7 @@ const app = {
       const act = b.dataset.menu;
       if (act === 'nearby-list') this.panel.show(visibleListView(this, this.map.visiblePois(), this.map.visibleTrails()));
       else if (act === 'directions') this.directions.open({});
+      else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
@@ -703,38 +704,26 @@ const app = {
     const modeLabel = { car: 'רכב', foot: 'הליכה', bike: 'אופניים' };
     
     const searchesHtml = searches.length
-      ? `<ul class="results">${searches.map((r, i) => `<li class="result">
-          <button type="button" data-search="${i}" style="flex:1">
-            <span class="r-icon neutral" aria-hidden="true">${svg('search', { size: 18 })}</span>
-            <span class="r-body"><span class="r-name">${esc(r.name)}</span>
-            ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span>
-          </button>
-          <button type="button" class="icon-btn" data-delete-search="${i}" aria-label="מחיקת חיפוש" title="מחיקת חיפוש" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
-        </li>`).join('')}</ul>`
+      ? `<ul class="results">${searches.map((r, i) => `<li class="result"><button type="button" data-search="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg('search', { size: 18 })}</span>
+          <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>`
       : '<p class="r-sub" style="text-align:center;padding:2rem">אין חיפושים אחרונים</p>';
     
     const destinationsHtml = destinations.length
-      ? `<ul class="results">${destinations.map((r, i) => `<li class="result">
-          <button type="button" data-dest="${i}" style="flex:1">
-            <span class="r-icon neutral" aria-hidden="true">${svg('pin', { size: 18 })}</span>
-            <span class="r-body"><span class="r-name">${esc(r.name)}</span>
-            ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span>
-          </button>
-          <button type="button" class="icon-btn" data-delete-dest="${i}" aria-label="מחיקת יעד" title="מחיקת יעד" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
-        </li>`).join('')}</ul>`
+      ? `<ul class="results">${destinations.map((r, i) => `<li class="result"><button type="button" data-dest="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg('pin', { size: 18 })}</span>
+          <span class="r-body"><span class="r-name">${esc(r.name)}</span>
+          ${r.secondary ? `<span class="r-sub" style="display:block">${esc(r.secondary)}</span>` : ''}</span></button></li>`).join('')}</ul>`
       : '<p class="r-sub" style="text-align:center;padding:2rem">אין יעדים אחרונים</p>';
     
     const routesHtml = routes.length
-      ? `<ul class="results">${routes.map((r, i) => `<li class="result">
-          <button type="button" data-route="${i}" style="flex:1">
-            <span class="r-icon neutral" aria-hidden="true">${svg(modeIcon[r.mode] || 'directions', { size: 18 })}</span>
-            <span class="r-body">
-              <span class="r-name">${esc(r.from.name)} ${svg('back', { size: 14 })} ${esc(r.to.name)}</span>
-              <span class="r-sub" style="display:block">${esc(modeLabel[r.mode])}</span>
-            </span>
-          </button>
-          <button type="button" class="icon-btn" data-delete-route="${i}" aria-label="מחיקת מסלול" title="מחיקת מסלול" style="color:#EF4444;width:36px;height:36px">${svg('trash', { size: 18 })}</button>
-        </li>`).join('')}</ul>`
+      ? `<ul class="results">${routes.map((r, i) => `<li class="result"><button type="button" data-route="${i}">
+          <span class="r-icon neutral" aria-hidden="true">${svg(modeIcon[r.mode] || 'directions', { size: 18 })}</span>
+          <span class="r-body">
+            <span class="r-name">${esc(r.from.name)} ${svg('back', { size: 14 })} ${esc(r.to.name)}</span>
+            <span class="r-sub" style="display:block">${esc(modeLabel[r.mode])}</span>
+          </span></button></li>`).join('')}</ul>`
       : '<p class="r-sub" style="text-align:center;padding:2rem">אין מסלולים אחרונים</p>';
     
     const hasAny = searches.length || destinations.length || routes.length;
@@ -750,6 +739,7 @@ const app = {
         <div id="tab-destinations" class="tab-content" role="tabpanel" aria-labelledby="tab-destinations" hidden>${destinationsHtml}</div>
         <div id="tab-routes" class="tab-content" role="tabpanel" aria-labelledby="tab-routes" hidden>${routesHtml}</div>
       </div>
+      ${hasAny ? '<p><button type="button" class="btn btn-secondary btn-sm" data-clear>ניקוי כל ההיסטוריה</button></p>' : ''}
     `, (dlg) => {
       // Tab switching
       const tabs = dlg.querySelectorAll('[role="tab"]');
@@ -792,44 +782,8 @@ const app = {
         });
       });
       
-      // Delete individual search
-      dlg.querySelectorAll('[data-delete-search]').forEach((b) => {
-        b.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = Number(b.dataset.deleteSearch);
-          const updated = this.recentSearches().filter((_, i) => i !== idx);
-          store.set('recentSearches', updated);
-          closeDialog();
-          this._recentDialog();
-        });
-      });
-      
-      // Delete individual destination
-      dlg.querySelectorAll('[data-delete-dest]').forEach((b) => {
-        b.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = Number(b.dataset.deleteDest);
-          const updated = this.recentDestinations().filter((_, i) => i !== idx);
-          store.set('recentDestinations', updated);
-          closeDialog();
-          this._recentDialog();
-        });
-      });
-      
-      // Delete individual route
-      dlg.querySelectorAll('[data-delete-route]').forEach((b) => {
-        b.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const idx = Number(b.dataset.deleteRoute);
-          const updated = this.recentRoutes().filter((_, i) => i !== idx);
-          store.set('recentRoutes', updated);
-          closeDialog();
-          this._recentDialog();
-        });
-      });
-      
-      // Clear all from header button
-      dlg.querySelector('[data-clear-all]')?.addEventListener('click', () => {
+      // Clear all
+      dlg.querySelector('[data-clear]')?.addEventListener('click', () => {
         store.set('recentSearches', []);
         store.set('recentDestinations', []);
         store.set('recentRoutes', []);
@@ -837,8 +791,6 @@ const app = {
         closeDialog();
         toast('ההיסטוריה נוקתה');
       });
-    }, {
-      headerActions: hasAny ? `<button type="button" class="icon-btn" data-clear-all aria-label="ניקוי כל ההיסטוריה" title="ניקוי כל ההיסטוריה" style="color:#EF4444">${svg('trash', { size: 20 })}</button>` : ''
     });
   },
 
@@ -1131,15 +1083,10 @@ function parseHash() {
 
 let dialogRelease = null;
 let dialogReturn = null;
-function openDialog(title, bodyHtml, wire, { headerActions = '' } = {}) {
+function openDialog(title, bodyHtml, wire) {
   const dlg = $('#dialog');
   dialogReturn = document.activeElement;
-  const titleEl = $('#dialog-title');
-  if (headerActions) {
-    titleEl.innerHTML = `<span style="flex:1">${esc(title)}</span>${headerActions}`;
-  } else {
-    titleEl.textContent = title;
-  }
+  $('#dialog-title').textContent = title;
   $('#dialog-body').innerHTML = bodyHtml;
   dlg.hidden = false;
   dialogRelease = trapFocus(dlg);

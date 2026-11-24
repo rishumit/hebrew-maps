@@ -137,6 +137,7 @@ export function wireTexts(root) {
 
 /** A link that opens a search for the place in Hamichlol (in the viewer's own browser – no automated access). */
 export function michlolHtml(name) {
-  // Removed: external link to Hamichlol
-  return '';
+  if (!name) return '';
+  const url = `https://www.hamichlol.org.il/w/index.php?search=${encodeURIComponent(name)}`;
+  return `<p class="r-sub more-photos"><a href="${esc(url)}" target="_blank" rel="noopener">${svg('book', { size: 14 })} מידע על ${esc(name)} במכלול<span class="sr-only"> (נפתח בלשונית חדשה)</span></a></p>`;
 }

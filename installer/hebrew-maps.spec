@@ -115,7 +115,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='hebrew-maps',
-    icon=str(ROOT / 'installer' / 'icon.ico') if os.name == 'nt' else None,
+    icon=str(ROOT / 'installer' / 'icon.ico'),
     console=False,
     windowed=True,
     upx=True,
