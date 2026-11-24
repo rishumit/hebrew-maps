@@ -263,35 +263,3 @@ html.maximized .wc-btn .i-restore { display: block; }
   .tab.active { outline: 1px solid CanvasText; }
   .wc-close:hover { background: Highlight; color: HighlightText; }
 }
-
-/* ------------------------------------------------------------------ tab context menu */
-.tab-ctx-menu {
-  position: fixed; z-index: 100; min-width: 220px;
-  background: var(--tab-active); border-radius: 8px; padding: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .08);
-  font-size: 13px; user-select: none; -webkit-user-select: none;
-}
-:root[data-theme="dark"] .tab-ctx-menu {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .4), 0 0 0 1px rgba(255, 255, 255, .1);
-}
-.tab-ctx-menu [role="menuitem"] {
-  width: 100%; padding: 8px 12px; border: 0; border-radius: 4px; background: none;
-  display: flex; align-items: center; gap: 12px; text-align: start; cursor: default;
-  color: var(--tb-fg); transition: background-color .1s;
-}
-.tab-ctx-menu [role="menuitem"]:hover {
-  background: var(--tab-hover);
-}
-.tab-ctx-menu [role="menuitem"]:active {
-  background: var(--btn-press);
-}
-.tab-ctx-menu [role="menuitem"][disabled] {
-  opacity: .4; pointer-events: none;
-}
-.tab-ctx-menu svg {
-  flex: none; width: 16px; height: 16px;
-}
-.ctx-sep {
-  height: 1px; margin: 4px 8px;
-  background: var(--tab-sep);
-}
