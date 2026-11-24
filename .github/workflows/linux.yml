@@ -1,0 +1,193 @@
+name: Linux Desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (for example 1.2.0)"
+        required: false
+        default: ""
+      release:
+        description: "Create a GitHub Release?"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  build-linux:
+    name: Build Linux portable desktop package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="$(printf '%s' "$INPUT_VERSION" | sed 's/^v//' | xargs)"
+          if [ -z "$version" ]; then
+            if [[ "$GITHUB_REF" =~ ^refs/tags/v(.+)$ ]]; then
+              version="${BASH_REMATCH[1]}"
+            else
+              version="$(python3 tools/set_version.py)"
+            fi
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $version" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "Building Linux version: $version"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set version everywhere
+        run: |
+          python tools/set_version.py "${{ steps.version.outputs.value }}"
+          python tools/set_version.py --check
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file \
+            libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+      - name: Install Python build dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/pip install "pyinstaller==6.10.0" -r requirements-icons.txt
+
+      - name: Generate icons
+        run: |
+          .venv/bin/python tools/make_icons.py --check || \
+            echo "::warning::Committed icons are out of date - run python tools/make_icons.py"
+          .venv/bin/python tools/make_icons.py
+
+      - name: Build PyInstaller server bundle
+        run: |
+          .venv/bin/pyinstaller installer/hebrew-maps.spec \
+            --distpath installer/dist \
+            --workpath installer/build \
+            --noconfirm
+
+      - name: Smoke test server bundle
+        run: |
+          set -euo pipefail
+          data_dir="$(mktemp -d)"
+          log_file="$(mktemp)"
+          HMAPS_DATA="$data_dir" HMAPS_NO_BROWSER=1 \
+            installer/dist/hebrew-maps/hebrew-maps \
+            --no-browser --host 127.0.0.1 --port 48197 >"$log_file" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            rm -rf "$data_dir"
+            rm -f "$log_file"
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 90); do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat "$log_file"
+              echo "Server exited before /api/health became ready" >&2
+              exit 1
+            fi
+            code="$(curl -sS -o /dev/null -w '%{http_code}' \
+              http://127.0.0.1:48197/api/health 2>/dev/null || true)"
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "Smoke test passed: /api/health -> $code"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$log_file"
+          echo "Server did not answer /api/health within 90 seconds" >&2
+          exit 1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build Tauri desktop app
+        run: |
+          cargo build --release --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Fetch web assets
+        run: .venv/bin/python tools/fetch_assets.py
+
+      - name: Build low-zoom world map
+        run: |
+          if [ ! -f web/world/world.json ]; then
+            .venv/bin/python -m tools.world
+          fi
+
+      - name: Assemble portable package
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          pkg="HebrewMaps-Linux-${VERSION}"
+          mkdir -p "dist/$pkg"
+          cp -a installer/dist/hebrew-maps/. "dist/$pkg/"
+          cp src-tauri/target/release/hebrew-maps-desktop "dist/$pkg/hebrew-maps-desktop"
+          cp -a web "dist/$pkg/web"
+          mkdir -p "dist/$pkg/data"
+          if [ -d data/sample ]; then
+            cp -a data/sample "dist/$pkg/data/"
+          fi
+          chmod +x "dist/$pkg/hebrew-maps" "dist/$pkg/hebrew-maps-desktop"
+          cat > "dist/$pkg/run-hebrew-maps.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -e
+          cd "$(dirname "$(readlink -f "$0")")"
+          exec ./hebrew-maps-desktop
+          EOF
+          chmod +x "dist/$pkg/run-hebrew-maps.sh"
+          tar -C dist -czf "dist/${pkg}.tar.gz" "$pkg"
+          sha256sum "dist/${pkg}.tar.gz" > "dist/${pkg}.tar.gz.sha256"
+
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v6
+        with:
+          name: HebrewMaps-Linux-${{ steps.version.outputs.value }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.release
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
