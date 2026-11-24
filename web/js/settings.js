@@ -1,4 +1,4 @@
-// "הגדרות ותיקיית נתונים": where the map data is kept (maps, tiles, aerial photos, the user's saved items).
+// "הגדרות": where the map data is kept (maps, tiles, aerial photos, the user's saved items).
 // The folder is read when the program starts (hmaps/core/userconfig.py), so a change takes effect
 // after closing and opening the program. The existing data can be copied to the new folder first.
 
@@ -40,7 +40,7 @@ function render(body, app) {
   const job = i.copy_job;
   const copying = job?.state === 'copying';
   const pct = copying && job.total ? Math.floor((job.done / job.total) * 100) : null;
-  body.innerHTML = `${head(app, 'הגדרות ותיקיית נתונים')}
+  body.innerHTML = `${head(app, 'הגדרות')}
     <section class="p-section" aria-labelledby="set-dd-h">
       <h3 id="set-dd-h">תיקיית הנתונים</h3>
       <p>כאן נשמרים המפה, נקודות העניין, נתוני הניווט, התחבורה הציבורית, תצלומי האוויר שהורדו, והמועדפים שלכם.

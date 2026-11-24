@@ -604,7 +604,6 @@ const app = {
       const act = b.dataset.menu;
       if (act === 'nearby-list') this.panel.show(visibleListView(this, this.map.visiblePois(), this.map.visibleTrails()));
       else if (act === 'directions') this.directions.open({});
-      else if (act === 'print-map') this.printing.openMap();
       else if (act === 'hikes') openHikesNear(this);
       else if (act === 'bible') loadBible().then(() => this.panel.show(bibleHomeView(this)));
       else if (act === 'recent') this._recentDialog();
@@ -739,7 +738,7 @@ const app = {
         <div id="tab-destinations" class="tab-content" role="tabpanel" aria-labelledby="tab-destinations" hidden>${destinationsHtml}</div>
         <div id="tab-routes" class="tab-content" role="tabpanel" aria-labelledby="tab-routes" hidden>${routesHtml}</div>
       </div>
-      ${hasAny ? '<p><button type="button" class="btn btn-secondary btn-sm" data-clear>ניקוי כל ההיסטוריה</button></p>' : ''}
+      ${hasAny ? `<p style="text-align:center;margin-top:1rem"><button type="button" class="icon-btn" style="color:#EF4444" data-clear aria-label="ניקוי כל ההיסטוריה" title="ניקוי כל ההיסטוריה">${svg('trash', { size: 20 })}</button></p>` : ''}
     `, (dlg) => {
       // Tab switching
       const tabs = dlg.querySelectorAll('[role="tab"]');
